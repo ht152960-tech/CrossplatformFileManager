@@ -1,0 +1,22 @@
+# Gradle / Kotlin
+.gradle/
+.kotlin/
+build/
+**/build/
+out/
+
+# IDE
+.idea/
+*.iml
+
+# Local machine config
+local.properties
+.DS_Store
+
+# Android build artifacts
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Kotlin/JS
+kotlin-js-store/
