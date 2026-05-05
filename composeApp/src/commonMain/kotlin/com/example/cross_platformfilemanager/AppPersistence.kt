@@ -5,5 +5,4 @@ interface AppSnapshotStore {
     suspend fun save(snapshot: AppSnapshot)
 }
 
-5expect fun createAppSnapshotStore(): AppSnapshotStore?
-
+expect fun createAppSnapshotStore(): AppSnapshotStore?
