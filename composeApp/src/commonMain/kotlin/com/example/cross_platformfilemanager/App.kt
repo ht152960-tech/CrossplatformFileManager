@@ -320,7 +320,7 @@ private fun LocaleSwitcher(
         FilterChip(
             selected = locale == AppLocale.ZhCn,
             onClick = { onLocaleChange(AppLocale.ZhCn) },
-            label = { Text("中文") },
+            label = { Text("\u4e2d\u6587") },
         )
         FilterChip(
             selected = locale == AppLocale.EnUs,
