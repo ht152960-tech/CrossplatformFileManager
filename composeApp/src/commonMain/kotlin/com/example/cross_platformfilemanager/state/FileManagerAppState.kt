@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 class FileManagerAppState(
     private val repository: InMemoryFileRepository = InMemoryFileRepository(),
     private val recommendationEngine: RecommendationEngine = RecommendationEngine(),
+    private val browserReferenceResolver: BrowserReferenceResolver? = null,
 ) {
     var locale by mutableStateOf(AppLocale.ZhCn)
     var query by mutableStateOf("")
@@ -119,6 +120,14 @@ class FileManagerAppState(
         snapshotVersion++
     }
 
+    fun applyBrowserDraft(draft: BrowserReferenceDraft) {
+        draftTitle = draft.title.trim().ifBlank { "Untitled file" }
+        draftSource = draft.source.trim().ifBlank { "browser-handle:unknown" }
+        draftType = draft.fileType.trim().ifBlank { "FILE" }
+        draftNotes = draft.notes.trim().ifBlank { "Selected from browser file picker." }
+        snapshotVersion++
+    }
+
     fun commitSearch() {
         repository.recordSearch(query)
         repository.recordRecommendation(query, selectedTag, recommendations)
@@ -141,6 +150,32 @@ class FileManagerAppState(
         snapshotVersion++
     }
 
+    suspend fun refreshReference(referenceId: String) {
+        val current = repository.references.firstOrNull { it.id == referenceId } ?: return
+        if (current.sourceKind != FileSourceKind.BrowserHandle) {
+            openReference(referenceId)
+            return
+        }
+
+        val resolved = browserReferenceResolver?.resolveReference(current) ?: run {
+            openReference(referenceId)
+            return
+        }
+
+        repository.updateReference(referenceId) { existing ->
+            existing.copy(
+                title = resolved.title.trim().ifBlank { existing.title },
+                source = resolved.source.trim().ifBlank { existing.source },
+                sourceKind = FileSourceKind.BrowserHandle,
+                fileType = resolved.fileType.trim().ifBlank { existing.fileType },
+                notes = resolved.notes.trim().ifBlank { existing.notes },
+                lastOpenedAtMillis = nowMillis(),
+            )
+        }
+        activeReferenceId = referenceId
+        snapshotVersion++
+    }
+
     fun toggleFavorite(referenceId: String) {
         repository.toggleFavorite(referenceId)
         snapshotVersion++
@@ -154,4 +189,3 @@ class FileManagerAppState(
         else -> FileSourceKind.ManualPath
     }
 }
-

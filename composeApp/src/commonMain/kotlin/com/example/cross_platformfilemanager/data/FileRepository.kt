@@ -128,6 +128,13 @@ class InMemoryFileRepository {
         references.add(0, reference)
     }
 
+    fun updateReference(referenceId: String, updater: (FileReference) -> FileReference) {
+        val index = references.indexOfFirst { it.id == referenceId }
+        if (index >= 0) {
+            references[index] = updater(references[index])
+        }
+    }
+
     fun replaceReferences(items: List<FileReference>) {
         references.clear()
         references.addAll(items)

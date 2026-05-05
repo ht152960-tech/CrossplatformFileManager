@@ -42,6 +42,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,12 +55,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 
 @Composable
 @Preview
 fun App() {
-    val appState = remember { FileManagerAppState() }
     val snapshotStore = remember { createAppSnapshotStore() }
+    val browserReferencePicker = remember { createBrowserReferencePicker() }
+    val browserReferenceResolver = remember { createBrowserReferenceResolver() }
+    val appState = remember(browserReferenceResolver) {
+        FileManagerAppState(browserReferenceResolver = browserReferenceResolver)
+    }
+    val coroutineScope = rememberCoroutineScope()
     val strings = remember(appState.locale) { AppStrings.forLocale(appState.locale) }
 
     LaunchedEffect(snapshotStore) {
@@ -123,6 +130,14 @@ fun App() {
                                         typeLabel = appState.draftType,
                                         tags = appState.draftTags,
                                         notes = appState.draftNotes,
+                                        browserPickerAvailable = browserReferencePicker != null,
+                                        onSelectLocalFile = {
+                                            coroutineScope.launch {
+                                                browserReferencePicker?.pickReference()?.let { draft ->
+                                                    appState.applyBrowserDraft(draft)
+                                                }
+                                            }
+                                        },
                                         onTitleChange = { appState.draftTitle = it },
                                         onSourceChange = { appState.draftSource = it },
                                         onTypeChange = { appState.draftType = it },
@@ -145,6 +160,11 @@ fun App() {
                                         onSearch = { appState.commitSearch() },
                                         onTagSelected = { appState.toggleTagFilter(it) },
                                         onOpenFile = { appState.openReference(it) },
+                                        onRefreshFile = { referenceId ->
+                                            coroutineScope.launch {
+                                                appState.refreshReference(referenceId)
+                                            }
+                                        },
                                         onFavoriteToggle = { appState.toggleFavorite(it) },
                                         onApplySuggestedQuery = {
                                             appState.query = it
@@ -165,6 +185,11 @@ fun App() {
                                         onUseSuggestion = { appState.query = it },
                                         onTagSelected = { appState.toggleTagFilter(it) },
                                         onOpenFile = { appState.openReference(it) },
+                                        onRefreshFile = { referenceId ->
+                                            coroutineScope.launch {
+                                                appState.refreshReference(referenceId)
+                                            }
+                                        },
                                     )
                                 }
                             }
@@ -173,13 +198,21 @@ fun App() {
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(16.dp),
                             ) {
-                                QuickAddCard(
-                                    strings = strings,
-                                    title = appState.draftTitle,
-                                    source = appState.draftSource,
-                                    typeLabel = appState.draftType,
-                                    tags = appState.draftTags,
-                                    notes = appState.draftNotes,
+                                    QuickAddCard(
+                                        strings = strings,
+                                        title = appState.draftTitle,
+                                        source = appState.draftSource,
+                                        typeLabel = appState.draftType,
+                                        tags = appState.draftTags,
+                                        notes = appState.draftNotes,
+                                    browserPickerAvailable = browserReferencePicker != null,
+                                    onSelectLocalFile = {
+                                        coroutineScope.launch {
+                                            browserReferencePicker?.pickReference()?.let { draft ->
+                                                appState.applyBrowserDraft(draft)
+                                            }
+                                        }
+                                    },
                                     onTitleChange = { appState.draftTitle = it },
                                     onSourceChange = { appState.draftSource = it },
                                     onTypeChange = { appState.draftType = it },
@@ -200,6 +233,11 @@ fun App() {
                                     onSearch = { appState.commitSearch() },
                                     onTagSelected = { appState.toggleTagFilter(it) },
                                     onOpenFile = { appState.openReference(it) },
+                                    onRefreshFile = { referenceId ->
+                                        coroutineScope.launch {
+                                            appState.refreshReference(referenceId)
+                                        }
+                                    },
                                     onFavoriteToggle = { appState.toggleFavorite(it) },
                                     onApplySuggestedQuery = {
                                         appState.query = it
@@ -215,6 +253,11 @@ fun App() {
                                     onUseSuggestion = { appState.query = it },
                                     onTagSelected = { appState.toggleTagFilter(it) },
                                     onOpenFile = { appState.openReference(it) },
+                                    onRefreshFile = { referenceId ->
+                                        coroutineScope.launch {
+                                            appState.refreshReference(referenceId)
+                                        }
+                                    },
                                 )
                             }
                         }
@@ -388,6 +431,8 @@ private fun QuickAddCard(
     typeLabel: String,
     tags: String,
     notes: String,
+    browserPickerAvailable: Boolean,
+    onSelectLocalFile: () -> Unit,
     onTitleChange: (String) -> Unit,
     onSourceChange: (String) -> Unit,
     onTypeChange: (String) -> Unit,
@@ -410,6 +455,11 @@ private fun QuickAddCard(
                     text = strings.quickAddSubtitle,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = strings.selectLocalFileHint,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
 
@@ -460,13 +510,23 @@ private fun QuickAddCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = strings.quickAddHint,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Button(onClick = onAdd) {
-                    Text(strings.addReference)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = strings.quickAddHint,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(
+                        onClick = onSelectLocalFile,
+                        enabled = browserPickerAvailable,
+                    ) {
+                        Text(strings.selectLocalFile)
+                    }
+                    Button(onClick = onAdd) {
+                        Text(strings.addReference)
+                    }
                 }
             }
         }
@@ -486,6 +546,7 @@ private fun SearchAndResultsPanel(
     onSearch: () -> Unit,
     onTagSelected: (String) -> Unit,
     onOpenFile: (String) -> Unit,
+    onRefreshFile: (String) -> Unit,
     onFavoriteToggle: (String) -> Unit,
     onApplySuggestedQuery: (String) -> Unit,
 ) {
@@ -556,8 +617,10 @@ private fun SearchAndResultsPanel(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     searchResults.forEach { result ->
                         ReferenceResultCard(
+                            strings = strings,
                             result = result,
                             onOpen = { onOpenFile(result.reference.id) },
+                            onRefresh = { onRefreshFile(result.reference.id) },
                             onFavoriteToggle = { onFavoriteToggle(result.reference.id) },
                             onTagSelected = onTagSelected,
                         )
@@ -609,8 +672,10 @@ private fun SuggestionChip(
 
 @Composable
 private fun ReferenceResultCard(
+    strings: UiStrings,
     result: SearchResult,
     onOpen: () -> Unit,
+    onRefresh: () -> Unit,
     onFavoriteToggle: () -> Unit,
     onTagSelected: (String) -> Unit,
 ) {
@@ -670,7 +735,12 @@ private fun ReferenceResultCard(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onOpen) {
-                        Text("Open")
+                        Text(strings.open)
+                    }
+                    if (result.reference.sourceKind == FileSourceKind.BrowserHandle) {
+                        OutlinedButton(onClick = onRefresh) {
+                            Text(strings.refresh)
+                        }
                     }
                     Text(
                         text = result.scoreLabel,
@@ -692,6 +762,7 @@ private fun RecommendationPanel(
     onUseSuggestion: (String) -> Unit,
     onTagSelected: (String) -> Unit,
     onOpenFile: (String) -> Unit,
+    onRefreshFile: (String) -> Unit,
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0x141D2B3C)),
@@ -715,6 +786,7 @@ private fun RecommendationPanel(
                     reference = selectedReference,
                     strings = strings,
                     onOpenFile = onOpenFile,
+                    onRefreshFile = onRefreshFile,
                     onTagSelected = onTagSelected,
                 )
             }
@@ -813,6 +885,7 @@ private fun SelectedReferenceCard(
     reference: FileReference,
     strings: UiStrings,
     onOpenFile: (String) -> Unit,
+    onRefreshFile: (String) -> Unit,
     onTagSelected: (String) -> Unit,
 ) {
     Card(
@@ -831,6 +904,11 @@ private fun SelectedReferenceCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { onOpenFile(reference.id) }) {
                     Text(strings.open)
+                }
+                if (reference.sourceKind == FileSourceKind.BrowserHandle) {
+                    OutlinedButton(onClick = { onRefreshFile(reference.id) }) {
+                        Text(strings.refresh)
+                    }
                 }
             }
         }
