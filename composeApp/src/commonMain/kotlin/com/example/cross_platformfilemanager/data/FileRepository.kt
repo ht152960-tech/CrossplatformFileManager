@@ -4,6 +4,7 @@ data class FileReference(
     val id: String,
     val title: String,
     val source: String,
+    val sourceKind: FileSourceKind,
     val fileType: String,
     val tags: List<String>,
     val notes: String,
@@ -11,6 +12,13 @@ data class FileReference(
     val lastOpenedAtMillis: Long,
     val isFavorite: Boolean = false,
 )
+
+enum class FileSourceKind {
+    ManualPath,
+    BrowserHandle,
+    Url,
+    RemoteReference,
+}
 
 data class SearchResult(
     val reference: FileReference,
@@ -33,6 +41,14 @@ enum class SuggestionKind {
     File,
 }
 
+data class RecommendationLog(
+    val id: String,
+    val query: String,
+    val selectedTag: String?,
+    val generatedAtMillis: Long,
+    val topSuggestions: List<String>,
+)
+
 data class DashboardStats(
     val fileCount: Int,
     val tagCount: Int,
@@ -46,6 +62,7 @@ class InMemoryFileRepository {
             id = "ref-001",
             title = "Quarterly contract draft",
             source = "/docs/legal/contract-q3-draft.docx",
+            sourceKind = FileSourceKind.ManualPath,
             fileType = "DOCX",
             tags = listOf("contract", "legal", "draft"),
             notes = "Needs approval and a signature pass.",
@@ -57,6 +74,7 @@ class InMemoryFileRepository {
             id = "ref-002",
             title = "Product roadmap",
             source = "/notes/roadmap-2026.md",
+            sourceKind = FileSourceKind.ManualPath,
             fileType = "MD",
             tags = listOf("product", "planning", "roadmap"),
             notes = "Quarterly milestone overview.",
@@ -67,6 +85,7 @@ class InMemoryFileRepository {
             id = "ref-003",
             title = "Invoice archive",
             source = "/finance/invoices/2026",
+            sourceKind = FileSourceKind.ManualPath,
             fileType = "FOLDER",
             tags = listOf("finance", "invoice", "archive"),
             notes = "Folder-like reference for repeated searches.",
@@ -77,6 +96,7 @@ class InMemoryFileRepository {
             id = "ref-004",
             title = "UI mockup board",
             source = "figma://design-system-v2",
+            sourceKind = FileSourceKind.RemoteReference,
             fileType = "FIGMA",
             tags = listOf("ui", "design", "mockup"),
             notes = "Shared visual direction for the app.",
@@ -87,6 +107,7 @@ class InMemoryFileRepository {
             id = "ref-005",
             title = "Research note pack",
             source = "/research/notes-ml-retrieval.txt",
+            sourceKind = FileSourceKind.ManualPath,
             fileType = "TXT",
             tags = listOf("research", "retrieval", "recommendation"),
             notes = "Useful for search and ranking experiments.",
@@ -101,8 +122,25 @@ class InMemoryFileRepository {
         "invoice",
     )
 
+    val recommendationLogs = androidx.compose.runtime.mutableStateListOf<RecommendationLog>()
+
     fun addReference(reference: FileReference) {
         references.add(0, reference)
+    }
+
+    fun replaceReferences(items: List<FileReference>) {
+        references.clear()
+        references.addAll(items)
+    }
+
+    fun replaceRecentSearches(items: List<String>) {
+        recentSearches.clear()
+        recentSearches.addAll(items.distinct())
+    }
+
+    fun replaceRecommendationLogs(items: List<RecommendationLog>) {
+        recommendationLogs.clear()
+        recommendationLogs.addAll(items)
     }
 
     fun toggleFavorite(referenceId: String) {
@@ -128,6 +166,26 @@ class InMemoryFileRepository {
         recentSearches.add(0, normalized)
         if (recentSearches.size > 12) {
             recentSearches.removeAt(recentSearches.lastIndex)
+        }
+    }
+
+    fun recordRecommendation(
+        query: String,
+        selectedTag: String?,
+        suggestions: List<Suggestion>,
+    ) {
+        val topSuggestions = suggestions.take(5).map { it.label }
+        recommendationLogs.add(
+            RecommendationLog(
+                id = "rec-${nowMillis()}",
+                query = normalize(query),
+                selectedTag = selectedTag?.trim()?.takeIf { it.isNotBlank() },
+                generatedAtMillis = nowMillis(),
+                topSuggestions = topSuggestions,
+            )
+        )
+        while (recommendationLogs.size > 30) {
+            recommendationLogs.removeAt(0)
         }
     }
 
@@ -211,12 +269,9 @@ class InMemoryFileRepository {
                     reasons += "recently searched"
                 }
 
-                val ageBoost = if (reference.lastOpenedAtMillis > 0L) {
-                    0.10
-                } else {
-                    0.0
+                if (reference.lastOpenedAtMillis > 0L) {
+                    score += 0.10
                 }
-                score += ageBoost
 
                 SearchResult(
                     reference = reference,
@@ -232,11 +287,10 @@ class InMemoryFileRepository {
             )
     }
 
-    fun stats(recommendationCount: Int): DashboardStats = DashboardStats(
+    fun stats(): DashboardStats = DashboardStats(
         fileCount = references.size,
         tagCount = allTags().size,
         recentSearchCount = recentSearches.size,
-        recommendationCount = recommendationCount,
+        recommendationCount = recommendationLogs.size,
     )
 }
-

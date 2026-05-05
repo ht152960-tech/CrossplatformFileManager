@@ -19,6 +19,7 @@ class FileManagerAppState(
     var draftNotes by mutableStateOf("Store only the reference and custom tags.")
 
     var activeReferenceId by mutableStateOf(repository.references.firstOrNull()?.id)
+    var snapshotVersion by mutableStateOf(0)
 
     val recommendations: List<Suggestion>
         get() = recommendationEngine.suggest(
@@ -61,7 +62,28 @@ class FileManagerAppState(
     val activeReference: FileReference?
         get() = repository.references.firstOrNull { it.id == activeReferenceId }
 
-    fun dashboardStats(): DashboardStats = repository.stats(recommendations.size)
+    fun dashboardStats(): DashboardStats = repository.stats()
+
+    fun exportSnapshot(): AppSnapshot = AppSnapshot(
+        locale = locale,
+        query = query,
+        selectedTag = selectedTag,
+        activeReferenceId = activeReferenceId,
+        references = repository.references.toList(),
+        recentSearches = repository.recentSearches.toList(),
+        recommendationLogs = repository.recommendationLogs.toList(),
+    )
+
+    fun restoreSnapshot(snapshot: AppSnapshot) {
+        locale = snapshot.locale
+        query = snapshot.query
+        selectedTag = snapshot.selectedTag
+        activeReferenceId = snapshot.activeReferenceId
+        repository.replaceReferences(snapshot.references)
+        repository.replaceRecentSearches(snapshot.recentSearches)
+        repository.replaceRecommendationLogs(snapshot.recommendationLogs)
+        snapshotVersion++
+    }
 
     fun addDraftReference() {
         val id = "ref-${nowMillis()}"
@@ -81,6 +103,7 @@ class FileManagerAppState(
                 id = id,
                 title = title,
                 source = source,
+                sourceKind = guessSourceKind(source),
                 fileType = type,
                 tags = normalizedTags,
                 notes = notes,
@@ -92,11 +115,14 @@ class FileManagerAppState(
         activeReferenceId = id
         query = title
         selectedTag = normalizedTags.firstOrNull()
-        repository.recordSearch(title)
+        commitSearch()
+        snapshotVersion++
     }
 
     fun commitSearch() {
         repository.recordSearch(query)
+        repository.recordRecommendation(query, selectedTag, recommendations)
+        snapshotVersion++
     }
 
     fun toggleTagFilter(tag: String) {
@@ -105,15 +131,27 @@ class FileManagerAppState(
             query = tag
         }
         repository.recordSearch(query.ifBlank { tag })
+        repository.recordRecommendation(query.ifBlank { tag }, selectedTag, recommendations)
+        snapshotVersion++
     }
 
     fun openReference(referenceId: String) {
         repository.open(referenceId)
         activeReferenceId = referenceId
+        snapshotVersion++
     }
 
     fun toggleFavorite(referenceId: String) {
         repository.toggleFavorite(referenceId)
+        snapshotVersion++
+    }
+
+    private fun guessSourceKind(source: String): FileSourceKind = when {
+        source.startsWith("http://", ignoreCase = true) -> FileSourceKind.Url
+        source.startsWith("https://", ignoreCase = true) -> FileSourceKind.Url
+        source.startsWith("browser-handle:", ignoreCase = true) -> FileSourceKind.BrowserHandle
+        source.contains("://") -> FileSourceKind.RemoteReference
+        else -> FileSourceKind.ManualPath
     }
 }
 

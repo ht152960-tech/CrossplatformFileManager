@@ -24,12 +24,12 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -59,7 +59,18 @@ import androidx.compose.ui.unit.sp
 @Preview
 fun App() {
     val appState = remember { FileManagerAppState() }
+    val snapshotStore = remember { createAppSnapshotStore() }
     val strings = remember(appState.locale) { AppStrings.forLocale(appState.locale) }
+
+    LaunchedEffect(snapshotStore) {
+        snapshotStore?.load()?.let { snapshot ->
+            appState.restoreSnapshot(snapshot)
+        }
+    }
+
+    LaunchedEffect(appState.snapshotVersion, snapshotStore) {
+        snapshotStore?.save(appState.exportSnapshot())
+    }
 
     MaterialTheme(colorScheme = appColorScheme()) {
         Surface(
@@ -531,7 +542,7 @@ private fun SearchAndResultsPanel(
                 onPick = onApplySuggestedQuery,
             )
 
-            Divider(color = Color(0x224F6787))
+            HorizontalDivider(color = Color(0x224F6787))
 
             Text(
                 text = if (selectedTag == null) strings.allResults else formatTagFilter(strings.filteredByTagLabel, selectedTag),
@@ -753,7 +764,7 @@ private fun RecommendationPanel(
                 }
             }
 
-            Divider(color = Color(0x224F6787))
+            HorizontalDivider(color = Color(0x224F6787))
 
             Text(
                 text = strings.recentlyOpened,
