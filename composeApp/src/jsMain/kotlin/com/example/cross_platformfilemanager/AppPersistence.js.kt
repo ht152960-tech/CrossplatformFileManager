@@ -33,6 +33,16 @@ private class BrowserLocalDataController : LocalDataController {
         return encoded
     }
 
+    override suspend fun importSnapshot(): String? {
+        val api = browserPersistenceApi() ?: return null
+        return try {
+            val imported: JsAny? = importSnapshotPromise(api).await()
+            imported as String?
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     override suspend fun clearAllData() {
         val api = browserPersistenceApi()
         if (api != null) {
@@ -74,6 +84,8 @@ private fun browserPersistenceApi(): JsAny? = window.asDynamic().fileAtlasPersis
 private fun loadSnapshotPromise(api: JsAny): Promise<JsAny?> = js("api.loadSnapshot()")
 
 private fun saveSnapshotPromise(api: JsAny, encoded: String): Promise<JsAny?> = js("api.saveSnapshot(encoded)")
+
+private fun importSnapshotPromise(api: JsAny): Promise<JsAny?> = js("api.importSnapshot()")
 
 private fun clearAllDataPromise(api: JsAny): Promise<JsAny?> = js("api.clearAllData()")
 

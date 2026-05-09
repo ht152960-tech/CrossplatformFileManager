@@ -36,6 +36,16 @@ data class Suggestion(
     val score: Double,
 )
 
+data class TagSummary(
+    val tag: String,
+    val referenceCount: Int,
+)
+
+data class FileTypeSummary(
+    val fileType: String,
+    val referenceCount: Int,
+)
+
 enum class SuggestionKind {
     Query,
     Tag,
@@ -266,15 +276,67 @@ class InMemoryFileRepository {
         .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
         .map { it.key }
 
+    fun tagSummaries(limit: Int = Int.MAX_VALUE): List<TagSummary> {
+        val counts = linkedMapOf<String, Pair<String, Int>>()
+
+        references.forEach { reference ->
+            reference.tags
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinctBy(::normalize)
+                .forEach { tag ->
+                    val normalizedTag = normalize(tag)
+                    val current = counts[normalizedTag]
+                    if (current == null) {
+                        counts[normalizedTag] = tag to 1
+                    } else {
+                        counts[normalizedTag] = current.first to (current.second + 1)
+                    }
+                }
+        }
+
+        return counts.values
+            .map { (tag, count) -> TagSummary(tag = tag, referenceCount = count) }
+            .sortedWith(compareByDescending<TagSummary> { it.referenceCount }.thenBy { normalize(it.tag) })
+            .take(limit)
+    }
+
+    fun fileTypeSummaries(limit: Int = Int.MAX_VALUE): List<FileTypeSummary> {
+        val counts = linkedMapOf<String, Pair<String, Int>>()
+
+        references.forEach { reference ->
+            val fileType = reference.fileType.trim().ifBlank { "FILE" }
+            val normalizedType = normalize(fileType)
+            val current = counts[normalizedType]
+            if (current == null) {
+                counts[normalizedType] = fileType to 1
+            } else {
+                counts[normalizedType] = current.first to (current.second + 1)
+            }
+        }
+
+        return counts.values
+            .map { (fileType, count) -> FileTypeSummary(fileType = fileType, referenceCount = count) }
+            .sortedWith(compareByDescending<FileTypeSummary> { it.referenceCount }.thenBy { normalize(it.fileType) })
+            .take(limit)
+    }
+
     fun topTags(limit: Int = 10): List<String> = allTags().take(limit)
 
     fun recentReferences(limit: Int = 5): List<FileReference> = references
         .sortedByDescending { it.lastOpenedAtMillis }
         .take(limit)
 
-    fun search(query: String, selectedTag: String?): List<SearchResult> {
+    fun search(
+        query: String,
+        selectedTag: String?,
+        selectedFileType: String?,
+        favoritesOnly: Boolean,
+    ): List<SearchResult> {
         val normalizedQuery = normalize(query)
         val tokens = tokenize(normalizedQuery)
+        val normalizedTagFilter = selectedTag?.let(::normalize)
+        val normalizedTypeFilter = selectedFileType?.let(::normalize)
 
         return references
             .map { reference ->
@@ -282,6 +344,7 @@ class InMemoryFileRepository {
                 val source = normalize(reference.source)
                 val notes = normalize(reference.notes)
                 val tagText = reference.tags.joinToString(" ") { normalize(it) }
+                val fileTypeText = normalize(reference.fileType)
 
                 var score = 0.0
                 val reasons = mutableListOf<String>()
@@ -291,9 +354,19 @@ class InMemoryFileRepository {
                     reasons += "ready for browsing"
                 }
 
-                if (selectedTag != null && reference.tags.any { normalize(it) == normalize(selectedTag) }) {
+                if (normalizedTagFilter != null && reference.tags.any { normalize(it) == normalizedTagFilter }) {
                     score += 0.35
                     reasons += "matches tag \"$selectedTag\""
+                }
+
+                if (normalizedTypeFilter != null && fileTypeText == normalizedTypeFilter) {
+                    score += 0.22
+                    reasons += "matches type \"$selectedFileType\""
+                }
+
+                if (favoritesOnly && reference.isFavorite) {
+                    score += 0.18
+                    reasons += "favorite only"
                 }
 
                 tokens.forEach { token ->
@@ -348,7 +421,13 @@ class InMemoryFileRepository {
                     reason = if (reasons.isEmpty()) "general candidate" else reasons.distinct().joinToString(", "),
                 )
             }
-            .filter { it.score > 0.15 || normalizedQuery.isBlank() || selectedTag != null }
+            .filter {
+                val matchesTag = normalizedTagFilter == null || it.reference.tags.any { tag -> normalize(tag) == normalizedTagFilter }
+                val matchesType = normalizedTypeFilter == null || normalize(it.reference.fileType) == normalizedTypeFilter
+                val matchesFavorite = !favoritesOnly || it.reference.isFavorite
+                (it.score > 0.15 || normalizedQuery.isBlank() || normalizedTagFilter != null || normalizedTypeFilter != null || favoritesOnly) &&
+                    matchesTag && matchesType && matchesFavorite
+            }
             .sortedWith(
                 compareByDescending<SearchResult> { it.score }
                     .thenByDescending { it.reference.lastOpenedAtMillis }

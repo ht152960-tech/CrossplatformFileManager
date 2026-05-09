@@ -1,7 +1,7 @@
 package com.example.cross_platformfilemanager
 
 internal object SnapshotCodec {
-    private const val FORMAT_VERSION = 2
+    private const val FORMAT_VERSION = 3
 
     fun encode(snapshot: AppSnapshot): String {
         val out = StringBuilder()
@@ -9,6 +9,8 @@ internal object SnapshotCodec {
         out.appendString(snapshot.locale.name)
         out.appendString(snapshot.query)
         out.appendString(snapshot.selectedTag.orEmpty())
+        out.appendString(snapshot.selectedFileType.orEmpty())
+        out.appendString(if (snapshot.favoritesOnly) "1" else "0")
         out.appendString(snapshot.activeReferenceId.orEmpty())
 
         out.appendString(snapshot.references.size.toString())
@@ -53,8 +55,9 @@ internal object SnapshotCodec {
         val cursor = Cursor(payload)
         return try {
             val firstToken = cursor.readString()
-            if (firstToken.toIntOrNull() == FORMAT_VERSION) {
-                decodeBody(cursor, schemaVersion = FORMAT_VERSION)
+            val version = firstToken.toIntOrNull()
+            if (version != null && version >= 2) {
+                decodeBody(cursor, schemaVersion = version)
             } else {
                 decodeBody(cursor, schemaVersion = 1, localeToken = firstToken)
             }
@@ -71,6 +74,8 @@ internal object SnapshotCodec {
         val locale = AppLocale.valueOf(localeToken ?: cursor.readString())
         val query = cursor.readString()
         val selectedTag = cursor.readString().takeIf { it.isNotBlank() }
+        val selectedFileType = if (schemaVersion >= 3) cursor.readString().takeIf { it.isNotBlank() } else null
+        val favoritesOnly = if (schemaVersion >= 3) cursor.readString() == "1" else false
         val activeReferenceId = cursor.readString().takeIf { it.isNotBlank() }
 
         val referenceCount = cursor.readString().toInt()
@@ -140,6 +145,8 @@ internal object SnapshotCodec {
             locale = locale,
             query = query,
             selectedTag = selectedTag,
+            selectedFileType = selectedFileType,
+            favoritesOnly = favoritesOnly,
             activeReferenceId = activeReferenceId,
             references = references,
             recentSearches = recentSearches,

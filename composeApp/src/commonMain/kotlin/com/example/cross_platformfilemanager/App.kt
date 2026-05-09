@@ -2,11 +2,13 @@ package com.example.cross_platformfilemanager
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -72,6 +74,8 @@ fun App() {
     val strings = remember(appState.locale) { AppStrings.forLocale(appState.locale) }
     var skipNextAutoSave by remember { mutableStateOf(false) }
     var showClearConfirmDialog by remember { mutableStateOf(false) }
+    var pendingImportSnapshot by remember { mutableStateOf<AppSnapshot?>(null) }
+    var showImportChoiceDialog by remember { mutableStateOf(false) }
     val existingDraftReferenceTitle = remember(appState.draftSource, appState.searchResults, appState.recentReferences) {
         val targetSource = appState.draftSource.trim()
         appState.searchResults.asSequence()
@@ -131,6 +135,41 @@ fun App() {
                     )
                 }
 
+                if (showImportChoiceDialog && pendingImportSnapshot != null) {
+                    AlertDialog(
+                        onDismissRequest = {
+                            showImportChoiceDialog = false
+                            pendingImportSnapshot = null
+                        },
+                        title = { Text(strings.importDataTitle) },
+                        text = { Text(strings.importDataBody) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                val snapshot = pendingImportSnapshot
+                                showImportChoiceDialog = false
+                                pendingImportSnapshot = null
+                                if (snapshot != null) {
+                                    appState.restoreSnapshot(snapshot)
+                                }
+                            }) {
+                                Text(strings.importReplace)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                val snapshot = pendingImportSnapshot
+                                showImportChoiceDialog = false
+                                pendingImportSnapshot = null
+                                if (snapshot != null) {
+                                    appState.mergeSnapshot(snapshot)
+                                }
+                            }) {
+                                Text(strings.importMerge)
+                            }
+                        },
+                    )
+                }
+
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -144,10 +183,22 @@ fun App() {
                         onClearFilters = {
                             appState.query = ""
                             appState.selectedTag = null
+                            appState.selectedFileType = null
+                            appState.favoritesOnly = false
                         },
                         onExportData = {
                             coroutineScope.launch {
                                 localDataController?.exportSnapshot()
+                            }
+                        },
+                        onImportData = {
+                            coroutineScope.launch {
+                                val imported = localDataController?.importSnapshot()
+                                val snapshot = imported?.let(SnapshotCodec::decode)
+                                if (snapshot != null) {
+                                    pendingImportSnapshot = snapshot
+                                    showImportChoiceDialog = true
+                                }
                             }
                         },
                         onClearData = {
@@ -203,13 +254,19 @@ fun App() {
                                         strings = strings,
                                         query = appState.query,
                                         selectedTag = appState.selectedTag,
+                                        selectedFileType = appState.selectedFileType,
+                                        favoritesOnly = appState.favoritesOnly,
+                                        selectedReferenceId = appState.activeReferenceId,
                                         querySuggestions = appState.querySuggestions,
                                         fileSuggestions = appState.fileSuggestions,
                                         searchResults = appState.searchResults,
-                                        topTags = appState.topTags,
+                                        tagSummaries = appState.tagSummaries,
+                                        fileTypeSummaries = appState.fileTypeSummaries,
                                         onQueryChange = { appState.query = it },
                                         onSearch = { appState.commitSearch() },
                                         onTagSelected = { appState.toggleTagFilter(it) },
+                                        onFileTypeSelected = { appState.toggleFileTypeFilter(it) },
+                                        onFavoritesOnlyToggle = { appState.toggleFavoritesOnly() },
                                         onOpenFile = { appState.openReference(it) },
                                         onRefreshFile = { referenceId ->
                                             coroutineScope.launch {
@@ -238,13 +295,41 @@ fun App() {
                                     modifier = Modifier.weight(0.85f),
                                     verticalArrangement = Arrangement.spacedBy(16.dp),
                                 ) {
+                                    appState.activeReference?.let { selectedReference ->
+                                        SelectedReferenceCard(
+                                            reference = selectedReference,
+                                            strings = strings,
+                                            onOpenFile = { appState.openReference(it) },
+                                            onRefreshFile = { referenceId ->
+                                                coroutineScope.launch {
+                                                    appState.refreshReference(referenceId)
+                                                }
+                                            },
+                                            onDeleteReference = { appState.deleteReference(it) },
+                                            onUpdateReferenceTitle = { referenceId, title ->
+                                                appState.updateReferenceTitle(referenceId, title)
+                                            },
+                                            onUpdateReferenceTags = { referenceId, tags ->
+                                                appState.updateReferenceTags(referenceId, tags)
+                                            },
+                                            onUpdateReferenceNotes = { referenceId, notes ->
+                                                appState.updateReferenceNotes(referenceId, notes)
+                                            },
+                                            onFavoriteToggle = { appState.toggleFavorite(it) },
+                                            onTagSelected = { appState.toggleTagFilter(it) },
+                                        )
+                                    }
+                                    TagLibraryPanel(
+                                        strings = strings,
+                                        tagSummaries = appState.tagSummaries,
+                                        selectedTag = appState.selectedTag,
+                                        onTagSelected = { appState.toggleTagFilter(it) },
+                                    )
                                     RecommendationPanel(
                                         strings = strings,
                                         recommendations = appState.recommendations,
                                         recentReferences = appState.recentReferences,
-                                        selectedReference = appState.activeReference,
                                         onUseSuggestion = { appState.query = it },
-                                        onTagSelected = { appState.toggleTagFilter(it) },
                                         onOpenFile = { appState.openReference(it) },
                                         onRefreshFile = { referenceId ->
                                             coroutineScope.launch {
@@ -297,13 +382,19 @@ fun App() {
                                     strings = strings,
                                     query = appState.query,
                                     selectedTag = appState.selectedTag,
+                                    selectedFileType = appState.selectedFileType,
+                                    favoritesOnly = appState.favoritesOnly,
+                                    selectedReferenceId = appState.activeReferenceId,
                                     querySuggestions = appState.querySuggestions,
                                     fileSuggestions = appState.fileSuggestions,
                                     searchResults = appState.searchResults,
-                                    topTags = appState.topTags,
+                                    tagSummaries = appState.tagSummaries,
+                                    fileTypeSummaries = appState.fileTypeSummaries,
                                     onQueryChange = { appState.query = it },
                                     onSearch = { appState.commitSearch() },
                                     onTagSelected = { appState.toggleTagFilter(it) },
+                                    onFileTypeSelected = { appState.toggleFileTypeFilter(it) },
+                                    onFavoritesOnlyToggle = { appState.toggleFavoritesOnly() },
                                     onOpenFile = { appState.openReference(it) },
                                     onRefreshFile = { referenceId -> 
                                         coroutineScope.launch {
@@ -327,13 +418,43 @@ fun App() {
                                     },
                                 )
 
+                                appState.activeReference?.let { selectedReference ->
+                                    SelectedReferenceCard(
+                                        reference = selectedReference,
+                                        strings = strings,
+                                        onOpenFile = { appState.openReference(it) },
+                                        onRefreshFile = { referenceId ->
+                                            coroutineScope.launch {
+                                                appState.refreshReference(referenceId)
+                                            }
+                                        },
+                                        onDeleteReference = { appState.deleteReference(it) },
+                                        onUpdateReferenceTitle = { referenceId, title ->
+                                            appState.updateReferenceTitle(referenceId, title)
+                                        },
+                                        onUpdateReferenceTags = { referenceId, tags ->
+                                            appState.updateReferenceTags(referenceId, tags)
+                                        },
+                                        onUpdateReferenceNotes = { referenceId, notes ->
+                                            appState.updateReferenceNotes(referenceId, notes)
+                                        },
+                                        onFavoriteToggle = { appState.toggleFavorite(it) },
+                                        onTagSelected = { appState.toggleTagFilter(it) },
+                                    )
+                                }
+
+                                TagLibraryPanel(
+                                    strings = strings,
+                                    tagSummaries = appState.tagSummaries,
+                                    selectedTag = appState.selectedTag,
+                                    onTagSelected = { appState.toggleTagFilter(it) },
+                                )
+
                                 RecommendationPanel(
                                     strings = strings,
                                     recommendations = appState.recommendations,
                                     recentReferences = appState.recentReferences,
-                                    selectedReference = appState.activeReference,
                                     onUseSuggestion = { appState.query = it },
-                                    onTagSelected = { appState.toggleTagFilter(it) },
                                     onOpenFile = { appState.openReference(it) },
                                     onRefreshFile = { referenceId ->
                                         coroutineScope.launch {
@@ -390,6 +511,7 @@ private fun HeaderBar(
     onLocaleChange: (AppLocale) -> Unit,
     onClearFilters: () -> Unit,
     onExportData: () -> Unit,
+    onImportData: () -> Unit,
     onClearData: () -> Unit,
 ) {
     Row(
@@ -426,6 +548,9 @@ private fun HeaderBar(
             )
             TextButton(onClick = onExportData) {
                 Text(strings.exportData)
+            }
+            TextButton(onClick = onImportData) {
+                Text(strings.importData)
             }
             TextButton(onClick = onClearData) {
                 Text(strings.clearData)
@@ -599,12 +724,11 @@ private fun QuickAddCard(
                     label = { Text(strings.fileType) },
                     singleLine = true,
                 )
-                OutlinedTextField(
+                TagChipEditor(
+                    strings = strings,
+                    tagsText = tags,
+                    onTagsTextChange = onTagsChange,
                     modifier = Modifier.weight(1.2f),
-                    value = tags,
-                    onValueChange = onTagsChange,
-                    label = { Text(strings.tagsCommaSeparated) },
-                    singleLine = true,
                 )
             }
 
@@ -658,13 +782,19 @@ private fun SearchAndResultsPanel(
     strings: UiStrings,
     query: String,
     selectedTag: String?,
+    selectedFileType: String?,
+    favoritesOnly: Boolean,
+    selectedReferenceId: String?,
     querySuggestions: List<Suggestion>,
     fileSuggestions: List<Suggestion>,
     searchResults: List<SearchResult>,
-    topTags: List<String>,
+    tagSummaries: List<TagSummary>,
+    fileTypeSummaries: List<FileTypeSummary>,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
     onTagSelected: (String) -> Unit,
+    onFileTypeSelected: (String?) -> Unit,
+    onFavoritesOnlyToggle: () -> Unit,
     onOpenFile: (String) -> Unit,
     onRefreshFile: (String) -> Unit,
     onFavoriteToggle: (String) -> Unit,
@@ -707,12 +837,44 @@ private fun SearchAndResultsPanel(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                topTags.take(8).forEach { tag ->
-                    AssistChip(
-                        onClick = { onTagSelected(tag) },
-                        label = { Text(tag) },
+                tagSummaries.take(8).forEach { tag ->
+                    FilterChip(
+                        selected = selectedTag == tag.tag,
+                        onClick = { onTagSelected(tag.tag) },
+                        label = { Text("${tag.tag} · ${tag.referenceCount}") },
                     )
                 }
+            }
+
+            Text(
+                text = strings.fileTypeFiltersTitle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium,
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = selectedFileType == null,
+                    onClick = { onFileTypeSelected(null) },
+                    label = { Text(strings.allFileTypes) },
+                )
+                fileTypeSummaries.take(6).forEach { fileType ->
+                    FilterChip(
+                        selected = selectedFileType == fileType.fileType,
+                        onClick = { onFileTypeSelected(fileType.fileType) },
+                        label = { Text("${fileType.fileType} · ${fileType.referenceCount}") },
+                    )
+                }
+                FilterChip(
+                    selected = favoritesOnly,
+                    onClick = onFavoritesOnlyToggle,
+                    label = { Text(strings.favoritesOnly) },
+                )
             }
 
             SuggestionSection(
@@ -729,29 +891,62 @@ private fun SearchAndResultsPanel(
 
             HorizontalDivider(color = Color(0x224F6787))
 
+            val resultSummary = remember(query, selectedTag, selectedFileType, favoritesOnly, searchResults.size, strings) {
+                buildList {
+                    add(formatCount(strings.resultsCountLabel, searchResults.size))
+                    if (query.isNotBlank()) {
+                        add(formatTagFilter(strings.filteredByQueryLabel, query))
+                    }
+                    if (selectedTag != null) {
+                        add(formatTagFilter(strings.filteredByTagLabel, selectedTag))
+                    }
+                    if (selectedFileType != null) {
+                        add(formatTagFilter(strings.filteredByTypeLabel, selectedFileType))
+                    }
+                    if (favoritesOnly) {
+                        add(strings.filteredByFavoritesLabel)
+                    }
+                }.joinToString(" \u00b7 ")
+            }
+
             Text(
-                text = if (selectedTag == null) strings.allResults else formatTagFilter(strings.filteredByTagLabel, selectedTag),
+                text = if (resultSummary.isBlank()) strings.allResults else resultSummary,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
             )
 
-            if (searchResults.isEmpty()) {
-                EmptyState(strings = strings)
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    searchResults.forEach { result ->
-                        ReferenceResultCard(
-                            strings = strings,
-                            result = result,
-                            onOpen = { onOpenFile(result.reference.id) },
-                            onRefresh = { onRefreshFile(result.reference.id) },
-                            onFavoriteToggle = { onFavoriteToggle(result.reference.id) },
-                            onDelete = { onDeleteReference(result.reference.id) },
-                            onUpdateTitle = { title -> onUpdateReferenceTitle(result.reference.id, title) },
-                            onUpdateTags = { tags -> onUpdateReferenceTags(result.reference.id, tags) },
-                            onUpdateNotes = { notes -> onUpdateReferenceNotes(result.reference.id, notes) },
-                            onTagSelected = onTagSelected,
-                        )
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val resultCardWidth = when {
+                    maxWidth < 720.dp -> maxWidth
+                    maxWidth < 1080.dp -> 360.dp
+                    else -> 400.dp
+                }
+
+                if (searchResults.isEmpty()) {
+                    EmptyState(strings = strings)
+                } else {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        searchResults.forEach { result ->
+                            Box(modifier = Modifier.width(resultCardWidth)) {
+                                ReferenceResultCard(
+                                    strings = strings,
+                                    result = result,
+                                    selected = selectedReferenceId == result.reference.id,
+                                    onOpen = { onOpenFile(result.reference.id) },
+                                    onRefresh = { onRefreshFile(result.reference.id) },
+                                    onFavoriteToggle = { onFavoriteToggle(result.reference.id) },
+                                    onDelete = { onDeleteReference(result.reference.id) },
+                                    onUpdateTitle = { title -> onUpdateReferenceTitle(result.reference.id, title) },
+                                    onUpdateTags = { tags -> onUpdateReferenceTags(result.reference.id, tags) },
+                                    onUpdateNotes = { notes -> onUpdateReferenceNotes(result.reference.id, notes) },
+                                    onTagSelected = onTagSelected,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -799,6 +994,54 @@ private fun SuggestionChip(
 }
 
 @Composable
+private fun TagLibraryPanel(
+    strings: UiStrings,
+    tagSummaries: List<TagSummary>,
+    selectedTag: String?,
+    onTagSelected: (String) -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0x141D2B3C)),
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(text = strings.tagLibraryTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = strings.tagLibrarySubtitle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (tagSummaries.isEmpty()) {
+                Text(
+                    text = strings.tagLibraryEmpty,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                )
+            } else {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    tagSummaries.forEach { tag ->
+                        FilterChip(
+                            selected = selectedTag == tag.tag,
+                            onClick = { onTagSelected(tag.tag) },
+                            label = { Text("${tag.tag} · ${tag.referenceCount}") },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ReferenceResultCard(
     strings: UiStrings,
     result: SearchResult,
@@ -810,6 +1053,8 @@ private fun ReferenceResultCard(
     onUpdateTags: (String) -> Unit,
     onUpdateNotes: (String) -> Unit,
     onTagSelected: (String) -> Unit,
+    selected: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     var isEditing by remember(result.reference.id) { mutableStateOf(false) }
     var titleDraft by remember(result.reference.id) { mutableStateOf(result.reference.title) }
@@ -819,7 +1064,13 @@ private fun ReferenceResultCard(
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0x10182839)),
         shape = RoundedCornerShape(20.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier
+            .border(
+                width = if (selected) 1.5.dp else 1.dp,
+                color = if (selected) MaterialTheme.colorScheme.primary else Color(0x223D5778),
+                shape = RoundedCornerShape(20.dp),
+            )
+            .clickable(onClick = onOpen),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -866,12 +1117,10 @@ private fun ReferenceResultCard(
                         label = { Text(strings.referenceTitle) },
                         singleLine = true,
                     )
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = tagsDraft,
-                        onValueChange = { tagsDraft = it },
-                        label = { Text(strings.tagsCommaSeparated) },
-                        singleLine = true,
+                    TagChipEditor(
+                        strings = strings,
+                        tagsText = tagsDraft,
+                        onTagsTextChange = { tagsDraft = it },
                     )
                     OutlinedTextField(
                         modifier = Modifier.fillMaxWidth(),
@@ -951,9 +1200,7 @@ private fun RecommendationPanel(
     strings: UiStrings,
     recommendations: List<Suggestion>,
     recentReferences: List<FileReference>,
-    selectedReference: FileReference?,
     onUseSuggestion: (String) -> Unit,
-    onTagSelected: (String) -> Unit,
     onOpenFile: (String) -> Unit,
     onRefreshFile: (String) -> Unit,
     onDeleteReference: (String) -> Unit,
@@ -972,24 +1219,10 @@ private fun RecommendationPanel(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(text = strings.recommendationTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text(
-                    text = strings.recommendationSubtitle,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            if (selectedReference != null) {
-                SelectedReferenceCard(
-                    reference = selectedReference,
-                    strings = strings,
-                    onOpenFile = onOpenFile,
-                    onRefreshFile = onRefreshFile,
-                    onDeleteReference = onDeleteReference,
-                    onUpdateReferenceTitle = onUpdateReferenceTitle,
-                    onUpdateReferenceTags = onUpdateReferenceTags,
-                    onUpdateReferenceNotes = onUpdateReferenceNotes,
-                    onTagSelected = onTagSelected,
-                )
+            Text(
+                text = strings.recommendationSubtitle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             }
 
             Text(
@@ -1091,12 +1324,14 @@ private fun SelectedReferenceCard(
     onUpdateReferenceTitle: (String, String) -> Unit,
     onUpdateReferenceTags: (String, String) -> Unit,
     onUpdateReferenceNotes: (String, String) -> Unit,
+    onFavoriteToggle: (String) -> Unit,
     onTagSelected: (String) -> Unit,
 ) {
     var isEditing by remember(reference.id) { mutableStateOf(false) }
     var titleDraft by remember(reference.id) { mutableStateOf(reference.title) }
     var tagsDraft by remember(reference.id) { mutableStateOf(reference.tags.joinToString(", ")) }
     var notesDraft by remember(reference.id) { mutableStateOf(reference.notes) }
+    var showDeleteConfirm by remember(reference.id) { mutableStateOf(false) }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0x141A2A3B)),
@@ -1117,12 +1352,10 @@ private fun SelectedReferenceCard(
                     singleLine = true,
                 )
                 Text(reference.source, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = tagsDraft,
-                    onValueChange = { tagsDraft = it },
-                    label = { Text(strings.tagsCommaSeparated) },
-                    singleLine = true,
+                TagChipEditor(
+                    strings = strings,
+                    tagsText = tagsDraft,
+                    onTagsTextChange = { tagsDraft = it },
                 )
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
@@ -1171,12 +1404,36 @@ private fun SelectedReferenceCard(
                     }) {
                         Text(strings.edit)
                     }
-                    OutlinedButton(onClick = { onDeleteReference(reference.id) }) {
+                    OutlinedButton(onClick = { onFavoriteToggle(reference.id) }) {
+                        Text(if (reference.isFavorite) strings.unfavorite else strings.favorite)
+                    }
+                    OutlinedButton(onClick = { showDeleteConfirm = true }) {
                         Text(strings.delete)
                     }
                 }
             }
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text(strings.delete) },
+            text = { Text(reference.title) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    onDeleteReference(reference.id)
+                }) {
+                    Text(strings.delete)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text(strings.cancel)
+                }
+            },
+        )
     }
 }
 
@@ -1197,6 +1454,107 @@ private fun EmptyState(strings: UiStrings) {
         )
     }
 }
+
+@Composable
+private fun TagChipEditor(
+    strings: UiStrings,
+    tagsText: String,
+    onTagsTextChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var newTagDraft by remember { mutableStateOf("") }
+    val tags = remember(tagsText) { parseDraftTags(tagsText) }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = strings.tagEditorTitle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp,
+        )
+
+        if (tags.isEmpty()) {
+            Text(
+                text = strings.tagEditorEmpty,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+            )
+        } else {
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                tags.forEach { tag ->
+                    AssistChip(
+                        onClick = { onTagsTextChange(removeDraftTag(tagsText, tag)) },
+                        label = { Text(tag) },
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                modifier = Modifier.weight(1f),
+                value = newTagDraft,
+                onValueChange = { newTagDraft = it },
+                label = { Text(strings.addTag) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = {
+                    val next = addDraftTag(tagsText, newTagDraft)
+                    if (next != tagsText) {
+                        onTagsTextChange(next)
+                    }
+                    newTagDraft = ""
+                }),
+            )
+            Button(onClick = {
+                val next = addDraftTag(tagsText, newTagDraft)
+                if (next != tagsText) {
+                    onTagsTextChange(next)
+                }
+                newTagDraft = ""
+            }) {
+                Text(strings.addTag)
+            }
+        }
+    }
+}
+
+private fun parseDraftTags(tagsText: String): List<String> =
+    tagsText
+        .split(",")
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinctBy { normalize(it) }
+
+private fun renderDraftTags(tags: List<String>): String =
+    tags.map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinctBy { normalize(it) }
+        .joinToString(", ")
+
+private fun addDraftTag(tagsText: String, tag: String): String {
+    val tags = parseDraftTags(tagsText).toMutableList()
+    val cleaned = tag.trim()
+    if (cleaned.isBlank()) return renderDraftTags(tags)
+    if (tags.none { normalize(it) == normalize(cleaned) }) {
+        tags += cleaned
+    }
+    return renderDraftTags(tags)
+}
+
+private fun removeDraftTag(tagsText: String, tag: String): String =
+    renderDraftTags(
+        parseDraftTags(tagsText).filterNot { normalize(it) == normalize(tag) }
+    )
 
 @Composable
 private fun TagRow(

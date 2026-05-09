@@ -20,3 +20,5 @@ internal fun tokenize(value: String): List<String> {
 }
 
 internal fun formatTagFilter(label: String, tag: String): String = label.replace("%s", tag)
+
+internal fun formatCount(label: String, count: Int): String = label.replace("%d", count.toString())

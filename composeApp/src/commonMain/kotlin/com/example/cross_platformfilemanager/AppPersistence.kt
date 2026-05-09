@@ -9,6 +9,7 @@ expect fun createAppSnapshotStore(): AppSnapshotStore?
 
 interface LocalDataController {
     suspend fun exportSnapshot(): String?
+    suspend fun importSnapshot(): String?
     suspend fun clearAllData()
 }
 

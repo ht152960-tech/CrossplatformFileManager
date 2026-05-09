@@ -443,6 +443,9 @@
                 exportSnapshot: async function () {
                     return await this.loadSnapshot();
                 },
+                importSnapshot: async function () {
+                    return await pickSnapshotFile();
+                },
                 clearAllData: async function () {
                     clearDraftStore();
                     await clearSnapshotStorage();
@@ -454,6 +457,30 @@
                 pickReference: pickReference,
                 resolveReference: resolveReference
             };
+
+            function pickSnapshotFile() {
+                return new Promise((resolve) => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.accept = ".snapshot,.txt,application/json,text/plain";
+                    input.style.display = "none";
+                    input.addEventListener("change", async () => {
+                        const file = input.files && input.files[0];
+                        input.remove();
+                        if (!file) {
+                            resolve(null);
+                            return;
+                        }
+                        try {
+                            resolve(await file.text());
+                        } catch (error) {
+                            resolve(null);
+                        }
+                    });
+                    document.body.appendChild(input);
+                    input.click();
+                });
+            }
         })();
     </script>
 </head>

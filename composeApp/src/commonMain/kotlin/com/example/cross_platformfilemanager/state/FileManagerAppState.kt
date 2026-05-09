@@ -19,6 +19,8 @@ class FileManagerAppState(
     var locale by mutableStateOf(AppLocale.ZhCn)
     var query by mutableStateOf("")
     var selectedTag by mutableStateOf<String?>(null)
+    var selectedFileType by mutableStateOf<String?>(null)
+    var favoritesOnly by mutableStateOf(false)
 
     var draftTitle by mutableStateOf(defaultDraftTitle)
     var draftSource by mutableStateOf(defaultDraftSource)
@@ -39,10 +41,10 @@ class FileManagerAppState(
 
     val searchResults: List<SearchResult>
         get() {
-            if (query.isBlank() && selectedTag == null) {
-                return repository.search("", null)
+            if (query.isBlank() && selectedTag == null && selectedFileType == null && !favoritesOnly) {
+                return repository.search("", null, null, false)
             }
-            return repository.search(query, selectedTag)
+            return repository.search(query, selectedTag, selectedFileType, favoritesOnly)
         }
 
     val querySuggestions: List<Suggestion>
@@ -64,6 +66,12 @@ class FileManagerAppState(
     val topTags: List<String>
         get() = repository.topTags()
 
+    val tagSummaries: List<TagSummary>
+        get() = repository.tagSummaries()
+
+    val fileTypeSummaries: List<FileTypeSummary>
+        get() = repository.fileTypeSummaries()
+
     val recentReferences: List<FileReference>
         get() = repository.recentReferences()
 
@@ -76,6 +84,8 @@ class FileManagerAppState(
         locale = locale,
         query = query,
         selectedTag = selectedTag,
+        selectedFileType = selectedFileType,
+        favoritesOnly = favoritesOnly,
         activeReferenceId = activeReferenceId,
         references = repository.references.toList(),
         recentSearches = repository.recentSearches.toList(),
@@ -86,10 +96,33 @@ class FileManagerAppState(
         locale = snapshot.locale
         query = snapshot.query
         selectedTag = snapshot.selectedTag
+        selectedFileType = snapshot.selectedFileType
+        favoritesOnly = snapshot.favoritesOnly
         activeReferenceId = snapshot.activeReferenceId
         repository.replaceReferences(snapshot.references)
         repository.replaceRecentSearches(snapshot.recentSearches)
         repository.replaceRecommendationLogs(snapshot.recommendationLogs)
+        snapshotVersion++
+    }
+
+    fun mergeSnapshot(snapshot: AppSnapshot) {
+        snapshot.references.forEach { reference ->
+            repository.upsertReference(reference)
+        }
+        repository.replaceRecentSearches(
+            (repository.recentSearches + snapshot.recentSearches)
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .take(12),
+        )
+        repository.replaceRecommendationLogs(
+            (repository.recommendationLogs + snapshot.recommendationLogs)
+                .distinctBy { it.id }
+                .sortedBy { it.generatedAtMillis }
+                .takeLast(30),
+        )
+        activeReferenceId = activeReferenceId ?: snapshot.activeReferenceId ?: repository.references.firstOrNull()?.id
         snapshotVersion++
     }
 
@@ -110,6 +143,8 @@ class FileManagerAppState(
         locale = AppLocale.ZhCn
         query = ""
         selectedTag = null
+        selectedFileType = null
+        favoritesOnly = false
         draftTitle = defaultDraftTitle
         draftSource = defaultDraftSource
         draftType = defaultDraftType
@@ -170,6 +205,23 @@ class FileManagerAppState(
         }
         repository.recordSearch(query.ifBlank { tag })
         repository.recordRecommendation(query.ifBlank { tag }, selectedTag, recommendations)
+        snapshotVersion++ 
+    }
+
+    fun toggleFileTypeFilter(fileType: String?) {
+        val normalized = fileType?.trim()?.takeIf { it.isNotBlank() }
+        selectedFileType = if (normalized == null) {
+            null
+        } else if (selectedFileType == normalized) {
+            null
+        } else {
+            normalized
+        }
+        snapshotVersion++
+    }
+
+    fun toggleFavoritesOnly() {
+        favoritesOnly = !favoritesOnly
         snapshotVersion++
     }
 
