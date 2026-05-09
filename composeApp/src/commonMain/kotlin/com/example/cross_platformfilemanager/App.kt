@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -63,11 +64,23 @@ fun App() {
     val snapshotStore = remember { createAppSnapshotStore() }
     val browserReferencePicker = remember { createBrowserReferencePicker() }
     val browserReferenceResolver = remember { createBrowserReferenceResolver() }
+    val localDataController = remember { createLocalDataController() }
     val appState = remember(browserReferenceResolver) {
         FileManagerAppState(browserReferenceResolver = browserReferenceResolver)
     }
     val coroutineScope = rememberCoroutineScope()
     val strings = remember(appState.locale) { AppStrings.forLocale(appState.locale) }
+    var skipNextAutoSave by remember { mutableStateOf(false) }
+    var showClearConfirmDialog by remember { mutableStateOf(false) }
+    val existingDraftReferenceTitle = remember(appState.draftSource, appState.searchResults, appState.recentReferences) {
+        val targetSource = appState.draftSource.trim()
+        appState.searchResults.asSequence()
+            .map { it.reference }
+            .plus(appState.recentReferences.asSequence())
+            .distinctBy { it.id }
+            .firstOrNull { it.source.trim().equals(targetSource, ignoreCase = true) }
+            ?.title
+    }
 
     LaunchedEffect(snapshotStore) {
         snapshotStore?.load()?.let { snapshot ->
@@ -76,6 +89,10 @@ fun App() {
     }
 
     LaunchedEffect(appState.snapshotVersion, snapshotStore) {
+        if (skipNextAutoSave) {
+            skipNextAutoSave = false
+            return@LaunchedEffect
+        }
         snapshotStore?.save(appState.exportSnapshot())
     }
 
@@ -89,6 +106,31 @@ fun App() {
                     .fillMaxSize()
                     .background(appBackgroundBrush())
             ) {
+                if (showClearConfirmDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showClearConfirmDialog = false },
+                        title = { Text(strings.clearDataTitle) },
+                        text = { Text(strings.clearDataBody) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showClearConfirmDialog = false
+                                coroutineScope.launch {
+                            localDataController?.clearAllData()
+                            skipNextAutoSave = true
+                            appState.clearLocalData()
+                        }
+                    }) {
+                        Text(strings.clearDataConfirm)
+                    }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showClearConfirmDialog = false }) {
+                                Text(strings.clearDataAbort)
+                            }
+                        },
+                    )
+                }
+
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -102,6 +144,14 @@ fun App() {
                         onClearFilters = {
                             appState.query = ""
                             appState.selectedTag = null
+                        },
+                        onExportData = {
+                            coroutineScope.launch {
+                                localDataController?.exportSnapshot()
+                            }
+                        },
+                        onClearData = {
+                            showClearConfirmDialog = true
                         },
                     )
 
@@ -146,6 +196,7 @@ fun App() {
                                         onAdd = {
                                             appState.addDraftReference()
                                         },
+                                        duplicateSourceTitle = existingDraftReferenceTitle,
                                     )
 
                                     SearchAndResultsPanel(
@@ -166,6 +217,16 @@ fun App() {
                                             }
                                         },
                                         onFavoriteToggle = { appState.toggleFavorite(it) },
+                                        onDeleteReference = { appState.deleteReference(it) },
+                                        onUpdateReferenceTitle = { referenceId, title ->
+                                            appState.updateReferenceTitle(referenceId, title)
+                                        },
+                                        onUpdateReferenceTags = { referenceId, tags ->
+                                            appState.updateReferenceTags(referenceId, tags)
+                                        },
+                                        onUpdateReferenceNotes = { referenceId, notes ->
+                                            appState.updateReferenceNotes(referenceId, notes)
+                                        },
                                         onApplySuggestedQuery = {
                                             appState.query = it
                                             appState.commitSearch()
@@ -189,6 +250,16 @@ fun App() {
                                             coroutineScope.launch {
                                                 appState.refreshReference(referenceId)
                                             }
+                                        },
+                                        onDeleteReference = { appState.deleteReference(it) },
+                                        onUpdateReferenceTitle = { referenceId, title ->
+                                            appState.updateReferenceTitle(referenceId, title)
+                                        },
+                                        onUpdateReferenceTags = { referenceId, tags ->
+                                            appState.updateReferenceTags(referenceId, tags)
+                                        },
+                                        onUpdateReferenceNotes = { referenceId, notes ->
+                                            appState.updateReferenceNotes(referenceId, notes)
                                         },
                                     )
                                 }
@@ -219,6 +290,7 @@ fun App() {
                                     onTagsChange = { appState.draftTags = it },
                                     onNotesChange = { appState.draftNotes = it },
                                     onAdd = { appState.addDraftReference() },
+                                    duplicateSourceTitle = existingDraftReferenceTitle,
                                 )
 
                                 SearchAndResultsPanel(
@@ -233,12 +305,22 @@ fun App() {
                                     onSearch = { appState.commitSearch() },
                                     onTagSelected = { appState.toggleTagFilter(it) },
                                     onOpenFile = { appState.openReference(it) },
-                                    onRefreshFile = { referenceId ->
+                                    onRefreshFile = { referenceId -> 
                                         coroutineScope.launch {
                                             appState.refreshReference(referenceId)
                                         }
                                     },
                                     onFavoriteToggle = { appState.toggleFavorite(it) },
+                                    onDeleteReference = { appState.deleteReference(it) },
+                                    onUpdateReferenceTitle = { referenceId, title ->
+                                        appState.updateReferenceTitle(referenceId, title)
+                                    },
+                                    onUpdateReferenceTags = { referenceId, tags ->
+                                        appState.updateReferenceTags(referenceId, tags)
+                                    },
+                                    onUpdateReferenceNotes = { referenceId, notes ->
+                                        appState.updateReferenceNotes(referenceId, notes)
+                                    },
                                     onApplySuggestedQuery = {
                                         appState.query = it
                                         appState.commitSearch()
@@ -257,6 +339,16 @@ fun App() {
                                         coroutineScope.launch {
                                             appState.refreshReference(referenceId)
                                         }
+                                    },
+                                    onDeleteReference = { appState.deleteReference(it) },
+                                    onUpdateReferenceTitle = { referenceId, title ->
+                                        appState.updateReferenceTitle(referenceId, title)
+                                    },
+                                    onUpdateReferenceTags = { referenceId, tags ->
+                                        appState.updateReferenceTags(referenceId, tags)
+                                    },
+                                    onUpdateReferenceNotes = { referenceId, notes ->
+                                        appState.updateReferenceNotes(referenceId, notes)
                                     },
                                 )
                             }
@@ -297,6 +389,8 @@ private fun HeaderBar(
     locale: AppLocale,
     onLocaleChange: (AppLocale) -> Unit,
     onClearFilters: () -> Unit,
+    onExportData: () -> Unit,
+    onClearData: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -330,6 +424,12 @@ private fun HeaderBar(
                 locale = locale,
                 onLocaleChange = onLocaleChange,
             )
+            TextButton(onClick = onExportData) {
+                Text(strings.exportData)
+            }
+            TextButton(onClick = onClearData) {
+                Text(strings.clearData)
+            }
             TextButton(onClick = onClearFilters) {
                 Text(strings.resetFilters)
             }
@@ -439,6 +539,7 @@ private fun QuickAddCard(
     onTagsChange: (String) -> Unit,
     onNotesChange: (String) -> Unit,
     onAdd: () -> Unit,
+    duplicateSourceTitle: String?,
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0x141D2B3C)),
@@ -456,6 +557,16 @@ private fun QuickAddCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onSelectLocalFile,
+                    enabled = browserPickerAvailable,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(strings.selectLocalFile)
+                }
                 Text(
                     text = strings.selectLocalFileHint,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -517,13 +628,22 @@ private fun QuickAddCard(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(
-                        onClick = onSelectLocalFile,
-                        enabled = browserPickerAvailable,
-                    ) {
-                        Text(strings.selectLocalFile)
+                if (duplicateSourceTitle != null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = strings.duplicateSourceNotice,
+                            color = Color(0xFFF5C451),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            text = duplicateSourceTitle,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                        )
                     }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(onClick = onAdd) {
                         Text(strings.addReference)
                     }
@@ -548,6 +668,10 @@ private fun SearchAndResultsPanel(
     onOpenFile: (String) -> Unit,
     onRefreshFile: (String) -> Unit,
     onFavoriteToggle: (String) -> Unit,
+    onDeleteReference: (String) -> Unit,
+    onUpdateReferenceTitle: (String, String) -> Unit,
+    onUpdateReferenceTags: (String, String) -> Unit,
+    onUpdateReferenceNotes: (String, String) -> Unit,
     onApplySuggestedQuery: (String) -> Unit,
 ) {
     Card(
@@ -622,6 +746,10 @@ private fun SearchAndResultsPanel(
                             onOpen = { onOpenFile(result.reference.id) },
                             onRefresh = { onRefreshFile(result.reference.id) },
                             onFavoriteToggle = { onFavoriteToggle(result.reference.id) },
+                            onDelete = { onDeleteReference(result.reference.id) },
+                            onUpdateTitle = { title -> onUpdateReferenceTitle(result.reference.id, title) },
+                            onUpdateTags = { tags -> onUpdateReferenceTags(result.reference.id, tags) },
+                            onUpdateNotes = { notes -> onUpdateReferenceNotes(result.reference.id, notes) },
                             onTagSelected = onTagSelected,
                         )
                     }
@@ -677,8 +805,17 @@ private fun ReferenceResultCard(
     onOpen: () -> Unit,
     onRefresh: () -> Unit,
     onFavoriteToggle: () -> Unit,
+    onDelete: () -> Unit,
+    onUpdateTitle: (String) -> Unit,
+    onUpdateTags: (String) -> Unit,
+    onUpdateNotes: (String) -> Unit,
     onTagSelected: (String) -> Unit,
 ) {
+    var isEditing by remember(result.reference.id) { mutableStateOf(false) }
+    var titleDraft by remember(result.reference.id) { mutableStateOf(result.reference.title) }
+    var tagsDraft by remember(result.reference.id) { mutableStateOf(result.reference.tags.joinToString(", ")) }
+    var notesDraft by remember(result.reference.id) { mutableStateOf(result.reference.notes) }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0x10182839)),
         shape = RoundedCornerShape(20.dp),
@@ -720,7 +857,33 @@ private fun ReferenceResultCard(
                 style = MaterialTheme.typography.bodySmall,
             )
 
-            TagRow(tags = result.reference.tags, onTagSelected = onTagSelected)
+            if (isEditing) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = titleDraft,
+                        onValueChange = { titleDraft = it },
+                        label = { Text(strings.referenceTitle) },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = tagsDraft,
+                        onValueChange = { tagsDraft = it },
+                        label = { Text(strings.tagsCommaSeparated) },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = notesDraft,
+                        onValueChange = { notesDraft = it },
+                        label = { Text(strings.notes) },
+                        minLines = 2,
+                    )
+                }
+            } else {
+                TagRow(tags = result.reference.tags, onTagSelected = onTagSelected)
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -734,6 +897,36 @@ private fun ReferenceResultCard(
                     fontWeight = FontWeight.Medium,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (isEditing) {
+                        OutlinedButton(onClick = {
+                            onUpdateTitle(titleDraft)
+                            onUpdateTags(tagsDraft)
+                            onUpdateNotes(notesDraft)
+                            isEditing = false
+                        }) {
+                            Text(strings.save)
+                        }
+                        OutlinedButton(onClick = {
+                            titleDraft = result.reference.title
+                            tagsDraft = result.reference.tags.joinToString(", ")
+                            notesDraft = result.reference.notes
+                            isEditing = false
+                        }) {
+                            Text(strings.cancel)
+                        }
+                    } else {
+                        OutlinedButton(onClick = {
+                            titleDraft = result.reference.title
+                            tagsDraft = result.reference.tags.joinToString(", ")
+                            notesDraft = result.reference.notes
+                            isEditing = true
+                        }) {
+                            Text(strings.edit)
+                        }
+                        OutlinedButton(onClick = onDelete) {
+                            Text(strings.delete)
+                        }
+                    }
                     OutlinedButton(onClick = onOpen) {
                         Text(strings.open)
                     }
@@ -763,6 +956,10 @@ private fun RecommendationPanel(
     onTagSelected: (String) -> Unit,
     onOpenFile: (String) -> Unit,
     onRefreshFile: (String) -> Unit,
+    onDeleteReference: (String) -> Unit,
+    onUpdateReferenceTitle: (String, String) -> Unit,
+    onUpdateReferenceTags: (String, String) -> Unit,
+    onUpdateReferenceNotes: (String, String) -> Unit,
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0x141D2B3C)),
@@ -787,6 +984,10 @@ private fun RecommendationPanel(
                     strings = strings,
                     onOpenFile = onOpenFile,
                     onRefreshFile = onRefreshFile,
+                    onDeleteReference = onDeleteReference,
+                    onUpdateReferenceTitle = onUpdateReferenceTitle,
+                    onUpdateReferenceTags = onUpdateReferenceTags,
+                    onUpdateReferenceNotes = onUpdateReferenceNotes,
                     onTagSelected = onTagSelected,
                 )
             }
@@ -886,8 +1087,17 @@ private fun SelectedReferenceCard(
     strings: UiStrings,
     onOpenFile: (String) -> Unit,
     onRefreshFile: (String) -> Unit,
+    onDeleteReference: (String) -> Unit,
+    onUpdateReferenceTitle: (String, String) -> Unit,
+    onUpdateReferenceTags: (String, String) -> Unit,
+    onUpdateReferenceNotes: (String, String) -> Unit,
     onTagSelected: (String) -> Unit,
 ) {
+    var isEditing by remember(reference.id) { mutableStateOf(false) }
+    var titleDraft by remember(reference.id) { mutableStateOf(reference.title) }
+    var tagsDraft by remember(reference.id) { mutableStateOf(reference.tags.joinToString(", ")) }
+    var notesDraft by remember(reference.id) { mutableStateOf(reference.notes) }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0x141A2A3B)),
         shape = RoundedCornerShape(20.dp),
@@ -898,16 +1108,71 @@ private fun SelectedReferenceCard(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(text = strings.activeItem, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            Text(reference.title, fontWeight = FontWeight.SemiBold)
-            Text(reference.source, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            TagRow(tags = reference.tags, onTagSelected = onTagSelected)
+            if (isEditing) {
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = titleDraft,
+                    onValueChange = { titleDraft = it },
+                    label = { Text(strings.referenceTitle) },
+                    singleLine = true,
+                )
+                Text(reference.source, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = tagsDraft,
+                    onValueChange = { tagsDraft = it },
+                    label = { Text(strings.tagsCommaSeparated) },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = notesDraft,
+                    onValueChange = { notesDraft = it },
+                    label = { Text(strings.notes) },
+                    minLines = 2,
+                )
+            } else {
+                Text(reference.title, fontWeight = FontWeight.SemiBold)
+                Text(reference.source, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                TagRow(tags = reference.tags, onTagSelected = onTagSelected)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { onOpenFile(reference.id) }) {
-                    Text(strings.open)
-                }
-                if (reference.sourceKind == FileSourceKind.BrowserHandle) {
-                    OutlinedButton(onClick = { onRefreshFile(reference.id) }) {
-                        Text(strings.refresh)
+                if (isEditing) {
+                    OutlinedButton(onClick = {
+                        onUpdateReferenceTitle(reference.id, titleDraft)
+                        onUpdateReferenceTags(reference.id, tagsDraft)
+                        onUpdateReferenceNotes(reference.id, notesDraft)
+                        isEditing = false
+                    }) {
+                        Text(strings.save)
+                    }
+                    OutlinedButton(onClick = {
+                        titleDraft = reference.title
+                        tagsDraft = reference.tags.joinToString(", ")
+                        notesDraft = reference.notes
+                        isEditing = false
+                    }) {
+                        Text(strings.cancel)
+                    }
+                } else {
+                    OutlinedButton(onClick = { onOpenFile(reference.id) }) {
+                        Text(strings.open)
+                    }
+                    if (reference.sourceKind == FileSourceKind.BrowserHandle) {
+                        OutlinedButton(onClick = { onRefreshFile(reference.id) }) {
+                            Text(strings.refresh)
+                        }
+                    }
+                    OutlinedButton(onClick = {
+                        titleDraft = reference.title
+                        tagsDraft = reference.tags.joinToString(", ")
+                        notesDraft = reference.notes
+                        isEditing = true
+                    }) {
+                        Text(strings.edit)
+                    }
+                    OutlinedButton(onClick = { onDeleteReference(reference.id) }) {
+                        Text(strings.delete)
                     }
                 }
             }

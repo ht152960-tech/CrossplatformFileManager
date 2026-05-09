@@ -1,5 +1,6 @@
 package com.example.cross_platformfilemanager
 
+//语言/地区相关。
 enum class AppLocale {
     ZhCn,
     EnUs,
@@ -39,6 +40,16 @@ data class UiStrings(
     val open: String,
     val refresh: String,
     val activeItem: String,
+    val edit: String,
+    val delete: String,
+    val save: String,
+    val cancel: String,
+    val exportData: String,
+    val clearData: String,
+    val clearDataTitle: String,
+    val clearDataBody: String,
+    val clearDataConfirm: String,
+    val clearDataAbort: String,
     val emptyResultsTitle: String,
     val emptyResultsBody: String,
     val openToSearch: String,
@@ -48,6 +59,7 @@ data class UiStrings(
     val recentOpenedCount: String,
     val searchRecordedCount: String,
     val filteredByTagLabel: String,
+    val duplicateSourceNotice: String,
 )
 
 object AppStrings {
@@ -68,7 +80,7 @@ object AppStrings {
         quickAddTitle = "\u65b0\u589e\u6587\u4ef6\u5f15\u7528",
         quickAddSubtitle = "\u53ea\u5b58\u6587\u4ef6\u5f15\u7528\u548c\u6807\u7b7e\uff0c\u4e0d\u5b58\u6587\u4ef6\u5185\u5bb9\u3002\u540e\u7eed\u53ef\u63a5\u6d4f\u89c8\u5668\u6587\u4ef6\u53e5\u67c4\u6216\u540c\u6b65\u5c42\u3002",
         selectLocalFile = "\u9009\u62e9\u672c\u5730\u6587\u4ef6",
-        selectLocalFileHint = "\u4f7f\u7528\u6d4f\u89c8\u5668\u9009\u62e9\u540e\uff0c\u53ea\u4fdd\u7559\u5f15\u7528\u548c\u53e5\u67c4\u6807\u8bc6\uff0c\u4e0d\u590d\u5236\u5185\u5bb9\u3002",
+        selectLocalFileHint = "\u9009\u62e9\u8bbe\u5907\u4e0a\u7684\u6587\u4ef6\uff0c\u6211\u4eec\u53ea\u4fdd\u7559\u5f15\u7528\u548c\u6807\u8bc6\uff0c\u4e0d\u590d\u5236\u5185\u5bb9\u3002",
         referenceTitle = "\u5f15\u7528\u540d\u79f0",
         referenceLocation = "\u6587\u4ef6\u4f4d\u7f6e / \u53e5\u67c4 / URL",
         fileType = "\u6587\u4ef6\u7c7b\u578b",
@@ -90,6 +102,16 @@ object AppStrings {
         open = "\u6253\u5f00",
         refresh = "\u5237\u65b0",
         activeItem = "\u5f53\u524d\u9009\u4e2d",
+        edit = "\u7f16\u8f91",
+        delete = "\u5220\u9664",
+        save = "\u4fdd\u5b58",
+        cancel = "\u53d6\u6d88",
+        exportData = "\u5bfc\u51fa\u6570\u636e",
+        clearData = "\u6e05\u7a7a\u672c\u5730\u6570\u636e",
+        clearDataTitle = "\u786e\u8ba4\u6e05\u7a7a\u672c\u5730\u6570\u636e",
+        clearDataBody = "\u6e05\u7a7a\u540e\uff0c\u672c\u5730\u5df2\u4fdd\u5b58\u7684\u5f15\u7528\u3001\u6807\u7b7e\u548c\u641c\u7d22\u8bb0\u5f55\u90fd\u4f1a\u88ab\u5220\u9664\u3002",
+        clearDataConfirm = "\u786e\u8ba4\u6e05\u7a7a",
+        clearDataAbort = "\u53d6\u6d88",
         emptyResultsTitle = "\u6ca1\u6709\u5339\u914d\u9879",
         emptyResultsBody = "\u6362\u4e2a\u5173\u952e\u8bcd\uff0c\u6216\u8005\u76f4\u63a5\u70b9\u4e0a\u9762\u7684\u6807\u7b7e\u5efa\u8bae\u3002",
         openToSearch = "\u6253\u5f00\u540e\u53ef\u7ee7\u7eed\u5b9a\u4f4d\u6807\u7b7e\u4e0e\u5386\u53f2\u3002",
@@ -99,6 +121,7 @@ object AppStrings {
         recentOpenedCount = "\u6700\u8fd1\u6253\u5f00\u6570",
         searchRecordedCount = "\u68c0\u7d22\u8bb0\u5f55",
         filteredByTagLabel = "\u5f53\u524d\u7b5b\u9009\u6807\u7b7e\uff1a%s",
+        duplicateSourceNotice = "\u8be5\u6765\u6e90\u5df2\u5b58\u5728\uff0c\u4fdd\u5b58\u65f6\u4f1a\u5408\u5e76\uff0c\u4e0d\u4f1a\u91cd\u590d\u521b\u5efa\u3002",
     )
 
     private fun en() = UiStrings(
@@ -113,7 +136,7 @@ object AppStrings {
         quickAddTitle = "Add a file reference",
         quickAddSubtitle = "Store only the reference and tags, not the file contents. We can later plug in browser file handles or sync.",
         selectLocalFile = "Select a local file",
-        selectLocalFileHint = "Choose a file in the browser. We only store the reference and handle token, not the contents.",
+        selectLocalFileHint = "Choose a file on this device. We only store the reference and handle token, not the contents.",
         referenceTitle = "Reference name",
         referenceLocation = "Path / handle / URL",
         fileType = "File type",
@@ -135,6 +158,16 @@ object AppStrings {
         open = "Open",
         refresh = "Refresh",
         activeItem = "Selected item",
+        edit = "Edit",
+        delete = "Delete",
+        save = "Save",
+        cancel = "Cancel",
+        exportData = "Export data",
+        clearData = "Clear local data",
+        clearDataTitle = "Confirm clear local data",
+        clearDataBody = "After clearing, locally saved references, tags, and search history will be removed.",
+        clearDataConfirm = "Clear",
+        clearDataAbort = "Cancel",
         emptyResultsTitle = "No matches yet",
         emptyResultsBody = "Try a different keyword or pick one of the tag suggestions above.",
         openToSearch = "Open an item to continue refining tags and history.",
@@ -144,5 +177,6 @@ object AppStrings {
         recentOpenedCount = "Recent opens",
         searchRecordedCount = "Search logs",
         filteredByTagLabel = "Filtered by tag: %s",
+        duplicateSourceNotice = "This source already exists, so saving will merge it instead of creating a duplicate.",
     )
 }

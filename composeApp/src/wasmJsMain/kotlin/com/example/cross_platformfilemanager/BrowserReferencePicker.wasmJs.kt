@@ -1,9 +1,10 @@
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+
 package com.example.cross_platformfilemanager
 
 import kotlinx.coroutines.await
 import kotlin.js.JsAny
 import kotlin.js.Promise
-import kotlin.js.ExperimentalWasmJsInterop
 
 actual fun createBrowserReferencePicker(): BrowserReferencePicker? = BrowserReferencePickerWasm()
 
@@ -18,5 +19,4 @@ private class BrowserReferencePickerWasm : BrowserReferencePicker {
     }
 }
 
-@OptIn(ExperimentalWasmJsInterop::class)
 private fun browserInterop(): BrowserPickInteropWasm = js("window.fileAtlasBrowser")

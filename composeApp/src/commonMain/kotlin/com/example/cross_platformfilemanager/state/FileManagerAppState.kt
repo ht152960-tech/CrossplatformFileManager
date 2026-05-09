@@ -4,20 +4,27 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
+//应用状态层，负责文件管理器的状态组织。
 class FileManagerAppState(
     private val repository: InMemoryFileRepository = InMemoryFileRepository(),
     private val recommendationEngine: RecommendationEngine = RecommendationEngine(),
     private val browserReferenceResolver: BrowserReferenceResolver? = null,
 ) {
+    private val defaultDraftTitle = "New reference"
+    private val defaultDraftSource = "/local/path/example.pdf"
+    private val defaultDraftType = "PDF"
+    private val defaultDraftTags = "tag1, tag2"
+    private val defaultDraftNotes = "Store only the reference and custom tags."
+
     var locale by mutableStateOf(AppLocale.ZhCn)
     var query by mutableStateOf("")
     var selectedTag by mutableStateOf<String?>(null)
 
-    var draftTitle by mutableStateOf("New reference")
-    var draftSource by mutableStateOf("/local/path/example.pdf")
-    var draftType by mutableStateOf("PDF")
-    var draftTags by mutableStateOf("tag1, tag2")
-    var draftNotes by mutableStateOf("Store only the reference and custom tags.")
+    var draftTitle by mutableStateOf(defaultDraftTitle)
+    var draftSource by mutableStateOf(defaultDraftSource)
+    var draftType by mutableStateOf(defaultDraftType)
+    var draftTags by mutableStateOf(defaultDraftTags)
+    var draftNotes by mutableStateOf(defaultDraftNotes)
 
     var activeReferenceId by mutableStateOf(repository.references.firstOrNull()?.id)
     var snapshotVersion by mutableStateOf(0)
@@ -86,45 +93,67 @@ class FileManagerAppState(
         snapshotVersion++
     }
 
+    fun resetWorkspace() {
+        resetWorkspaceFields()
+        activeReferenceId = repository.references.firstOrNull()?.id
+        snapshotVersion++
+    }
+
+    fun clearLocalData() {
+        repository.clearAllData()
+        resetWorkspaceFields()
+        activeReferenceId = null
+        snapshotVersion++
+    }
+
+    private fun resetWorkspaceFields() {
+        locale = AppLocale.ZhCn
+        query = ""
+        selectedTag = null
+        draftTitle = defaultDraftTitle
+        draftSource = defaultDraftSource
+        draftType = defaultDraftType
+        draftTags = defaultDraftTags
+        draftNotes = defaultDraftNotes
+    }
+
     fun addDraftReference() {
         val id = "ref-${nowMillis()}"
-        val normalizedTags = draftTags
+        val source = draftSource.trim().ifBlank { "/local/path/$id" }
+        val tags = draftTags
             .split(",")
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .distinct()
 
-        val title = draftTitle.trim().ifBlank { "Untitled reference" }
-        val source = draftSource.trim().ifBlank { "/local/path/$id" }
-        val type = draftType.trim().ifBlank { "FILE" }
-        val notes = draftNotes.trim()
-
-        repository.addReference(
-            FileReference(
-                id = id,
-                title = title,
+        val saved = repository.upsertReference(
+            BrowserReferenceDraft(
+                title = draftTitle,
                 source = source,
+                fileType = draftType,
+                notes = draftNotes,
+            ).toReference(
+                id = id,
                 sourceKind = guessSourceKind(source),
-                fileType = type,
-                tags = normalizedTags,
-                notes = notes,
+                tags = tags,
                 createdAtMillis = nowMillis(),
                 lastOpenedAtMillis = nowMillis(),
             )
         )
 
-        activeReferenceId = id
-        query = title
-        selectedTag = normalizedTags.firstOrNull()
+        activeReferenceId = saved.id
+        query = saved.title
+        selectedTag = saved.tags.firstOrNull()
         commitSearch()
         snapshotVersion++
     }
 
     fun applyBrowserDraft(draft: BrowserReferenceDraft) {
-        draftTitle = draft.title.trim().ifBlank { "Untitled file" }
-        draftSource = draft.source.trim().ifBlank { "browser-handle:unknown" }
-        draftType = draft.fileType.trim().ifBlank { "FILE" }
-        draftNotes = draft.notes.trim().ifBlank { "Selected from browser file picker." }
+        val normalized = draft.normalized()
+        draftTitle = normalized.title.ifBlank { "Untitled file" }
+        draftSource = normalized.source.ifBlank { "browser-handle:unknown" }
+        draftType = normalized.fileType.ifBlank { "FILE" }
+        draftNotes = normalized.notes.ifBlank { "Selected from browser file picker." }
         snapshotVersion++
     }
 
@@ -178,6 +207,41 @@ class FileManagerAppState(
 
     fun toggleFavorite(referenceId: String) {
         repository.toggleFavorite(referenceId)
+        snapshotVersion++
+    }
+
+    fun deleteReference(referenceId: String) {
+        if (!repository.deleteReference(referenceId)) {
+            return
+        }
+        if (activeReferenceId == referenceId) {
+            activeReferenceId = repository.references.firstOrNull()?.id
+        }
+        snapshotVersion++
+    }
+
+    fun updateReferenceTags(referenceId: String, tagsText: String) {
+        val tags = tagsText
+            .split(",")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        repository.updateReferenceTags(referenceId, tags)
+        snapshotVersion++
+    }
+
+    fun updateReferenceNotes(referenceId: String, notes: String) {
+        repository.updateReference(referenceId) { existing ->
+            existing.copy(notes = notes.trim())
+        }
+        snapshotVersion++
+    }
+
+    fun updateReferenceTitle(referenceId: String, title: String) {
+        repository.updateReference(referenceId) { existing ->
+            existing.copy(title = title.trim().ifBlank { existing.title })
+        }
         snapshotVersion++
     }
 

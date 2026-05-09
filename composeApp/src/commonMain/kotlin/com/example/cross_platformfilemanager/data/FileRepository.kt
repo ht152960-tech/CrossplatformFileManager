@@ -1,5 +1,6 @@
 package com.example.cross_platformfilemanager
 
+//数据访问层，抽象文件数据来源。
 data class FileReference(
     val id: String,
     val title: String,
@@ -125,15 +126,70 @@ class InMemoryFileRepository {
     val recommendationLogs = androidx.compose.runtime.mutableStateListOf<RecommendationLog>()
 
     fun addReference(reference: FileReference) {
-        references.add(0, reference)
+        upsertReference(reference)
+    }
+
+    fun upsertReference(reference: FileReference): FileReference {
+        val normalizedSource = normalizeSource(reference.source)
+        val indexBySource = references.indexOfFirst { normalizeSource(it.source) == normalizedSource }
+        val indexById = if (indexBySource >= 0) {
+            indexBySource
+        } else {
+            references.indexOfFirst { it.id == reference.id }
+        }
+
+        if (indexById >= 0) {
+            val current = references[indexById]
+            val merged = reference.copy(
+                id = current.id,
+                createdAtMillis = current.createdAtMillis,
+                lastOpenedAtMillis = maxOf(current.lastOpenedAtMillis, reference.lastOpenedAtMillis),
+                isFavorite = current.isFavorite || reference.isFavorite,
+                tags = normalizeTags(reference.tags),
+            )
+            references[indexById] = merged
+            return merged
+        }
+
+        val inserted = reference.copy(tags = normalizeTags(reference.tags))
+        references.add(0, inserted)
+        return inserted
     }
 
     fun updateReference(referenceId: String, updater: (FileReference) -> FileReference) {
         val index = references.indexOfFirst { it.id == referenceId }
         if (index >= 0) {
-            references[index] = updater(references[index])
+            val updated = updater(references[index])
+            references[index] = updated.copy(tags = normalizeTags(updated.tags))
         }
     }
+
+    fun updateReferenceTags(referenceId: String, tags: List<String>) {
+        val index = references.indexOfFirst { it.id == referenceId }
+        if (index >= 0) {
+            references[index] = references[index].copy(tags = normalizeTags(tags))
+        }
+    }
+
+    fun deleteReference(referenceId: String): Boolean {
+        val index = references.indexOfFirst { it.id == referenceId }
+        if (index < 0) {
+            return false
+        }
+        references.removeAt(index)
+        return true
+    }
+
+    fun findReferenceById(referenceId: String): FileReference? =
+        references.firstOrNull { it.id == referenceId }
+
+    fun findReferenceBySource(source: String): FileReference? {
+        val normalizedSource = normalizeSource(source)
+        return references.firstOrNull { normalizeSource(it.source) == normalizedSource }
+    }
+
+    fun hasReferenceWithSource(source: String): Boolean =
+        findReferenceBySource(source) != null
 
     fun replaceReferences(items: List<FileReference>) {
         references.clear()
@@ -148,6 +204,12 @@ class InMemoryFileRepository {
     fun replaceRecommendationLogs(items: List<RecommendationLog>) {
         recommendationLogs.clear()
         recommendationLogs.addAll(items)
+    }
+
+    fun clearAllData() {
+        references.clear()
+        recentSearches.clear()
+        recommendationLogs.clear()
     }
 
     fun toggleFavorite(referenceId: String) {
@@ -300,4 +362,11 @@ class InMemoryFileRepository {
         recentSearchCount = recentSearches.size,
         recommendationCount = recommendationLogs.size,
     )
+
+    private fun normalizeSource(source: String): String = source.trim().lowercase()
+
+    private fun normalizeTags(tags: List<String>): List<String> =
+        tags.map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
 }

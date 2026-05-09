@@ -1,5 +1,6 @@
 package com.example.cross_platformfilemanager
 
+//领域逻辑，名字看起来像文件推荐/智能建议相关。
 class RecommendationEngine {
     fun suggest(
         query: String,
