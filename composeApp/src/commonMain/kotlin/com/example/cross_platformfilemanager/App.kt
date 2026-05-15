@@ -239,7 +239,7 @@ fun App() {
                     val reference = appState.activeReference
                     AlertDialog(
                         onDismissRequest = { showDeleteConfirm = false },
-                        title = { Text(if (appState.locale == AppLocale.ZhCn) "删除文件" else "Delete file") },
+                        title = { Text(if (appState.locale == AppLocale.ZhCn) "\u5220\u9664\u6587\u4ef6" else "Delete file") },
                         text = { Text(reference?.title.orEmpty()) },
                         confirmButton = {
                             TextButton(
@@ -250,14 +250,14 @@ fun App() {
                                 },
                             ) {
                                 Text(
-                                    text = if (appState.locale == AppLocale.ZhCn) "删除" else "Delete",
+                                    text = if (appState.locale == AppLocale.ZhCn) "\u5220\u9664" else "Delete",
                                     color = MaterialTheme.colorScheme.error,
                                 )
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { showDeleteConfirm = false }) {
-                                Text(if (appState.locale == AppLocale.ZhCn) "取消" else "Cancel")
+                                Text(if (appState.locale == AppLocale.ZhCn) "\u53d6\u6d88" else "Cancel")
                             }
                         },
                     )
@@ -282,10 +282,10 @@ private fun HomePage(
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         TopBarCard(
-            title = if (locale == AppLocale.ZhCn) "文件管理器" else "File Atlas",
+            title = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u7ba1\u7406\u5668" else "File Atlas",
             trailing = {
                 OutlinedButton(onClick = onOpenAllFiles) {
-                    Text(if (locale == AppLocale.ZhCn) "全部文件" else "All files")
+                    Text(if (locale == AppLocale.ZhCn) "\u5168\u90e8\u6587\u4ef6" else "All files")
                 }
             },
         )
@@ -295,13 +295,13 @@ private fun HomePage(
             onQueryChange = onSearchDraftChange,
             onSearch = onSearch,
             placeholder = appState.searchPlaceholder,
-            buttonLabel = if (locale == AppLocale.ZhCn) "搜索" else "Search",
+            buttonLabel = if (locale == AppLocale.ZhCn) "\u641c\u7d22" else "Search",
         )
 
         SectionCard(
-            title = if (locale == AppLocale.ZhCn) "快捷操作" else "Quick actions",
+            title = if (locale == AppLocale.ZhCn) "\u5feb\u6377\u64cd\u4f5c" else "Quick actions",
             subtitle = if (locale == AppLocale.ZhCn) {
-                "先选择文件，或者直接进入全部文件。"
+                "\u5148\u9009\u62e9\u6587\u4ef6\uff0c\u6216\u8005\u76f4\u63a5\u8fdb\u5165\u5168\u90e8\u6587\u4ef6\u3002"
             } else {
                 "Pick a file or jump to the full library."
             },
@@ -311,7 +311,7 @@ private fun HomePage(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Button(onClick = onPickFile) {
-                    Text(if (locale == AppLocale.ZhCn) "选择文件" else "Pick file")
+                    Text(if (locale == AppLocale.ZhCn) "\u9009\u62e9\u6587\u4ef6" else "Pick file")
                 }
             }
         }
@@ -319,16 +319,16 @@ private fun HomePage(
         SectionCard(
             title = appState.recentlyAdded,
             subtitle = if (locale == AppLocale.ZhCn) {
-                "点击任意条目进入详情页。"
+                "\u70b9\u51fb\u4efb\u610f\u6761\u76ee\u8fdb\u5165\u8be6\u60c5\u9875\u3002"
             } else {
                 "Open any item to view its details."
             },
         ) {
             if (appState.recentAddedReferences.isEmpty()) {
                 EmptyPanel(
-                    title = if (locale == AppLocale.ZhCn) "还没有新文件" else "No recent files yet",
+                    title = if (locale == AppLocale.ZhCn) "\u8fd8\u6ca1\u6709\u65b0\u6587\u4ef6" else "No recent files yet",
                     body = if (locale == AppLocale.ZhCn) {
-                        "选择一个文件后，它会出现在这里。"
+                        "\u9009\u62e9\u4e00\u4e2a\u6587\u4ef6\u540e\uff0c\u5b83\u4f1a\u51fa\u73b0\u5728\u8fd9\u91cc\u3002"
                     } else {
                         "Pick a file and it will appear here."
                     },
@@ -349,7 +349,7 @@ private fun HomePage(
                 EmptyPanel(
                     title = appState.noRecommendations,
                     body = if (locale == AppLocale.ZhCn) {
-                        "系统还没有足够的数据生成推荐。"
+                        "\u7cfb\u7edf\u8fd8\u6ca1\u6709\u8db3\u591f\u7684\u6570\u636e\u751f\u6210\u63a8\u8350\u3002"
                     } else {
                         "The system has not collected enough signals yet."
                     },
@@ -379,14 +379,14 @@ private fun AllFilesPage(
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         TopBarCard(
-            title = if (locale == AppLocale.ZhCn) "全部文件" else "All files",
+            title = if (locale == AppLocale.ZhCn) "\u5168\u90e8\u6587\u4ef6" else "All files",
             onBack = onBackHome,
         )
 
         SectionCard(
-            title = if (locale == AppLocale.ZhCn) "排序条件" else "Sort by",
+            title = if (locale == AppLocale.ZhCn) "\u6392\u5e8f\u6761\u4ef6" else "Sort by",
             subtitle = if (locale == AppLocale.ZhCn) {
-                "切换排序方式后，下面的网格会立即更新。"
+                "\u5207\u6362\u6392\u5e8f\u65b9\u5f0f\u540e\uff0c\u4e0b\u9762\u7684\u7f51\u683c\u4f1a\u7acb\u5373\u66f4\u65b0\u3002"
             } else {
                 "Switch the order and the grid updates immediately."
             },
@@ -396,22 +396,22 @@ private fun AllFilesPage(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 SortChip(
-                    label = if (locale == AppLocale.ZhCn) "最近添加" else "Recent added",
+                    label = if (locale == AppLocale.ZhCn) "\u6700\u8fd1\u6dfb\u52a0" else "Recent added",
                     selected = sortMode == FileSortMode.RecentAdded,
                     onClick = { onSortModeChange(FileSortMode.RecentAdded) },
                 )
                 SortChip(
-                    label = if (locale == AppLocale.ZhCn) "文件名" else "Name",
+                    label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u540d" else "Name",
                     selected = sortMode == FileSortMode.Name,
                     onClick = { onSortModeChange(FileSortMode.Name) },
                 )
                 SortChip(
-                    label = if (locale == AppLocale.ZhCn) "文件类型" else "Type",
+                    label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u7c7b\u578b" else "Type",
                     selected = sortMode == FileSortMode.Type,
                     onClick = { onSortModeChange(FileSortMode.Type) },
                 )
                 SortChip(
-                    label = if (locale == AppLocale.ZhCn) "标签" else "Tags",
+                    label = if (locale == AppLocale.ZhCn) "\u6807\u7b7e" else "Tags",
                     selected = sortMode == FileSortMode.Tags,
                     onClick = { onSortModeChange(FileSortMode.Tags) },
                 )
@@ -420,9 +420,9 @@ private fun AllFilesPage(
 
         if (sortedFiles.isEmpty()) {
             EmptyPanel(
-                title = if (locale == AppLocale.ZhCn) "暂无文件" else "No files uploaded yet",
+                title = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u6587\u4ef6" else "No files uploaded yet",
                 body = if (locale == AppLocale.ZhCn) {
-                    "先选择一个文件，列表就会出现。"
+                    "\u5148\u9009\u62e9\u4e00\u4e2a\u6587\u4ef6\uff0c\u5217\u8868\u5c31\u4f1a\u51fa\u73b0\u3002"
                 } else {
                     "Pick a file first and it will show up here."
                 },
@@ -612,7 +612,7 @@ private fun TagLibraryRow(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = "×",
+                text = "\u00d7",
                 color = Color(0xFF475569),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
@@ -633,21 +633,21 @@ private fun DetailPage(
     if (reference == null) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             TopBarCard(
-                title = if (locale == AppLocale.ZhCn) "文件详情" else "File details",
+                title = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u8be6\u60c5" else "File details",
                 onBack = onBackHome,
             )
             SectionCard(
-                title = if (locale == AppLocale.ZhCn) "没有选中文件" else "No file selected",
+                title = if (locale == AppLocale.ZhCn) "\u6ca1\u6709\u9009\u4e2d\u6587\u4ef6" else "No file selected",
                 subtitle = if (locale == AppLocale.ZhCn) {
-                    "先从主页、全部文件页或搜索结果页打开一个文件。"
+                    "\u5148\u4ece\u4e3b\u9875\u3001\u5168\u90e8\u6587\u4ef6\u9875\u6216\u641c\u7d22\u7ed3\u679c\u9875\u6253\u5f00\u4e00\u4e2a\u6587\u4ef6\u3002"
                 } else {
                     "Open a file from the home page, library, or search results first."
                 },
             ) {
                 EmptyPanel(
-                    title = if (locale == AppLocale.ZhCn) "当前没有文件" else "Nothing open",
+                    title = if (locale == AppLocale.ZhCn) "\u5f53\u524d\u6ca1\u6709\u6587\u4ef6" else "Nothing open",
                     body = if (locale == AppLocale.ZhCn) {
-                        "打开一个文件后，这里会显示文件图标、标签和操作按钮。"
+                        "\u6253\u5f00\u4e00\u4e2a\u6587\u4ef6\u540e\uff0c\u8fd9\u91cc\u4f1a\u663e\u793a\u6587\u4ef6\u56fe\u6807\u3001\u6807\u7b7e\u548c\u64cd\u4f5c\u6309\u94ae\u3002"
                     } else {
                         "Once opened, this page shows the icon, tags, and actions."
                     },
@@ -662,7 +662,7 @@ private fun DetailPage(
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         TopBarCard(
-            title = if (locale == AppLocale.ZhCn) "文件详情" else "File details",
+            title = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u8be6\u60c5" else "File details",
             onBack = onBackHome,
         )
 
@@ -916,7 +916,7 @@ private fun SortMenuButton(
     var expanded by remember { mutableStateOf(false) }
     Box {
         OutlinedButton(onClick = { expanded = true }) {
-            Text(if (locale == AppLocale.ZhCn) "排序" else "Sort")
+            Text(if (locale == AppLocale.ZhCn) "\u6392\u5e8f" else "Sort")
         }
         DropdownMenu(
             expanded = expanded,
@@ -1187,7 +1187,7 @@ private fun ManualAddDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (appState.locale == AppLocale.ZhCn) "添加文件" else "Add file") },
+        title = { Text(if (appState.locale == AppLocale.ZhCn) "\u6dfb\u52a0\u6587\u4ef6" else "Add file") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
@@ -1251,11 +1251,11 @@ private fun sortReferences(references: List<FileReference>, sortMode: FileSortMo
 
 private fun sortModeLabel(mode: FileSortMode, locale: AppLocale): String =
     when (mode) {
-        FileSortMode.RecentAdded -> if (locale == AppLocale.ZhCn) "最近添加" else "Recent added"
-        FileSortMode.Name -> if (locale == AppLocale.ZhCn) "文件名" else "Name"
-        FileSortMode.Type -> if (locale == AppLocale.ZhCn) "文件类型" else "Type"
-        FileSortMode.Tags -> if (locale == AppLocale.ZhCn) "标签" else "Tags"
-        FileSortMode.RecentOpened -> if (locale == AppLocale.ZhCn) "最近打开" else "Recent opened"
+        FileSortMode.RecentAdded -> if (locale == AppLocale.ZhCn) "\u6700\u8fd1\u6dfb\u52a0" else "Recent added"
+        FileSortMode.Name -> if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u540d" else "Name"
+        FileSortMode.Type -> if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u7c7b\u578b" else "Type"
+        FileSortMode.Tags -> if (locale == AppLocale.ZhCn) "\u6807\u7b7e" else "Tags"
+        FileSortMode.RecentOpened -> if (locale == AppLocale.ZhCn) "\u6700\u8fd1\u6253\u5f00" else "Recent opened"
     }
 
 private fun resolveRecommendedReferences(appState: FileManagerAppState): List<FileReference> {

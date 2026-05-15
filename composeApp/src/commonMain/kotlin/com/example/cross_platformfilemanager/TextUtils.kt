@@ -1,6 +1,8 @@
 package com.example.cross_platformfilemanager
 
 import kotlin.time.Clock
+import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 internal fun nowMillis(): Long = Clock.System.now().toEpochMilliseconds()
 
@@ -22,3 +24,90 @@ internal fun tokenize(value: String): List<String> {
 internal fun formatTagFilter(label: String, tag: String): String = label.replace("%s", tag)
 
 internal fun formatCount(label: String, count: Int): String = label.replace("%d", count.toString())
+
+internal fun formatRelativeTime(millis: Long): String {
+    if (millis <= 0L) return "never"
+    val delta = Clock.System.now().toEpochMilliseconds() - millis
+    if (delta < 0L) return "just now"
+    val duration = delta.toDouble()
+    return when {
+        delta < 60_000L -> "just now"
+        delta < 3_600_000L -> "${(duration / 60_000L).toInt()}m ago"
+        delta < 86_400_000L -> "${(duration / 3_600_000L).toInt()}h ago"
+        else -> "${(duration / 86_400_000L).toInt()}d ago"
+    }
+}
+
+internal fun formatFileSize(bytes: Long?): String =
+    when {
+        bytes == null || bytes < 0L -> "unknown size"
+        bytes < 1024L -> "$bytes B"
+        bytes < 1024L * 1024L -> "${formatOneDecimal(bytes / 1024.0)} KB"
+        bytes < 1024L * 1024L * 1024L -> "${formatOneDecimal(bytes / (1024.0 * 1024.0))} MB"
+        else -> "${formatOneDecimal(bytes / (1024.0 * 1024.0 * 1024.0))} GB"
+    }
+
+private fun formatOneDecimal(value: Double): String {
+    val rounded = (value * 10.0).roundToInt() / 10.0
+    return if (rounded % 1.0 == 0.0) rounded.toInt().toString() else rounded.toString()
+}
+
+internal fun displayText(value: String): String {
+    val trimmed = value.trim()
+    if (trimmed.isEmpty()) return trimmed
+    if (!looksLikeMojibake(trimmed)) {
+        return trimmed
+    }
+
+    val repaired = tryRepairUtf8Mojibake(trimmed)
+    return if (looksMoreReadable(repaired, trimmed)) repaired else trimmed
+}
+
+internal fun guessFileSizeFromNotes(notes: String): Long? {
+    val match = fileSizeFromNotesPattern.find(notes) ?: return null
+    val amount = match.groupValues.getOrNull(1)?.toDoubleOrNull() ?: return null
+    val unit = match.groupValues.getOrNull(2)?.uppercase() ?: return null
+    val multiplier = when (unit) {
+        "B" -> 1.0
+        "KB" -> 1024.0
+        "MB" -> 1024.0 * 1024.0
+        "GB" -> 1024.0 * 1024.0 * 1024.0
+        else -> return null
+    }
+    return (amount * multiplier).roundToLong().coerceAtLeast(0L)
+}
+
+private val fileSizeFromNotesPattern =
+    Regex("""(?:^|\|\s*)Size:\s*([\d.]+)\s*(B|KB|MB|GB)""", RegexOption.IGNORE_CASE)
+
+private val mojibakeMarkers = setOf(
+    '鍒', '鍏', '鍚', '鍙', '鍗', '鍜', '鍨', '鍦', '鍫', '鏂',
+    '鏄', '鏁', '鏍', '鏉', '鏌', '鏋', '鐢', '鐩', '鐪', '鐫',
+    '鐯', '鎵', '鎷', '鎺', '鎻', '鎿', '杩', '娣', '娓', '瀛',
+    '绛', '绫', '绯', '绱', '绲', '绾', '绗', '缁', '缃', '钘',
+    '鈥', '銆', '閰', '閿', '閫', '閮', '閰', '闈', '闊', '闆',
+)
+
+private fun looksLikeMojibake(value: String): Boolean =
+    value.any { it.code in 0x80..0xFF } || value.any { it in mojibakeMarkers }
+
+private fun tryRepairUtf8Mojibake(value: String): String {
+    val bytes = ByteArray(value.length) { index -> value[index].code.toByte() }
+    return runCatching { bytes.decodeToString() }.getOrDefault(value)
+}
+
+private fun looksMoreReadable(candidate: String, original: String): Boolean {
+    if (candidate == original) return false
+    return readabilityScore(candidate) > readabilityScore(original)
+}
+
+private fun readabilityScore(value: String): Int =
+    value.sumOf { char ->
+        when {
+            char.code in 0x4E00..0x9FFF -> 3
+            char.code in 0x20..0x7E -> 1
+            char == '\uFFFD' -> -5
+            char in mojibakeMarkers -> -2
+            else -> 0
+        }
+    }
