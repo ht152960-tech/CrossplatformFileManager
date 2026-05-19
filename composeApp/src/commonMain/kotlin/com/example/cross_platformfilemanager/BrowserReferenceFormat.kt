@@ -5,11 +5,13 @@ internal object BrowserReferenceFormat {
         title: String,
         source: String,
         fileType: String,
+        fileSizeBytes: Long?,
         notes: String,
     ): String = buildString {
         appendString(title)
         appendString(source)
         appendString(fileType)
+        appendString(fileSizeBytes?.toString().orEmpty())
         appendString(notes)
     }
 
@@ -19,13 +21,20 @@ internal object BrowserReferenceFormat {
         val title = cursor.readString()
         val source = cursor.readString()
         val fileType = cursor.readString()
-        val notes = cursor.readString()
-        if (cursor.remaining() != 0) return null
+        val sizeOrNotes = cursor.readString()
+        val (fileSizeBytes, notes) = if (cursor.remaining() == 0) {
+            null to sizeOrNotes
+        } else {
+            val noteText = cursor.readString()
+            if (cursor.remaining() != 0) return null
+            sizeOrNotes.toLongOrNull() to noteText
+        }
 
         return BrowserReferenceDraft(
             title = title.ifBlank { "Untitled file" },
             source = source.ifBlank { "browser-handle:unknown" },
             fileType = fileType.ifBlank { "FILE" },
+            fileSizeBytes = fileSizeBytes ?: guessFileSizeFromNotes(notes),
             notes = notes.ifBlank { "Selected from browser file picker." },
         )
     }

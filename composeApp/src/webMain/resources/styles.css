@@ -1,12 +1,194 @@
+﻿@font-face {
+    font-family: "NotoSansSC-ui";
+    src: url("fonts/noto_sans_sc_ui.woff2") format("woff2");
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+}
 
-
-html, body {
+html, body, canvas {
     width: 100%;
     height: 100%;
     margin: 0;
     padding: 0;
     overflow: hidden;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-family:
+        "NotoSansSC-ui",
+        "Microsoft YaHei UI",
+        "Microsoft YaHei",
+        "PingFang SC",
+        "Hiragino Sans GB",
+        "Segoe UI",
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Arial Unicode MS",
+        sans-serif;
     background: #07111f;
     color: #e5eef9;
+}
+
+button, input, textarea, select {
+    margin: 0;
+    font: inherit;
+    color: inherit;
+}
+
+canvas {
+    display: block;
+    font-family: inherit !important;
+}
+
+body:not(.app-ready) canvas {
+    visibility: hidden;
+}
+
+body.app-ready .boot-screen {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+}
+
+.boot-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    background:
+        radial-gradient(circle at top, rgba(37, 99, 235, 0.18), transparent 42%),
+        radial-gradient(circle at 20% 20%, rgba(22, 163, 74, 0.12), transparent 26%),
+        linear-gradient(180deg, #06101d 0%, #0a1627 100%);
+    color: #eef4fb;
+    font-family:
+        "NotoSansSC-ui",
+        "Microsoft YaHei UI",
+        "Microsoft YaHei",
+        "PingFang SC",
+        "Hiragino Sans GB",
+        "Segoe UI",
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        sans-serif;
+}
+
+.boot-card {
+    width: min(420px, 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+}
+
+.boot-brand-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+}
+
+.boot-mark {
+    width: 54px;
+    height: 54px;
+    border-radius: 18px;
+    background: linear-gradient(145deg, rgba(125, 211, 252, 0.95), rgba(59, 130, 246, 0.75));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.boot-kicker {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(191, 219, 254, 0.85);
+}
+
+.boot-title {
+    margin-top: 4px;
+    font-size: 20px;
+    font-weight: 700;
+    color: #f8fbff;
+}
+
+.boot-copy {
+    max-width: 34ch;
+    line-height: 1.7;
+    font-size: 14px;
+    color: rgba(226, 232, 240, 0.84);
+}
+
+.boot-spinner {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    border: 3px solid rgba(255, 255, 255, 0.22);
+    border-top-color: rgba(255, 255, 255, 0.94);
+    animation: boot-spin 0.9s linear infinite;
+}
+
+.boot-skeleton {
+    width: min(100%, 320px);
+    display: grid;
+    gap: 12px;
+}
+
+.boot-skeleton-line,
+.boot-skeleton-card {
+    position: relative;
+    overflow: hidden;
+    background: rgba(148, 163, 184, 0.16);
+}
+
+.boot-skeleton-line {
+    height: 14px;
+    border-radius: 999px;
+}
+
+.boot-skeleton-line--wide {
+    width: 100%;
+}
+
+.boot-skeleton-line--medium {
+    width: 74%;
+}
+
+.boot-skeleton-line::after,
+.boot-skeleton-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.12) 50%, transparent 100%);
+    animation: boot-shimmer 1.45s ease-in-out infinite;
+}
+
+@keyframes boot-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes boot-shimmer {
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+@media (max-width: 640px) {
+    .boot-card {
+        width: min(92vw, 420px);
+    }
+
+    .boot-brand-row {
+        gap: 12px;
+    }
 }

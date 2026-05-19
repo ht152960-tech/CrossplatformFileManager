@@ -19,6 +19,8 @@ data class BrowserReferenceDraft(
     val title: String,
     val source: String,
     val fileType: String,
+    val fileSizeBytes: Long? = null,
+    val coverArtSource: String? = null,
     val notes: String,
 )
 
@@ -38,6 +40,8 @@ fun BrowserReferenceDraft.normalized(): BrowserReferenceDraft = copy(
     title = title.trim(),
     source = source.trim(),
     fileType = fileType.trim(),
+    fileSizeBytes = fileSizeBytes,
+    coverArtSource = coverArtSource?.trim()?.takeIf { it.isNotBlank() },
     notes = notes.trim(),
 )
 
@@ -54,6 +58,8 @@ fun BrowserReferenceDraft.toReference(
     source = source.trim().ifBlank { "browser-handle:unknown" },
     sourceKind = sourceKind,
     fileType = fileType.trim().ifBlank { "FILE" },
+    fileSizeBytes = fileSizeBytes,
+    coverArtSource = coverArtSource?.trim()?.takeIf { it.isNotBlank() },
     tags = tags.map { it.trim() }.filter { it.isNotBlank() }.distinct(),
     notes = notes.trim(),
     createdAtMillis = createdAtMillis,
@@ -65,5 +71,7 @@ fun FileReference.toBrowserReferenceDraft(): BrowserReferenceDraft = BrowserRefe
     title = title,
     source = source,
     fileType = fileType,
+    fileSizeBytes = fileSizeBytes,
+    coverArtSource = coverArtSource,
     notes = notes,
 )

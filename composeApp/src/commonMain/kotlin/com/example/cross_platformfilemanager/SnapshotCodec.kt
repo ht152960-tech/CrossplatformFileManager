@@ -1,7 +1,7 @@
 package com.example.cross_platformfilemanager
 
 internal object SnapshotCodec {
-    private const val FORMAT_VERSION = 3
+    private const val FORMAT_VERSION = 7
 
     fun encode(snapshot: AppSnapshot): String {
         val out = StringBuilder()
@@ -20,6 +20,8 @@ internal object SnapshotCodec {
             out.appendString(reference.source)
             out.appendString(reference.sourceKind.name)
             out.appendString(reference.fileType)
+            out.appendString(reference.fileSizeBytes?.toString().orEmpty())
+            out.appendString(reference.coverArtSource.orEmpty())
             out.appendString(reference.notes)
             out.appendString(reference.createdAtMillis.toString())
             out.appendString(reference.lastOpenedAtMillis.toString())
@@ -46,6 +48,12 @@ internal object SnapshotCodec {
                 out.appendString(suggestion)
             }
         }
+
+        val recommendationState = snapshot.recommendationState
+        out.appendString(if (recommendationState == null) "0" else "1")
+        if (recommendationState != null) {
+            encodeRecommendationState(out, recommendationState)
+        }
         return out.toString()
     }
 
@@ -71,7 +79,13 @@ internal object SnapshotCodec {
         schemaVersion: Int,
         localeToken: String? = null,
     ): AppSnapshot {
-        val locale = AppLocale.valueOf(localeToken ?: cursor.readString())
+        val locale = AppLocale.valueOf(localeToken ?: cursor.readString()).let { decoded ->
+            if (schemaVersion < 4 && decoded == AppLocale.ZhCn) {
+                AppLocale.EnUs
+            } else {
+                decoded
+            }
+        }
         val query = cursor.readString()
         val selectedTag = cursor.readString().takeIf { it.isNotBlank() }
         val selectedFileType = if (schemaVersion >= 3) cursor.readString().takeIf { it.isNotBlank() } else null
@@ -86,6 +100,8 @@ internal object SnapshotCodec {
                 val source = cursor.readString()
                 val sourceKind = FileSourceKind.valueOf(cursor.readString())
                 val fileType = cursor.readString()
+                val fileSizeBytes = if (schemaVersion >= 5) cursor.readString().toLongOrNull() else null
+                val coverArtSource = if (schemaVersion >= 7) cursor.readString().takeIf { it.isNotBlank() } else null
                 val notes = cursor.readString()
                 val createdAtMillis = cursor.readString().toLong()
                 val lastOpenedAtMillis = cursor.readString().toLong()
@@ -102,6 +118,8 @@ internal object SnapshotCodec {
                         source = source,
                         sourceKind = sourceKind,
                         fileType = fileType,
+                        fileSizeBytes = fileSizeBytes,
+                        coverArtSource = coverArtSource,
                         tags = tags,
                         notes = notes,
                         createdAtMillis = createdAtMillis,
@@ -140,6 +158,12 @@ internal object SnapshotCodec {
             }
         }
 
+        val recommendationState = if (schemaVersion >= 6 && cursor.readString() == "1") {
+            decodeRecommendationState(cursor)
+        } else {
+            null
+        }
+
         return AppSnapshot(
             schemaVersion = schemaVersion,
             locale = locale,
@@ -151,6 +175,114 @@ internal object SnapshotCodec {
             references = references,
             recentSearches = recentSearches,
             recommendationLogs = recommendationLogs,
+            recommendationState = recommendationState,
+        )
+    }
+
+    private fun encodeRecommendationState(
+        out: StringBuilder,
+        recommendationState: RecommendationEngineSnapshot,
+    ) {
+        out.appendString(recommendationState.lastOpenedFileId.orEmpty())
+
+        val filePatterns = recommendationState.filePatterns.entries.sortedBy { it.key }
+        out.appendString(filePatterns.size.toString())
+        filePatterns.forEach { entry ->
+            val pattern = entry.value
+            out.appendString(pattern.fileId)
+            out.appendString(pattern.lastOpenTimeMillis.toString())
+            out.appendString(pattern.estimatedPeriodMillis.toString())
+            out.appendString(pattern.openCount.toString())
+        }
+
+        val counts = recommendationState.transitionSnapshot.counts.entries.sortedBy { it.key }
+        out.appendString(counts.size.toString())
+        counts.forEach { entry ->
+            out.appendString(entry.key)
+            val sortedBucket = entry.value.entries.sortedBy { it.key }
+            out.appendString(sortedBucket.size.toString())
+            sortedBucket.forEach { bucketEntry ->
+                out.appendString(bucketEntry.key)
+                out.appendString(bucketEntry.value.toString())
+            }
+        }
+
+        val totals = recommendationState.transitionSnapshot.totals.entries.sortedBy { it.key }
+        out.appendString(totals.size.toString())
+        totals.forEach { entry ->
+            out.appendString(entry.key)
+            out.appendString(entry.value.toString())
+        }
+
+        out.appendString(recommendationState.weightSnapshot.baseIntervalWeight.toString())
+        out.appendString(recommendationState.weightSnapshot.baseTransitionWeight.toString())
+        out.appendString(recommendationState.weightSnapshot.baseRecencyWeight.toString())
+        out.appendString(recommendationState.weightSnapshot.learnedIntervalWeight.toString())
+        out.appendString(recommendationState.weightSnapshot.learnedTransitionWeight.toString())
+        out.appendString(recommendationState.weightSnapshot.learnedRecencyWeight.toString())
+    }
+
+    private fun decodeRecommendationState(cursor: Cursor): RecommendationEngineSnapshot {
+        val lastOpenedFileId = cursor.readString().takeIf { it.isNotBlank() }
+
+        val filePatternCount = cursor.readString().toInt()
+        val filePatterns = buildMap<String, FilePattern> {
+            repeat(filePatternCount) {
+                val fileId = cursor.readString()
+                val lastOpenTimeMillis = cursor.readString().toLong()
+                val estimatedPeriodMillis = cursor.readString().toLong()
+                val openCount = cursor.readString().toInt()
+                put(
+                    fileId,
+                    FilePattern(
+                        fileId = fileId,
+                        lastOpenTimeMillis = lastOpenTimeMillis,
+                        estimatedPeriodMillis = estimatedPeriodMillis,
+                        openCount = openCount,
+                    ),
+                )
+            }
+        }
+
+        val transitionCount = cursor.readString().toInt()
+        val counts = buildMap<String, Map<String, Int>> {
+            repeat(transitionCount) {
+                val from = cursor.readString()
+                val bucketCount = cursor.readString().toInt()
+                val bucket = buildMap<String, Int> {
+                    repeat(bucketCount) {
+                        val to = cursor.readString()
+                        val count = cursor.readString().toInt()
+                        put(to, count)
+                    }
+                }
+                put(from, bucket)
+            }
+        }
+
+        val totalsCount = cursor.readString().toInt()
+        val totals = buildMap<String, Int> {
+            repeat(totalsCount) {
+                val from = cursor.readString()
+                val total = cursor.readString().toInt()
+                put(from, total)
+            }
+        }
+
+        val weightSnapshot = WeightSnapshot(
+            baseIntervalWeight = cursor.readString().toDouble(),
+            baseTransitionWeight = cursor.readString().toDouble(),
+            baseRecencyWeight = cursor.readString().toDouble(),
+            learnedIntervalWeight = cursor.readString().toDouble(),
+            learnedTransitionWeight = cursor.readString().toDouble(),
+            learnedRecencyWeight = cursor.readString().toDouble(),
+        )
+
+        return RecommendationEngineSnapshot(
+            filePatterns = filePatterns,
+            transitionSnapshot = TransitionSnapshot(counts = counts, totals = totals),
+            weightSnapshot = weightSnapshot,
+            lastOpenedFileId = lastOpenedFileId,
         )
     }
 

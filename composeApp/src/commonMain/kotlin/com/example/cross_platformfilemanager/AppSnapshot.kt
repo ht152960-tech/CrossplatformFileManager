@@ -1,7 +1,7 @@
 package com.example.cross_platformfilemanager
 
 data class AppSnapshot(
-    val schemaVersion: Int = 3,
+    val schemaVersion: Int = 7,
     val locale: AppLocale,
     val query: String,
     val selectedTag: String?,
@@ -11,4 +11,5 @@ data class AppSnapshot(
     val references: List<FileReference>,
     val recentSearches: List<String>,
     val recommendationLogs: List<RecommendationLog>,
+    val recommendationState: RecommendationEngineSnapshot? = null,
 )

@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrossplatformFileManager</title>
+    <style>
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            background: #07111f;
+            color: #e5eef9;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .boot-screen {
+            width: min(420px, calc(100vw - 48px));
+            padding: 28px 24px;
+            border-radius: 24px;
+            background:
+                radial-gradient(circle at top, rgba(37, 99, 235, 0.18), transparent 42%),
+                linear-gradient(180deg, #06101d 0%, #0a1627 100%);
+            box-shadow: 0 18px 48px rgba(15, 23, 42, 0.35);
+            text-align: center;
+        }
+
+        body.app-ready .boot-screen {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            width: min(520px, calc(100vw - 24px));
+            max-height: calc(100vh - 24px);
+            overflow: auto;
+            z-index: 2147483647;
+            pointer-events: none;
+            text-align: left;
+        }
+
+        .boot-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0 0 10px;
+        }
+
+        .boot-copy {
+            margin: 0;
+            font-size: 14px;
+            line-height: 1.7;
+            color: rgba(226, 232, 240, 0.82);
+        }
+
+        .boot-trace {
+            margin-top: 14px;
+            padding: 12px;
+            border-radius: 14px;
+            background: rgba(15, 23, 42, 0.34);
+            color: rgba(226, 232, 240, 0.86);
+            font-size: 11px;
+            line-height: 1.6;
+            text-align: left;
+            white-space: pre-wrap;
+            max-height: 180px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+<div class="boot-screen" aria-live="polite" aria-busy="true">
+    <div class="boot-title">Loading app...</div>
+    <p class="boot-copy">Starting the web app entry script.</p>
+    <div id="boot-trace" class="boot-trace">boot: starting...</div>
+</div>
+<script>
+    (function () {
+        const SNAPSHOT_KEY = "file-atlas.snapshot";
+        const DRAFTS_KEY = "file-atlas.browser-drafts";
+
+        function loadDraftStore() {
+            try {
+                const raw = window.localStorage.getItem(DRAFTS_KEY);
+                if (!raw) {
+                    return {};
+                }
+                const parsed = JSON.parse(raw);
+                return parsed && typeof parsed === "object" ? parsed : {};
+            } catch (error) {
+                return {};
+            }
+        }
+
+        function saveDraftStore(store) {
+            try {
+                window.localStorage.setItem(DRAFTS_KEY, JSON.stringify(store));
+            } catch (error) {
+                // Ignore storage failures and keep the app usable.
+            }
+        }
+
+        function saveBrowserDraft(id, draft) {
+            const store = loadDraftStore();
+            store[id] = draft;
+            saveDraftStore(store);
+        }
+
+        function readBrowserDraft(id) {
+            const store = loadDraftStore();
+            return store[id] || null;
+        }
+
+        function encodeDraft(title, source, fileType, notes) {
+            return [
+                `${title.length}:${title}`,
+                `${source.length}:${source}`,
+                `${fileType.length}:${fileType}`,
+                `${notes.length}:${notes}`,
+            ].join("");
+        }
+
+        function generateId() {
+            if (window.crypto && typeof window.crypto.randomUUID === "function") {
+                return window.crypto.randomUUID();
+            }
+            return `browser-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        }
+
+        function guessFileType(file) {
+            if (file && file.type) {
+                const primary = file.type.split("/")[0];
+                if (primary) {
+                    return primary.toUpperCase();
+                }
+            }
+            const name = file && file.name ? file.name : "";
+            const dot = name.lastIndexOf(".");
+            if (dot >= 0 && dot < name.length - 1) {
+                return name.substring(dot + 1).toUpperCase();
+            }
+            return "FILE";
+        }
+
+        function formatFileSize(bytes) {
+            if (!Number.isFinite(bytes) || bytes < 0) {
+                return "unknown size";
+            }
+            if (bytes < 1024) {
+                return `${bytes} B`;
+            }
+            if (bytes < 1024 * 1024) {
+                return `${(bytes / 1024).toFixed(1)} KB`;
+            }
+            return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        }
+
+        function formatModifiedTime(timestamp) {
+            if (!Number.isFinite(timestamp) || timestamp <= 0) {
+                return "unknown time";
+            }
+            try {
+                return new Date(timestamp).toLocaleString();
+            } catch (error) {
+                return "unknown time";
+            }
+        }
+
+        function buildDraftNotes(baseNotes, file) {
+            const pieces = [baseNotes];
+            if (file && typeof file.size === "number") {
+                pieces.push(`Size: ${formatFileSize(file.size)}`);
+            }
+            if (file && typeof file.lastModified === "number") {
+                pieces.push(`Modified: ${formatModifiedTime(file.lastModified)}`);
+            }
+            return pieces.filter(Boolean).join(" | ");
+        }
+
+        function pickWithInput() {
+            return new Promise((resolve) => {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.style.display = "none";
+                input.addEventListener("change", () => {
+                    const file = input.files && input.files[0];
+                    input.remove();
+                    if (!file) {
+                        resolve(null);
+                        return;
+                    }
+                    const id = generateId();
+                    const title = file.name || "Untitled file";
+                    const source = `browser-file:${id}`;
+                    const fileType = guessFileType(file);
+                    const notes = buildDraftNotes("Selected from browser file picker.", file);
+                    saveBrowserDraft(id, {
+                        title: title,
+                        source: source,
+                        fileType: fileType,
+                        notes: notes,
+                    });
+                    resolve(encodeDraft(title, source, fileType, notes));
+                });
+                document.body.appendChild(input);
+                input.click();
+            });
+        }
+
+        async function pickReference() {
+            if (window.showOpenFilePicker) {
+                try {
+                    const handles = await window.showOpenFilePicker({ multiple: false });
+                    const handle = handles && handles[0];
+                    if (!handle) {
+                        return null;
+                    }
+                    const file = await handle.getFile();
+                    const id = generateId();
+                    const title = file.name || "Untitled file";
+                    const source = `browser-handle:${id}`;
+                    const fileType = guessFileType(file);
+                    const notes = buildDraftNotes("Selected from browser file picker.", file);
+                    saveBrowserDraft(id, {
+                        title: title,
+                        source: source,
+                        fileType: fileType,
+                        notes: notes,
+                    });
+                    return encodeDraft(title, source, fileType, notes);
+                } catch (error) {
+                    return null;
+                }
+            }
+            return await pickWithInput();
+        }
+
+        async function resolveReference(source) {
+            if (!source || typeof source !== "string") {
+                return null;
+            }
+            const handledPrefixes = ["browser-handle:", "browser-file:"];
+            const matchedPrefix = handledPrefixes.find((prefix) => source.startsWith(prefix));
+            if (!matchedPrefix) {
+                return null;
+            }
+            const referenceId = source.substring(matchedPrefix.length);
+            if (!referenceId) {
+                return null;
+            }
+            const storedDraft = readBrowserDraft(referenceId);
+            if (storedDraft) {
+                return encodeDraft(
+                    storedDraft.title || "Untitled file",
+                    storedDraft.source || source,
+                    storedDraft.fileType || "FILE",
+                    storedDraft.notes || "Selected from browser file picker."
+                );
+            }
+            return null;
+        }
+
+        function pickSnapshotFile() {
+            return new Promise((resolve) => {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = ".snapshot,.txt,application/json,text/plain";
+                input.style.display = "none";
+                input.addEventListener("change", async () => {
+                    const file = input.files && input.files[0];
+                    input.remove();
+                    if (!file) {
+                        resolve(null);
+                        return;
+                    }
+                    try {
+                        resolve(await file.text());
+                    } catch (error) {
+                        resolve(null);
+                    }
+                });
+                document.body.appendChild(input);
+                input.click();
+            });
+        }
+
+        window.fileAtlasPersistence = {
+            loadSnapshot: async function () {
+                return window.localStorage.getItem(SNAPSHOT_KEY);
+            },
+            saveSnapshot: async function (encoded) {
+                window.localStorage.setItem(SNAPSHOT_KEY, encoded);
+            },
+            exportSnapshot: async function () {
+                return await this.loadSnapshot();
+            },
+            importSnapshot: async function () {
+                return await pickSnapshotFile();
+            },
+            clearAllData: async function () {
+                try {
+                    window.localStorage.removeItem(DRAFTS_KEY);
+                    window.localStorage.removeItem(SNAPSHOT_KEY);
+                } catch (error) {
+                    // Ignore storage failures and keep the app usable.
+                }
+            }
+        };
+
+        window.fileAtlasBrowser = {
+            pickReference: pickReference,
+            resolveReference: resolveReference
+        };
+        globalThis.fileAtlasBrowser = window.fileAtlasBrowser;
+    })();
+</script>
+<script>
+    (function () {
+        const bootStart = performance.now();
+        const traceNode = document.getElementById("boot-trace");
+        const traceLines = [];
+
+        function trace(message) {
+            const elapsed = Math.round(performance.now() - bootStart);
+            const line = `${elapsed}ms | ${message}`;
+            traceLines.push(line);
+            console.log(line);
+            if (traceNode) {
+                traceNode.textContent = traceLines.join("\n");
+            }
+        }
+
+        window.fileAtlasBootTrace = trace;
+        trace("boot script running");
+
+        window.addEventListener("file-atlas-ui-ready", () => {
+            trace("file-atlas-ui-ready received");
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    trace("boot overlay pinned");
+                    document.body.classList.add("app-ready");
+                });
+            });
+        }, { once: true });
+
+        function loadComposeApp() {
+            if (document.querySelector('script[data-compose-app="true"]')) {
+                trace("composeApp.js already present");
+                return;
+            }
+
+            trace("appending composeApp.js");
+            const script = document.createElement("script");
+            script.type = "application/javascript";
+            script.src = "composeApp.js";
+            script.dataset.composeApp = "true";
+            script.onload = () => trace("composeApp.js loaded");
+            script.onerror = () => trace("composeApp.js failed");
+            document.body.appendChild(script);
+        }
+
+        function startAppWhenReady() {
+            trace("startAppWhenReady");
+            loadComposeApp();
+        }
+
+        if (document.readyState === "loading") {
+            trace("waiting for DOMContentLoaded");
+            document.addEventListener("DOMContentLoaded", () => {
+                trace("DOMContentLoaded");
+                startAppWhenReady();
+            }, { once: true });
+        } else {
+            trace("DOM already ready");
+            startAppWhenReady();
+        }
+    })();
+</script>
+</body>
+</html>

@@ -1,7 +1,24 @@
 package com.example.cross_platformfilemanager
 
-//领域逻辑，名字看起来像文件推荐/智能建议相关。
-class RecommendationEngine {
+import kotlin.math.exp
+
+class RecommendationEngine(
+    private val stateDao: RecommendationStateDao = InMemoryRecommendationRepository(),
+    private val eventDao: RecommendationEventDao? = null,
+    val filePatternStore: FilePatternStore = FilePatternStore(),
+    val transitionStore: TransitionStore = TransitionStore(),
+    val weightStore: WeightStore = WeightStore(),
+    learner: OnlineLearner? = null,
+) {
+    private val onlineLearner: OnlineLearner = learner ?: OnlineLearner(weightStore)
+    private val resolvedEventDao: RecommendationEventDao =
+        eventDao ?: (stateDao as? RecommendationEventDao) ?: InMemoryRecommendationEventDao()
+    private var lastOpenedFileId: String? = null
+
+    init {
+        stateDao.loadState()?.let { restoreSnapshot(it) }
+    }
+
     fun suggest(
         query: String,
         references: List<FileReference>,
@@ -156,6 +173,136 @@ class RecommendationEngine {
             .take(8)
     }
 
+    fun exportSnapshot(): RecommendationEngineSnapshot = RecommendationEngineSnapshot(
+        filePatterns = filePatternStore.snapshot(),
+        transitionSnapshot = transitionStore.snapshot(),
+        weightSnapshot = weightStore.snapshot(),
+        lastOpenedFileId = lastOpenedFileId,
+    )
+
+    fun restoreSnapshot(snapshot: RecommendationEngineSnapshot?) {
+        if (snapshot == null) {
+            clear()
+            return
+        }
+        filePatternStore.restore(snapshot.filePatterns)
+        transitionStore.restore(snapshot.transitionSnapshot)
+        weightStore.restore(snapshot.weightSnapshot)
+        lastOpenedFileId = snapshot.lastOpenedFileId
+        persist()
+    }
+
+    fun clear() {
+        filePatternStore.clear()
+        transitionStore.clear()
+        weightStore.resetLearning()
+        lastOpenedFileId = null
+        stateDao.clearState()
+        resolvedEventDao.clearEvents()
+    }
+
+    fun recordFileOpen(
+        fileId: String,
+        openedAtMillis: Long = nowMillis(),
+        previousFileId: String? = lastOpenedFileId,
+    ): FileOpenLog {
+        val log = FileOpenLog(
+            fileId = fileId,
+            openedAtMillis = openedAtMillis,
+            previousFileId = previousFileId,
+        )
+
+        filePatternStore.recordOpen(log)
+        if (!previousFileId.isNullOrBlank()) {
+            transitionStore.recordTransition(previousFileId, fileId)
+        }
+        lastOpenedFileId = fileId
+        resolvedEventDao.appendOpenEvent(log)
+        persist()
+        return log
+    }
+
+    fun recommend(
+        references: List<FileReference>,
+        previousFileId: String? = lastOpenedFileId,
+        nowMillis: Long = nowMillis(),
+        limit: Int = 10,
+    ): List<ScoredRecommendation> {
+        if (limit <= 0 || references.isEmpty()) return emptyList()
+        val contextFileId = previousFileId?.takeIf { it.isNotBlank() }
+        val scoredCandidates = references
+            .asSequence()
+            .filter { it.id.isNotBlank() }
+            // 候选列表做一次最末端去重，避免上游重复引用把同一个文件算进推荐结果两次。
+            .distinctBy { recommendationDedupKey(it) }
+            .filterNot { contextFileId != null && it.id == contextFileId }
+            .map { reference ->
+                val intervalScore = filePatternStore.intervalScore(reference.id, nowMillis)
+                val transitionScore = transitionStore.transitionScore(contextFileId, reference.id)
+                val recencyScore = recencyScore(reference.lastOpenedAtMillis, nowMillis)
+                val openCount = filePatternStore.get(reference.id)?.openCount ?: 0
+                val confidence = recommendationConfidence(
+                    openCount = openCount,
+                    hasContext = contextFileId != null,
+                )
+                val structuralScore =
+                    (weightStore.totalIntervalWeight() * intervalScore) +
+                        (weightStore.totalTransitionWeight() * transitionScore) +
+                        (weightStore.totalRecencyWeight() * recencyScore)
+                // 样本少或者上下文缺失时，不让结构化信号单独决定排序，而是回退到更稳的最近打开时间。
+                val finalScore =
+                    (structuralScore * confidence) +
+                        (recencyScore * (1.0 - confidence))
+
+                ScoredRecommendation(
+                    file = reference,
+                    intervalScore = intervalScore,
+                    transitionScore = transitionScore,
+                    recencyScore = recencyScore,
+                    finalScore = finalScore,
+                )
+            }
+            .sortedWith(
+                compareByDescending<ScoredRecommendation> { it.finalScore }
+                    // 分数接近时，优先选择历史样本更多的文件，减少低样本偶然性。
+                    .thenByDescending { filePatternStore.get(it.file.id)?.openCount ?: 0 }
+                    .thenByDescending { it.file.lastOpenedAtMillis }
+                    .thenBy { normalize(it.file.title) }
+                    .thenBy { it.file.id },
+            )
+            .toList()
+
+        return selectWithDiversity(scoredCandidates, limit)
+    }
+
+    fun recordRecommendationClick(
+        clickedFileId: String,
+        shownRecommendations: List<ScoredRecommendation>,
+        openedAtMillis: Long = nowMillis(),
+        previousFileId: String? = lastOpenedFileId,
+    ): FileOpenLog? {
+        val clicked = shownRecommendations.firstOrNull { it.file.id == clickedFileId } ?: return null
+        val log = recordFileOpen(
+            fileId = clicked.file.id,
+            openedAtMillis = openedAtMillis,
+            previousFileId = previousFileId,
+        )
+        onlineLearner.learnFromClick(
+            clickedFileId = clickedFileId,
+            shownRecommendations = shownRecommendations,
+        )
+        resolvedEventDao.appendClickEvent(
+            RecommendationClickLog(
+                clickedFileId = clickedFileId,
+                openedAtMillis = openedAtMillis,
+                previousFileId = previousFileId,
+                shownFileIds = shownRecommendations.map { it.file.id },
+            ),
+        )
+        persist()
+        return log
+    }
+
     private fun buildCoOccurrence(references: List<FileReference>): Map<String, Map<String, Int>> {
         val map = mutableMapOf<String, MutableMap<String, Int>>()
 
@@ -173,5 +320,89 @@ class RecommendationEngine {
 
         return map
     }
-}
 
+    private fun recencyScore(lastOpenedAtMillis: Long, nowMillis: Long): Double {
+        if (lastOpenedAtMillis <= 0L) return 0.4
+        val age = (nowMillis - lastOpenedAtMillis).coerceAtLeast(0L)
+        return exp(-(age.toDouble() / RECENCY_HALFLIFE_MILLIS.toDouble())).coerceIn(0.0, 1.0)
+    }
+
+    private fun recommendationDedupKey(reference: FileReference): String {
+        val sourceKey = reference.source.trim().lowercase()
+        return if (sourceKey.isNotBlank()) {
+            "source:$sourceKey"
+        } else {
+            "id:${reference.id.trim()}"
+        }
+    }
+
+    private fun recommendationConfidence(
+        openCount: Int,
+        hasContext: Boolean,
+    ): Double {
+        val supportConfidence = when {
+            openCount <= 1 -> 0.35
+            openCount == 2 -> 0.55
+            openCount == 3 -> 0.75
+            openCount == 4 -> 0.9
+            else -> 1.0
+        }
+
+        // 没有 previousFileId 时，后继关系无法提供有效信息，所以整体信心再保守一点。
+        return if (hasContext) {
+            supportConfidence
+        } else {
+            (supportConfidence * 0.8) + 0.2
+        }
+    }
+
+    private fun selectWithDiversity(
+        scoredCandidates: List<ScoredRecommendation>,
+        limit: Int,
+    ): List<ScoredRecommendation> {
+        if (limit <= 0 || scoredCandidates.isEmpty()) return emptyList()
+
+        val remaining = scoredCandidates.toMutableList()
+        val selected = mutableListOf<ScoredRecommendation>()
+
+        while (remaining.isNotEmpty() && selected.size < limit) {
+            var bestIndex = 0
+            var bestScore = diversityAdjustedScore(selected, remaining[0])
+
+            for (index in 1 until remaining.size) {
+                val candidate = remaining[index]
+                val adjustedScore = diversityAdjustedScore(selected, candidate)
+                if (adjustedScore > bestScore) {
+                    bestScore = adjustedScore
+                    bestIndex = index
+                }
+            }
+
+            selected += remaining.removeAt(bestIndex)
+        }
+
+        return selected
+    }
+
+    private fun diversityAdjustedScore(
+        selected: List<ScoredRecommendation>,
+        candidate: ScoredRecommendation,
+    ): Double {
+        if (selected.isEmpty()) return candidate.finalScore
+
+        val candidateCategory = FileTypeClassifier.classify(candidate.file)
+        val sameCategoryCount = selected.count { FileTypeClassifier.classify(it.file) == candidateCategory }
+        val sameSourceKindCount = selected.count { it.file.sourceKind == candidate.file.sourceKind }
+
+        val penalty = (sameCategoryCount * 0.04) + (sameSourceKindCount * 0.01)
+        return candidate.finalScore - penalty
+    }
+
+    private fun persist() {
+        stateDao.saveState(exportSnapshot())
+    }
+
+    private companion object {
+        const val RECENCY_HALFLIFE_MILLIS = 7L * 86_400_000L
+    }
+}

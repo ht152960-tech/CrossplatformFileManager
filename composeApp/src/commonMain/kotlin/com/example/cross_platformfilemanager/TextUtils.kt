@@ -54,13 +54,22 @@ private fun formatOneDecimal(value: Double): String {
 
 internal fun displayText(value: String): String {
     val trimmed = value.trim()
-    if (trimmed.isEmpty()) return trimmed
-    if (!looksLikeMojibake(trimmed)) {
-        return trimmed
+    if (trimmed.isBlank()) return trimmed
+
+    if (looksLikeMojibake(trimmed)) {
+        val repaired = tryRepairUtf8Mojibake(trimmed)
+        if (looksMoreReadable(repaired, trimmed)) {
+            return repaired
+        }
     }
 
-    val repaired = tryRepairUtf8Mojibake(trimmed)
-    return if (looksMoreReadable(repaired, trimmed)) repaired else trimmed
+    return trimmed
+}
+
+@Suppress("UNUSED_PARAMETER")
+internal fun displayTextForUi(value: String, fullCjkFontReady: Boolean): String {
+    val repaired = displayText(value)
+    return repaired
 }
 
 internal fun guessFileSizeFromNotes(notes: String): Long? {
@@ -100,6 +109,14 @@ private fun looksMoreReadable(candidate: String, original: String): Boolean {
     if (candidate == original) return false
     return readabilityScore(candidate) > readabilityScore(original)
 }
+
+private fun containsCjk(value: String): Boolean =
+    value.any { char ->
+        val code = char.code
+        code in 0x3400..0x4DBF ||
+            code in 0x4E00..0x9FFF ||
+            code in 0xF900..0xFAFF
+    }
 
 private fun readabilityScore(value: String): Int =
     value.sumOf { char ->

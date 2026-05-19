@@ -7,6 +7,8 @@ data class FileReference(
     val source: String,
     val sourceKind: FileSourceKind,
     val fileType: String,
+    val fileSizeBytes: Long? = null,
+    val coverArtSource: String? = null,
     val tags: List<String>,
     val notes: String,
     val createdAtMillis: Long,
@@ -68,70 +70,9 @@ data class DashboardStats(
 )
 
 class InMemoryFileRepository {
-    val references = androidx.compose.runtime.mutableStateListOf(
-        FileReference(
-            id = "ref-001",
-            title = "Quarterly contract draft",
-            source = "/docs/legal/contract-q3-draft.docx",
-            sourceKind = FileSourceKind.ManualPath,
-            fileType = "DOCX",
-            tags = listOf("contract", "legal", "draft"),
-            notes = "Needs approval and a signature pass.",
-            createdAtMillis = 1710000000000,
-            lastOpenedAtMillis = 1710100000000,
-            isFavorite = true,
-        ),
-        FileReference(
-            id = "ref-002",
-            title = "Product roadmap",
-            source = "/notes/roadmap-2026.md",
-            sourceKind = FileSourceKind.ManualPath,
-            fileType = "MD",
-            tags = listOf("product", "planning", "roadmap"),
-            notes = "Quarterly milestone overview.",
-            createdAtMillis = 1710200000000,
-            lastOpenedAtMillis = 1710500000000,
-        ),
-        FileReference(
-            id = "ref-003",
-            title = "Invoice archive",
-            source = "/finance/invoices/2026",
-            sourceKind = FileSourceKind.ManualPath,
-            fileType = "FOLDER",
-            tags = listOf("finance", "invoice", "archive"),
-            notes = "Folder-like reference for repeated searches.",
-            createdAtMillis = 1710300000000,
-            lastOpenedAtMillis = 1710600000000,
-        ),
-        FileReference(
-            id = "ref-004",
-            title = "UI mockup board",
-            source = "figma://design-system-v2",
-            sourceKind = FileSourceKind.RemoteReference,
-            fileType = "FIGMA",
-            tags = listOf("ui", "design", "mockup"),
-            notes = "Shared visual direction for the app.",
-            createdAtMillis = 1710400000000,
-            lastOpenedAtMillis = 1710550000000,
-        ),
-        FileReference(
-            id = "ref-005",
-            title = "Research note pack",
-            source = "/research/notes-ml-retrieval.txt",
-            sourceKind = FileSourceKind.ManualPath,
-            fileType = "TXT",
-            tags = listOf("research", "retrieval", "recommendation"),
-            notes = "Useful for search and ranking experiments.",
-            createdAtMillis = 1710450000000,
-            lastOpenedAtMillis = 1710700000000,
-        ),
-    )
+    val references = androidx.compose.runtime.mutableStateListOf<FileReference>()
 
-    val recentSearches = androidx.compose.runtime.mutableStateListOf(
-        "contract",
-        "roadmap",
-        "invoice",
-    )
+    val recentSearches = androidx.compose.runtime.mutableStateListOf<String>()
 
     val recommendationLogs = androidx.compose.runtime.mutableStateListOf<RecommendationLog>()
 
@@ -141,7 +82,12 @@ class InMemoryFileRepository {
 
     fun upsertReference(reference: FileReference): FileReference {
         val normalizedSource = normalizeSource(reference.source)
-        val indexBySource = references.indexOfFirst { normalizeSource(it.source) == normalizedSource }
+        val indexBySource = if (normalizedSource.isBlank()) {
+            -1
+        } else {
+            // 空 source 不能当作稳定身份键，否则两个不同文件会被误认为同一个引用。
+            references.indexOfFirst { normalizeSource(it.source) == normalizedSource }
+        }
         val indexById = if (indexBySource >= 0) {
             indexBySource
         } else {
@@ -155,6 +101,7 @@ class InMemoryFileRepository {
                 createdAtMillis = current.createdAtMillis,
                 lastOpenedAtMillis = maxOf(current.lastOpenedAtMillis, reference.lastOpenedAtMillis),
                 isFavorite = current.isFavorite || reference.isFavorite,
+                fileSizeBytes = reference.fileSizeBytes ?: current.fileSizeBytes,
                 tags = normalizeTags(reference.tags),
             )
             references[indexById] = merged
@@ -181,6 +128,21 @@ class InMemoryFileRepository {
         }
     }
 
+    fun removeTagEverywhere(tag: String): Int {
+        val normalizedTag = normalize(tag)
+        if (normalizedTag.isBlank()) return 0
+
+        var changedCount = 0
+        references.forEachIndexed { index, reference ->
+            val updatedTags = reference.tags.filterNot { normalize(it) == normalizedTag }
+            if (updatedTags.size != reference.tags.size) {
+                references[index] = reference.copy(tags = normalizeTags(updatedTags))
+                changedCount++
+            }
+        }
+        return changedCount
+    }
+
     fun deleteReference(referenceId: String): Boolean {
         val index = references.indexOfFirst { it.id == referenceId }
         if (index < 0) {
@@ -203,17 +165,55 @@ class InMemoryFileRepository {
 
     fun replaceReferences(items: List<FileReference>) {
         references.clear()
-        references.addAll(items)
+        // 恢复快照或合并外部数据时，顺手做一次清洗，避免重复引用把列表和推荐信号一起污染。
+        val sanitized = linkedMapOf<String, FileReference>()
+        items.forEach { reference ->
+            val id = reference.id.trim()
+            if (id.isBlank()) return@forEach
+
+            val sourceKey = normalizeSource(reference.source)
+            val dedupeKey = if (sourceKey.isNotBlank()) {
+                "source:$sourceKey"
+            } else {
+                "id:$id"
+            }
+
+            sanitized[dedupeKey] = reference.copy(tags = normalizeTags(reference.tags))
+        }
+        references.addAll(sanitized.values)
     }
 
     fun replaceRecentSearches(items: List<String>) {
         recentSearches.clear()
-        recentSearches.addAll(items.distinct())
+        // 导入快照时顺手清洗搜索词，避免空字符串、重复项和大小写抖动污染最近搜索。
+        recentSearches.addAll(
+            items
+                .map(::normalize)
+                .filter { it.isNotBlank() }
+                .distinct()
+                .take(12)
+        )
     }
 
     fun replaceRecommendationLogs(items: List<RecommendationLog>) {
         recommendationLogs.clear()
-        recommendationLogs.addAll(items)
+        // 恢复时把历史推荐日志也做一次轻量清洗，避免脏快照把重复记录重新灌回去。
+        val cleaned = items
+            .map { log ->
+                log.copy(
+                    query = normalize(log.query),
+                    selectedTag = log.selectedTag?.trim()?.takeIf { it.isNotBlank() },
+                    topSuggestions = log.topSuggestions
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct(),
+                )
+            }
+            .asReversed()
+            .distinctBy { it.id }
+            .asReversed()
+            .sortedBy { it.generatedAtMillis }
+        recommendationLogs.addAll(cleaned.takeLast(30))
     }
 
     fun clearAllData() {
@@ -234,13 +234,20 @@ class InMemoryFileRepository {
         val index = references.indexOfFirst { it.id == referenceId }
         if (index >= 0) {
             val current = references[index]
-            references[index] = current.copy(lastOpenedAtMillis = nowMillis())
+            val openedAtMillis = nowMillis()
+            // 同一个文件在很短时间内被重复打开时，通常是连点、刷新或回看，不把它当成新的“最近打开”信号。
+            if (current.lastOpenedAtMillis > 0L && openedAtMillis - current.lastOpenedAtMillis < RECENT_OPEN_NOISE_WINDOW_MILLIS) {
+                return
+            }
+            references[index] = current.copy(lastOpenedAtMillis = openedAtMillis)
         }
     }
 
     fun recordSearch(query: String) {
         val normalized = normalize(query)
         if (normalized.isBlank()) return
+        // 连续输入相同查询时，不重复挤占最近搜索位置，避免把重复刷新当成新搜索信号。
+        if (recentSearches.firstOrNull() == normalized) return
         recentSearches.remove(normalized)
         recentSearches.add(0, normalized)
         if (recentSearches.size > 12) {
@@ -254,11 +261,25 @@ class InMemoryFileRepository {
         suggestions: List<Suggestion>,
     ) {
         val topSuggestions = suggestions.take(5).map { it.label }
+        val normalizedQuery = normalize(query)
+        val normalizedSelectedTag = selectedTag?.trim()?.takeIf { it.isNotBlank() }
+
+        // 如果连续生成的推荐内容完全一样，就不重复记一条历史，避免刷新或重组把日志撑大。
+        val lastLog = recommendationLogs.lastOrNull()
+        if (
+            lastLog != null &&
+            lastLog.query == normalizedQuery &&
+            lastLog.selectedTag == normalizedSelectedTag &&
+            lastLog.topSuggestions == topSuggestions
+        ) {
+            return
+        }
+
         recommendationLogs.add(
             RecommendationLog(
                 id = "rec-${nowMillis()}",
-                query = normalize(query),
-                selectedTag = selectedTag?.trim()?.takeIf { it.isNotBlank() },
+                query = normalizedQuery,
+                selectedTag = normalizedSelectedTag,
                 generatedAtMillis = nowMillis(),
                 topSuggestions = topSuggestions,
             )
@@ -334,34 +355,44 @@ class InMemoryFileRepository {
         favoritesOnly: Boolean,
     ): List<SearchResult> {
         val normalizedQuery = normalize(query)
-        val tokens = tokenize(normalizedQuery)
         val normalizedTagFilter = selectedTag?.let(::normalize)
         val normalizedTypeFilter = selectedFileType?.let(::normalize)
+
+        if (normalizedQuery.isBlank() && normalizedTagFilter == null && normalizedTypeFilter == null && !favoritesOnly) {
+            return emptyList()
+        }
 
         return references
             .map { reference ->
                 val title = normalize(reference.title)
-                val source = normalize(reference.source)
-                val notes = normalize(reference.notes)
-                val tagText = reference.tags.joinToString(" ") { normalize(it) }
-                val fileTypeText = normalize(reference.fileType)
-
                 var score = 0.0
                 val reasons = mutableListOf<String>()
 
-                if (normalizedQuery.isBlank()) {
-                    score += 0.20
-                    reasons += "ready for browsing"
+                val queryMatch = if (normalizedQuery.isBlank()) {
+                    0.0
+                } else {
+                    val queryTokens = tokenize(normalizedQuery)
+                    val tokenScores = queryTokens.map { token -> titleMatchScore(title, token) }
+                    if (tokenScores.isEmpty() || tokenScores.any { it <= 0.0 }) {
+                        0.0
+                    } else {
+                        tokenScores.average()
+                    }
+                }
+
+                if (queryMatch > 0.0) {
+                    score += queryMatch
+                    reasons += "title match"
                 }
 
                 if (normalizedTagFilter != null && reference.tags.any { normalize(it) == normalizedTagFilter }) {
-                    score += 0.35
-                    reasons += "matches tag \"$selectedTag\""
+                    score += 0.30
+                    reasons += "tag filter"
                 }
 
-                if (normalizedTypeFilter != null && fileTypeText == normalizedTypeFilter) {
-                    score += 0.22
-                    reasons += "matches type \"$selectedFileType\""
+                if (normalizedTypeFilter != null && normalize(reference.fileType) == normalizedTypeFilter) {
+                    score += 0.20
+                    reasons += "type filter"
                 }
 
                 if (favoritesOnly && reference.isFavorite) {
@@ -369,64 +400,22 @@ class InMemoryFileRepository {
                     reasons += "favorite only"
                 }
 
-                tokens.forEach { token ->
-                    when {
-                        title == token -> {
-                            score += 0.45
-                            reasons += "title match"
-                        }
-                        title.startsWith(token) -> {
-                            score += 0.30
-                            reasons += "title prefix"
-                        }
-                        title.contains(token) -> {
-                            score += 0.20
-                            reasons += "title contains"
-                        }
-                    }
-
-                    when {
-                        source.contains(token) -> {
-                            score += 0.16
-                            reasons += "source contains"
-                        }
-                        notes.contains(token) -> {
-                            score += 0.12
-                            reasons += "notes contain"
-                        }
-                        tagText.contains(token) -> {
-                            score += 0.28
-                            reasons += "tag match"
-                        }
-                    }
-                }
-
-                if (reference.isFavorite) {
-                    score += 0.05
-                    reasons += "favorite"
-                }
-
-                if (recentSearches.any { normalize(it).contains(normalizedQuery) && normalizedQuery.isNotBlank() }) {
-                    score += 0.05
-                    reasons += "recently searched"
-                }
-
-                if (reference.lastOpenedAtMillis > 0L) {
-                    score += 0.10
-                }
-
                 SearchResult(
                     reference = reference,
                     score = score,
-                    reason = if (reasons.isEmpty()) "general candidate" else reasons.distinct().joinToString(", "),
+                    reason = if (reasons.isEmpty()) {
+                        if (normalizedQuery.isBlank()) "general candidate" else "title candidate"
+                    } else {
+                        reasons.distinct().joinToString(", ")
+                    },
                 )
             }
             .filter {
                 val matchesTag = normalizedTagFilter == null || it.reference.tags.any { tag -> normalize(tag) == normalizedTagFilter }
                 val matchesType = normalizedTypeFilter == null || normalize(it.reference.fileType) == normalizedTypeFilter
                 val matchesFavorite = !favoritesOnly || it.reference.isFavorite
-                (it.score > 0.15 || normalizedQuery.isBlank() || normalizedTagFilter != null || normalizedTypeFilter != null || favoritesOnly) &&
-                    matchesTag && matchesType && matchesFavorite
+                val matchesQuery = normalizedQuery.isBlank() || normalizedTagFilter != null || normalizedTypeFilter != null || favoritesOnly || it.score > 0.0
+                matchesQuery && matchesTag && matchesType && matchesFavorite
             }
             .sortedWith(
                 compareByDescending<SearchResult> { it.score }
@@ -448,4 +437,32 @@ class InMemoryFileRepository {
         tags.map { it.trim() }
             .filter { it.isNotBlank() }
             .distinct()
+
+    private fun titleMatchScore(title: String, token: String): Double {
+        if (token.isBlank()) return 0.0
+        return when {
+            title == token -> 1.0
+            title.startsWith(token) -> 0.92
+            title.contains(token) -> 0.78
+            isSubsequence(title, token) -> 0.60
+            else -> 0.0
+        }
+    }
+
+    private fun isSubsequence(text: String, pattern: String): Boolean {
+        var textIndex = 0
+        var patternIndex = 0
+        while (textIndex < text.length && patternIndex < pattern.length) {
+            if (text[textIndex] == pattern[patternIndex]) {
+                patternIndex++
+            }
+            textIndex++
+        }
+        return patternIndex == pattern.length
+    }
+
+    private companion object {
+        // 这个窗口只用于去掉短时间重复打开的噪声，不影响正常的后续推荐学习。
+        const val RECENT_OPEN_NOISE_WINDOW_MILLIS = 2L * 60L * 1000L
+    }
 }

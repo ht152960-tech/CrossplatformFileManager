@@ -1,0 +1,305 @@
+App composition entered
+snapshot load start +${startedAt - appStartMillis}ms
+snapshot load end +${nowMillis() - appStartMillis}ms
+删除文件
+Delete file
+删除
+Delete
+取消
+Cancel
+文件管理器
+File Atlas
+搜索
+Search
+点击任意条目进入详情页。
+Open any item to view its details.
+上传文件
+Upload file
+还没有新文件
+No recent files yet
+选择一个文件后，它会出现在这里。
+Pick a file and it will appear here.
+全部文件
+All files
+系统还没有足够的数据生成推荐。
+The system has not collected enough signals yet.
+排序条件
+Sort by
+切换排序方式后，下面的网格会立即更新。
+Switch the order and the grid updates immediately.
+最近添加
+Recent added
+文件名
+Name
+文件类型
+Type
+标签
+Tags
+暂无文件
+No files uploaded yet
+先选择一个文件，列表就会出现。
+Pick a file first and it will show up here.
+“${displayTextForUi(appState.query, fullCjkFontReady)}”的搜索结果 · ${searchResults.size} 个
+"${displayTextForUi(appState.query, fullCjkFontReady)}" search results · ${searchResults.size}
+输入关键字后再搜索
+Enter a keyword to search
+搜索结果 · ${searchResults.size} 个
+Search results · ${searchResults.size}
+还没有输入搜索关键字
+No search keyword yet
+输入一个关键字后再点搜索。
+Type a keyword first, then press Search.
+文件详情
+File details
+没有选中文件
+No file selected
+先从主页、全部文件页或搜索结果页打开一个文件。
+Open a file from the home page, library, or search results first.
+当前没有文件
+Nothing open
+打开一个文件后，这里会显示文件图标、标签和操作按钮。
+Once opened, this page shows the icon, tags, and actions.
+browser-
+文件信息
+File info
+这里显示上传时间、大小和文件路径。
+Upload time, size, and file path are shown here.
+文件大小
+File size
+文件路径
+File path
+暂未保存路径
+No file path saved
+封面来源
+Cover art source
+这个文件还没有可直接打开的本地路径。
+This file does not have a directly openable local path.
+右上角按钮只会从本文件移除标签，不会删除标签本身。
+Use the top-right button to remove a tag from this file without deleting the tag everywhere.
+− 移除标签
+− Remove tag
+暂无标签
+No tags yet
+可以先点击右侧的“+新增标签”。
+Use the + add tag button to create one.
++ 新增标签
++ Add tag
+删除此文件
+Delete this file
+移除标签
+Remove tag
+选一个标签，只从当前文件移除。
+Pick a tag to remove it from this file only.
+完成
+Done
+添加标签
+Add tag
+输入标签
+Tag name
+已有标签
+Existing tags
+确定新增
+Add
+菜单
+Menu
+返回
+Back
+EN
+中文
+功能
+关闭
+Close
+在这里切换语言。
+Switch the app language here.
+排序
+Sort
+↗ 打开此文件
+↗ Open this file
+Cover art
+Reserved
+DEPRECATION
+添加文件
+Add file
+浏览器文件选择器不可用，请手动添加引用。
+Browser file picker is not available. Please add a reference manually.
+,
+最近打开
+Recent opened
+这个文件没有保存路径。
+This file does not have a saved path.
+这个文件接口还没有解析成可直接打开的路径。
+This browser file handle has not been resolved to an openable path.
+保存的文件路径找不到文件。
+The saved file path could not be found.
+这个网址无法打开。
+This URL could not be opened.
+这个来源类型不支持直接打开。
+This source type cannot be opened directly.
+本地优先 · 引用 + 标签 · 离线搜索与推荐
+本地离线
+重置筛选
+导入快照
+已选择的文件
+已自动加入列表，你还可以继续修改草稿字段或重新选择文件。
+已选文件列表
+还没有点选文件。
+已选 %d 项
+全选
+清空选中
+移除所选
+长按拖动右侧句柄即可排序。
+单击文件即可打开详情。
+暂无文件。
+当前选中
+点击下面任一个文件，这里会显示选中信息。
+文件库
+推荐列表
+新上传
+选择导入方式
+导入后，可以替换当前整套索引，或者只将数据合并进现有库。
+替换当前
+合并进现有
+已记录引用
+标签总数
+标签筛选
+点击标签即可筛选结果，选中的标签会高亮显示。
+暂无可筛选标签。
+近期检索
+当前推荐
+新增文件引用
+只存文件引用和标签，不存文件内容。选中后会自动加入列表，草稿字段仍可继续修改。
+选择本地文件
+选择设备上的文件，系统会自动加入列表，但不会复制文件内容。
+引用名称
+文件位置 / 句柄 / URL
+标签（逗号分隔）
+暂无标签，可以现在添加。
+删除标签
+备注
+先用路径或引用字符串占位，后续可替换成真正的本地文件访问。
+添加引用
+搜索文件
+输入关键字后点击搜索，也可以直接点标签进行筛选。
+搜索标签、文件名、路径或备注
+建议你可以这样查
+最像你要找的文件
+全部结果
+命中 %d 条
+文件类型筛选
+全部类型
+仅看收藏
+推荐面板
+算法会综合标签匹配、历史行为、最近检索和标签共现。
+推荐查询
+用这个查
+打开
+刷新
+上传于
+编辑
+保存
+导出快照
+清空本地数据
+确认清空本地数据
+清空后，本地已保存的引用、标签和搜索记录都会被删除。
+确认清空
+暂无匹配文件
+换个关键词，或者点上面的标签继续筛选。
+打开后可继续定位标签与历史。
+暂无推荐
+建议数
+引用数
+最近打开数
+检索记录
+搜索：%s
+当前筛选标签：%s
+类型：%s
+收藏
+取消收藏
+该来源已存在，保存时会合并，不会重复创建。
+Local-first - references + tags - offline search and recommendations
+Local only
+Reset filters
+Import snapshot
+Selected file
+It has been added to the library automatically. You can still edit the draft fields or pick another file.
+Selected files
+No files selected yet.
+%d selected
+Select all
+Clear selection
+Remove selected
+Long-press the handle on the right to reorder.
+Click a file to open details.
+No files yet.
+Current selection
+Click any file below and the selected file name and type will appear here.
+File library
+Recommended
+New uploads
+Choose import mode
+You can replace the current index entirely, or merge the imported data into the existing library.
+Replace current
+Merge into current
+References
+Tag filters
+Click a tag to filter results. The active tag stays highlighted.
+No filter tags yet.
+Recent searches
+Recommendations
+Add a file reference
+Store only the reference and tags, not the file contents. Selecting a file automatically adds it to the library, while the draft fields remain editable.
+Select a local file
+Choose a file on this device. The app auto-adds a reference without copying file contents.
+Reference name
+Path / handle / URL
+File type
+Tags (comma-separated)
+No tags yet. Add one now.
+Notes
+Start with a simple path or reference string. We can replace it with real file access later.
+Add reference
+Search files
+Enter a keyword, press search, or tap a tag to filter.
+Search tags, file names, paths, or notes
+Ways you might search
+Closest file ideas
+All results
+%d matches
+File type filters
+All types
+Favorites only
+Recommendation panel
+The ranking mixes tag matching, usage history, recent searches, and tag co-occurrence.
+Recommended queries
+Use this
+Recently added
+Recently opened
+Open
+Refresh
+Selected item
+Uploaded
+Last opened
+Edit
+Save
+Export snapshot
+Clear local data
+Confirm clear local data
+After clearing, locally saved references, tags, and search history will be removed.
+Clear
+No matching files
+Try a different keyword or tap a tag above to keep filtering.
+Open an item to continue refining tags and history.
+No recommendations yet
+Suggestions
+Recent opens
+Search logs
+Search: %s
+Filtered by tag: %s
+Type: %s
+Favorite
+Unfavorite
+This source already exists, so saving will merge it instead of creating a duplicate.
+Loading app...
+snapshotReady=$snapshotReady  uiFontReady=$uiFontReady  fullCjkFontReady=$fullCjkFontReady
+Font loading failed
+The UI font resource did not become ready. Check the font asset path and network response.
