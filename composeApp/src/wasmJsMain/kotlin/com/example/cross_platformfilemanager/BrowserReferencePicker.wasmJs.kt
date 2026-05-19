@@ -14,9 +14,13 @@ private external interface BrowserPickInteropWasm {
 
 private class BrowserReferencePickerWasm : BrowserReferencePicker {
     override suspend fun pickReference(): BrowserReferenceDraft? {
-        val encoded: JsAny? = browserInterop().pickReference().await()
-        return BrowserReferenceFormat.decode(encoded as? String ?: return null)
+        val bridge = browserInterop() ?: return null
+        val encoded: JsAny? = bridge.pickReference().await()
+        val encodedString = encoded as? String ?: return null
+        return BrowserReferenceFormat.decode(encodedString)
     }
 }
 
-private fun browserInterop(): BrowserPickInteropWasm = js("window.fileAtlasBrowser")
+@OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+private fun browserInterop(): BrowserPickInteropWasm? =
+    js("(globalThis.fileAtlasBrowser || null)")

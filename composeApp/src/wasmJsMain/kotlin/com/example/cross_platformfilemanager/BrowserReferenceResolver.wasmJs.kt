@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+
 package com.example.cross_platformfilemanager
 
 import kotlinx.coroutines.await
@@ -13,10 +15,13 @@ private external interface BrowserResolveInteropWasm {
 
 private class BrowserReferenceResolverWasm : BrowserReferenceResolver {
     override suspend fun resolveReference(reference: FileReference): BrowserReferenceDraft? {
-        val encoded: JsAny? = browserInterop().resolveReference(reference.source).await()
-        return BrowserReferenceFormat.decode(encoded as? String ?: return null)
+        val bridge = browserInterop() ?: return null
+        val encoded: JsAny? = bridge.resolveReference(reference.source).await()
+        val encodedString = encoded as? String ?: return null
+        return BrowserReferenceFormat.decode(encodedString)
     }
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
-private fun browserInterop(): BrowserResolveInteropWasm = js("window.fileAtlasBrowser")
+private fun browserInterop(): BrowserResolveInteropWasm? =
+    js("(globalThis.fileAtlasBrowser || null)")
