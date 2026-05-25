@@ -4,7 +4,11 @@ import kotlinx.coroutines.await
 import kotlin.js.JsAny
 import kotlin.js.Promise
 
-// Wasm 端和 JS 一样，只对标准网页地址做外部打开。
+/**
+ * Kotlin/Wasm 平台信息实现。
+ *
+ * 与 JS 端类似，Wasm 端的外部打开能力也通过浏览器桥接对象完成。
+ */
 class WasmPlatform : Platform {
     override val name: String = "Web with Kotlin/Wasm"
 }

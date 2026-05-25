@@ -139,6 +139,12 @@ private enum class AllFilesTypeFilter {
 
 @Composable
 @Preview
+/**
+ * 应用根入口。
+ *
+ * 这里负责创建跨页面共享的状态对象、恢复快照、接入启动门面，
+ * 并把主要页面之间的导航和通用操作入口组织起来。
+ */
 fun App() {
     val snapshotStore = remember { createAppSnapshotStore() }
     val browserReferencePicker = remember { createBrowserReferencePicker() }
@@ -201,6 +207,8 @@ fun App() {
             currentPage = AppPage.Detail
             return
         }
+        // 无论入口来自最近新增、推荐列表还是搜索结果，真正的打开行为都统一走应用状态层，
+        // 这样文件条目状态和推荐学习信号才能在同一个入口里保持一致。
         openReferenceWithRefresh(appState, coroutineScope, reference)
         currentPage = AppPage.Detail
     }
@@ -537,6 +545,12 @@ fun App() {
 }
 
 @Composable
+/**
+ * 首页。
+ *
+ * 首页主要展示最近新增、推荐文件和全局搜索入口，
+ * 不直接参与推荐计算，只消费应用状态层已经准备好的结果。
+ */
 private fun HomePage(
     appState: FileManagerAppState,
     locale: AppLocale,
@@ -551,6 +565,7 @@ private fun HomePage(
     onSearch: () -> Unit,
     onOpenReference: (FileReference) -> Unit,
 ) {
+    // 首页推荐面板只消费只读推荐结果，不在 UI 层直接拼装推荐算法输入。
     val recommendedReferences = resolveRecommendedReferences(appState)
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -630,6 +645,8 @@ private fun HomePage(
                     },
                 )
             } else {
+                // 推荐面板只展示推荐链路返回的前若干个文件条目；
+                // 用户点击其中任意条目时，会回到统一的打开入口写入推荐反馈上下文。
                 AdaptiveFileGrid(
                     items = recommendedReferences,
                     fullCjkFontReady = fullCjkFontReady,
@@ -642,6 +659,12 @@ private fun HomePage(
 }
 
 @Composable
+/**
+ * 全部文件页。
+ *
+ * 这个页面负责文件总览、排序和按大类筛选，
+ * 推荐算法细节不会在这里展开。
+ */
 private fun AllFilesPage(
     appState: FileManagerAppState,
     locale: AppLocale,
@@ -761,6 +784,12 @@ private fun AllFilesPage(
 }
 
 @Composable
+/**
+ * 搜索结果页。
+ *
+ * 页面负责接收搜索输入、展示当前搜索标签和结果列表，
+ * 真正的搜索标签归一化与匹配逻辑由状态层和仓储层处理。
+ */
 private fun SearchResultsPage(
     appState: FileManagerAppState,
     locale: AppLocale,
@@ -1153,6 +1182,11 @@ private fun SearchEmptyState(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
+/**
+ * 详情页。
+ *
+ * 这里展示单个文件条目的详细信息，并承接打开、刷新、替换、删除和标签编辑等入口。
+ */
 private fun DetailPage(
     appState: FileManagerAppState,
     browserReferencePicker: BrowserReferencePicker?,
@@ -1728,6 +1762,11 @@ private fun LanguageToggleButton(
 }
 
 @Composable
+/**
+ * 侧边菜单面板。
+ *
+ * 该面板承接工作区级别的操作入口，例如语言切换、快照导入导出和本地数据清理。
+ */
 private fun SideMenuPanel(
     appState: FileManagerAppState,
     locale: AppLocale,
@@ -2477,6 +2516,12 @@ private fun SortChip(
 }
 
 @Composable
+/**
+ * 手动添加或替换文件条目的对话框。
+ *
+ * 对话框只负责收集草稿字段和触发确认动作，
+ * 真正的草稿入库、替换和后续缩略图处理仍由应用状态层完成。
+ */
 private fun ManualAddDialog(
     appState: FileManagerAppState,
     locale: AppLocale,
@@ -2743,6 +2788,11 @@ private fun compareString(left: String, right: String, direction: SortDirection)
         SortDirection.Descending -> right.compareTo(left)
     }
 
+/**
+ * 从只读推荐状态中提取首页展示用的推荐文件列表。
+ *
+ * 首页不直接依赖带打分明细的结构，只保留前 10 个文件条目用于展示。
+ */
 private fun resolveRecommendedReferences(
     recommendationState: RecommendationReadOnlyState,
 ): List<FileReference> = recommendationState.recommendedReferences.take(10)

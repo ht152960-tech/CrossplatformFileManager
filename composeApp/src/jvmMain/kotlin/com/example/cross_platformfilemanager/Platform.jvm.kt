@@ -4,7 +4,11 @@ import java.awt.Desktop
 import java.io.File
 import java.net.URI
 
-// JVM 端可以直接交给系统桌面去打开本地文件或网址。
+/**
+ * JVM 桌面平台信息实现。
+ *
+ * 该实现允许把本地文件或 URL 直接交给宿主系统桌面打开。
+ */
 class JVMPlatform : Platform {
     override val name: String = "Java ${System.getProperty("java.version")}"
 }

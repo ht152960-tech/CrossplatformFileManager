@@ -1,11 +1,19 @@
 package com.example.cross_platformfilemanager
 
-// Locale/region related.
+/**
+ * 应用支持的语言环境。
+ */
 enum class AppLocale {
     ZhCn,
     EnUs,
 }
 
+/**
+ * 整个应用界面使用的文案集合。
+ *
+ * 把界面文案集中在一个对象里，便于按语言环境整体切换，
+ * 也避免 UI 文件到处分散硬编码字符串。
+ */
 data class UiStrings(
     val appName: String,
     val subtitle: String,
@@ -98,6 +106,12 @@ data class UiStrings(
     val duplicateSourceNotice: String,
 )
 
+/**
+ * 语言文案提供器。
+ *
+ * UI 层只通过这里按当前语言环境读取文案，
+ * 不需要知道具体中文或英文字符串存放在哪一段实现里。
+ */
 object AppStrings {
     fun forLocale(locale: AppLocale): UiStrings = when (locale) {
         AppLocale.ZhCn -> zh()

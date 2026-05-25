@@ -1,5 +1,11 @@
 package com.example.cross_platformfilemanager
 
+/**
+ * 文件大类。
+ *
+ * 这个分类既服务全部文件页的类型筛选，
+ * 也服务推荐结果里的轻量多样性约束。
+ */
 enum class FileTypeCategory {
     TextDocument,
     PdfDocument,
@@ -14,8 +20,14 @@ enum class FileTypeCategory {
     Unknown,
 }
 
+/**
+ * 基于文件类型、标题扩展名和来源扩展名的轻量分类器。
+ *
+ * 第一版只使用简单 token 规则，不依赖第三方库或平台能力，
+ * 重点是为筛选和推荐提供稳定、可解释的类型信号。
+ */
 object FileTypeClassifier {
-    // 先把最常见、最容易被维护的人类文档类型单独收拢。
+    // 先把最常见、最容易被误判的人类文档类型单独收拢。
     private val textDocumentTokens = setOf("txt", "text", "md", "markdown", "log", "rtf", "doc", "docx")
     private val pdfTokens = setOf("pdf")
     private val videoTokens = setOf("mp4", "mkv", "mov", "avi", "webm", "video", "movie")
@@ -30,6 +42,12 @@ object FileTypeClassifier {
     private val presentationTokens = setOf("ppt", "pptx", "presentation", "slide", "slides")
     private val folderTokens = setOf("folder", "dir", "directory")
 
+    /**
+     * 给单个文件条目归类。
+     *
+     * 分类顺序本身也是规则的一部分：
+     * 一旦某类先命中，就不会继续落到后面的更宽泛类别中。
+     */
     fun classify(reference: FileReference): FileTypeCategory {
         val tokens = referenceTokens(reference)
         return when {

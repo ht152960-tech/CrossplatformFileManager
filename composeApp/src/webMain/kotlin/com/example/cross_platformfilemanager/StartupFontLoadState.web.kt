@@ -11,6 +11,7 @@ import org.jetbrains.compose.resources.preloadFont
 import kotlinx.browser.window
 import kotlinx.browser.document
 
+// Web 端会在启动阶段主动预加载 UI 字体和完整中文字体，再决定是否放行主内容。
 @OptIn(ExperimentalResourceApi::class)
 @Composable
 actual fun rememberAppFontLoadState(): AppFontLoadState {

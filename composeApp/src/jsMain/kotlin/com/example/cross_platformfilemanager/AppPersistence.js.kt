@@ -11,6 +11,7 @@ private const val LOCAL_STORAGE_KEY = "file-atlas.snapshot"
 
 actual fun createAppSnapshotStore(): AppSnapshotStore? = BrowserSnapshotStore()
 
+// Web 端优先走宿主提供的持久化桥接，失败时回退到 localStorage。
 private class BrowserSnapshotStore : AppSnapshotStore {
     override suspend fun load(): AppSnapshot? {
         val encoded = loadEncodedSnapshot() ?: return null

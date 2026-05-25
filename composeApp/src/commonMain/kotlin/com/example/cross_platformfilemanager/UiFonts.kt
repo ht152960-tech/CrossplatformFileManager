@@ -18,6 +18,12 @@ fun rememberAppFontFamily(): FontFamily = FontFamily(Font(NotoSansScUi))
 @Composable
 fun rememberFullCjkFontFamily(): FontFamily = FontFamily(Font(NotoSansSc))
 
+/**
+ * 基于给定字体族生成整套 Material Typography。
+ *
+ * 这样界面层只需要决定当前使用哪套字体，
+ * 不需要逐个文本样式单独设置字体族。
+ */
 fun appTypography(fontFamily: FontFamily): Typography {
     val defaults = Typography()
 

@@ -6,6 +6,7 @@ import kotlinx.coroutines.await
 import kotlin.js.JsAny
 import kotlin.js.Promise
 
+// JS 端通过浏览器桥接对象把外部引用解析成可入库的文件草稿。
 actual fun createBrowserReferenceResolver(): BrowserReferenceResolver? = BrowserReferenceResolverJs()
 
 private external interface BrowserResolveInterop {

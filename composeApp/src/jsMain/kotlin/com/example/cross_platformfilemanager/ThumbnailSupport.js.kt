@@ -16,6 +16,7 @@ import kotlin.js.JsAny
 import kotlin.js.Promise
 import org.jetbrains.skia.Image
 
+// JS 端缩略图能力通过浏览器桥接实现，生成结果以 data URL 形式回写到共享层。
 actual fun createThumbnailGenerator(): ThumbnailGenerator? = BrowserThumbnailGeneratorJs()
 
 private external interface BrowserThumbnailInterop {
@@ -62,6 +63,7 @@ private fun decodeThumbnailDataUrl(thumbnailPath: String): Painter? = runCatchin
     println("Thumbnail UI load failed: ${it.message}")
 }.getOrNull()
 
+// Web 端只对图像和视频做缩略图尝试，避免把不支持的来源交给浏览器桥接白跑一遍。
 private fun FileReference.isLikelyWebThumbnailCandidate(): Boolean {
     val normalizedType = fileType.trim().lowercase()
     if (normalizedType in WEB_IMAGE_TYPES || normalizedType in WEB_VIDEO_TYPES) {

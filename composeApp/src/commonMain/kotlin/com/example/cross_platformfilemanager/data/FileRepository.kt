@@ -1,6 +1,11 @@
-﻿package com.example.cross_platformfilemanager
+package com.example.cross_platformfilemanager
 
-//数据访问层，抽象文件数据来源�?
+/**
+ * 文件条目。
+ *
+ * 这是文件管理和推荐链路共同依赖的基础模型。
+ * 推荐算法会读取其中的标识、标题、类型、标签和最近打开时间作为候选文件输入。
+ */
 data class FileReference(
     val id: String,
     val title: String,
@@ -48,6 +53,12 @@ enum class SuggestionKind {
     File,
 }
 
+/**
+ * 一次推荐展示日志。
+ *
+ * 它记录的是某次查询条件下给用户展示了哪些建议，
+ * 主要用于快照恢复和推荐展示历史保留，不等同于推荐点击反馈。
+ */
 data class RecommendationLog(
     val id: String,
     val query: String,
@@ -56,6 +67,12 @@ data class RecommendationLog(
     val topSuggestions: List<String>,
 )
 
+/**
+ * 基于内存数据结构的文件仓储。
+ *
+ * 这个仓储除了维护文件条目，还保存最近搜索和推荐日志，
+ * 供应用状态层把搜索、推荐展示和快照恢复串起来。
+ */
 class InMemoryFileRepository {
     val references = androidx.compose.runtime.mutableStateListOf<FileReference>()
 
@@ -132,7 +149,6 @@ class InMemoryFileRepository {
     fun findReferenceById(referenceId: String): FileReference? =
         references.firstOrNull { it.id == referenceId }
 
-
     fun replaceReferences(items: List<FileReference>) {
         references.clear()
         references.addAll(items.map { reference ->
@@ -142,18 +158,23 @@ class InMemoryFileRepository {
 
     fun replaceRecentSearches(items: List<String>) {
         recentSearches.clear()
-                recentSearches.addAll(
+        recentSearches.addAll(
             items
                 .map(::normalize)
                 .filter { it.isNotBlank() }
                 .distinct()
-                .take(12)
+                .take(12),
         )
     }
 
+    /**
+     * 用外部快照中的推荐日志替换当前日志列表。
+     *
+     * 恢复时会统一做规范化、去重和裁剪，避免历史快照把噪声或重复日志带回当前状态。
+     */
     fun replaceRecommendationLogs(items: List<RecommendationLog>) {
         recommendationLogs.clear()
-                val cleaned = items
+        val cleaned = items
             .map { log ->
                 log.copy(
                     query = normalize(log.query),
@@ -171,6 +192,11 @@ class InMemoryFileRepository {
         recommendationLogs.addAll(cleaned.takeLast(30))
     }
 
+    /**
+     * 清空仓储层维护的文件、搜索和推荐日志数据。
+     *
+     * 推荐引擎内部的学习状态由应用状态层单独清理。
+     */
     fun clearAllData() {
         references.clear()
         recentSearches.clear()
@@ -185,12 +211,18 @@ class InMemoryFileRepository {
         }
     }
 
+    /**
+     * 更新文件条目的最近打开时间。
+     *
+     * 这里服务文件条目自身状态；
+     * 真正驱动推荐学习的打开事件仍由上层同步交给推荐引擎记录。
+     */
     fun open(referenceId: String) {
         val index = references.indexOfFirst { it.id == referenceId }
         if (index >= 0) {
             val current = references[index]
             val openedAtMillis = nowMillis()
-                        if (current.lastOpenedAtMillis > 0L && openedAtMillis - current.lastOpenedAtMillis < RECENT_OPEN_NOISE_WINDOW_MILLIS) {
+            if (current.lastOpenedAtMillis > 0L && openedAtMillis - current.lastOpenedAtMillis < RECENT_OPEN_NOISE_WINDOW_MILLIS) {
                 return
             }
             references[index] = current.copy(lastOpenedAtMillis = openedAtMillis)
@@ -200,7 +232,7 @@ class InMemoryFileRepository {
     fun recordSearch(query: String) {
         val normalized = normalize(query)
         if (normalized.isBlank()) return
-                if (recentSearches.firstOrNull() == normalized) return
+        if (recentSearches.firstOrNull() == normalized) return
         recentSearches.remove(normalized)
         recentSearches.add(0, normalized)
         if (recentSearches.size > 12) {
@@ -208,6 +240,12 @@ class InMemoryFileRepository {
         }
     }
 
+    /**
+     * 记录一次推荐展示结果。
+     *
+     * 当连续两次推荐的查询条件和前几项结果完全一致时，不重复写日志，
+     * 避免把展示层刷新噪声误当成新的推荐历史。
+     */
     fun recordRecommendation(
         query: String,
         selectedTag: String?,
@@ -359,12 +397,3 @@ class InMemoryFileRepository {
         const val RECENT_OPEN_NOISE_WINDOW_MILLIS = 2L * 60L * 1000L
     }
 }
-
-
-
-
-
-
-
-
-

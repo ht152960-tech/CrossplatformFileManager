@@ -1,8 +1,19 @@
 package com.example.cross_platformfilemanager
 
+/**
+ * 应用快照编解码器。
+ *
+ * 它负责把整个工作区状态编码成字符串，并在恢复时反向解码。
+ * 推荐日志和推荐引擎状态也通过这里持久化，因此这是推荐学习结果跨会话保留的关键边界。
+ */
 internal object SnapshotCodec {
     private const val FORMAT_VERSION = 10
 
+    /**
+     * 把应用快照编码成单字符串载荷。
+     *
+     * 当前实现使用长度前缀顺序编码，避免字段内容中的普通字符干扰解析。
+     */
     fun encode(snapshot: AppSnapshot): String {
         val out = StringBuilder()
         out.appendString(snapshot.schemaVersion.toString())
@@ -65,6 +76,12 @@ internal object SnapshotCodec {
         return out.toString()
     }
 
+    /**
+     * 从持久化字符串中恢复应用快照。
+     *
+     * 当载荷为空或解码过程出现异常时，返回空值，
+     * 让上层按“没有可恢复快照”处理，而不是直接中断启动流程。
+     */
     fun decode(payload: String): AppSnapshot? {
         if (payload.isBlank()) return null
 
@@ -223,6 +240,7 @@ internal object SnapshotCodec {
     ) {
         out.appendString(recommendationState.lastOpenedFileId.orEmpty())
 
+        // 编码前先按 key 排序，保证同一状态在不同运行时下也能得到稳定输出。
         val filePatterns = recommendationState.filePatterns.entries.sortedBy { it.key }
         out.appendString(filePatterns.size.toString())
         filePatterns.forEach { entry ->
@@ -233,6 +251,7 @@ internal object SnapshotCodec {
             out.appendString(pattern.openCount.toString())
         }
 
+        // 后继关系同样按起点和终点排序，避免 Map 遍历顺序影响快照结果。
         val counts = recommendationState.transitionSnapshot.counts.entries.sortedBy { it.key }
         out.appendString(counts.size.toString())
         counts.forEach { entry ->

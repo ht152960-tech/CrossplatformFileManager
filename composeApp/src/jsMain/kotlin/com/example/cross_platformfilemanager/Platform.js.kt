@@ -4,7 +4,12 @@ import kotlinx.coroutines.await
 import kotlin.js.JsAny
 import kotlin.js.Promise
 
-// 浏览器端直接用新标签页打开外部地址，本地磁盘路径则不在这里强行猜。
+/**
+ * Kotlin/JS 平台信息实现。
+ *
+ * Web 端的外部打开能力通过浏览器桥接对象完成，
+ * 这里只负责把共享层的文件条目请求转交给前端宿主环境。
+ */
 class JsPlatform : Platform {
     override val name: String = "Web with Kotlin/JS"
 }

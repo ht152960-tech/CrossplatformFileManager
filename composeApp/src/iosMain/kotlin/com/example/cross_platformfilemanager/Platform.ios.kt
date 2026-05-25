@@ -2,7 +2,12 @@ package com.example.cross_platformfilemanager
 
 import platform.UIKit.UIDevice
 
-// iOS 端先只保留平台名；文件外部打开后续再按需要接系统能力。
+/**
+ * iOS 平台信息实现。
+ *
+ * 当前 iOS 端先只暴露平台名称，
+ * 外部打开文件的能力后续再按需要接入系统接口。
+ */
 class IOSPlatform : Platform {
     override val name: String = UIDevice.currentDevice.systemName() + " " + UIDevice.currentDevice.systemVersion
 }

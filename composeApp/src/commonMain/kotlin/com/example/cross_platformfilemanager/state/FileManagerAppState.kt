@@ -4,7 +4,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
-//应用状态层，负责文件管理器的状态组织。
+/**
+ * 应用状态层，负责把文件仓储、推荐引擎、快照恢复和界面可读状态组织在一起。
+ *
+ * 推荐相关的职责主要集中在：
+ * - 组装推荐候选文件
+ * - 暴露推荐结果与打分明细
+ * - 在打开文件时同步写入推荐引擎的打开事件
+ * - 在导入导出快照时保留推荐日志和推荐状态
+ */
 class FileManagerAppState(
     private val repository: InMemoryFileRepository = InMemoryFileRepository(),
     private val recommendationEngine: RecommendationEngine = RecommendationEngine(),
@@ -132,6 +140,11 @@ class FileManagerAppState(
     val emptyResultsBody: String
         get() = strings.emptyResultsBody
 
+    /**
+     * 当前搜索条件下的建议列表。
+     *
+     * 这里调用的是推荐引擎的建议入口，主要服务搜索联想和标签建议。
+     */
     val recommendations: List<Suggestion>
         get() = recommendationEngine.suggest(
             query = query,
@@ -155,6 +168,11 @@ class FileManagerAppState(
     val allReferences: List<FileReference>
         get() = repository.references
 
+    /**
+     * 面向界面展示的推荐文件列表。
+     *
+     * 这里返回的是去掉打分明细后的文件条目，用于常规列表展示。
+     */
     override val recommendedReferences: List<FileReference>
         get() = recommendationEngine.recommend(
             references = recommendationCandidates(),
@@ -163,6 +181,11 @@ class FileManagerAppState(
             limit = 10,
         ).map { it.file }
 
+    /**
+     * 保留打分明细的推荐结果。
+     *
+     * 这个视图更适合调试、解释推荐结果或后续扩展推荐说明能力。
+     */
     override val scoredRecommendedReferences: List<ScoredRecommendation>
         get() = recommendationEngine.recommend(
             references = recommendationCandidates(),
@@ -185,6 +208,12 @@ class FileManagerAppState(
     val activeReference: FileReference?
         get() = repository.references.firstOrNull { it.id == activeReferenceId }
 
+    /**
+     * 导出当前工作区快照。
+     *
+     * 除了普通界面状态，这里还会一起导出推荐日志和推荐引擎状态，
+     * 这样恢复后推荐算法可以延续先前的学习结果。
+     */
     fun exportSnapshot(): AppSnapshot = AppSnapshot(
         locale = preferredLocale,
         query = query,
@@ -199,6 +228,11 @@ class FileManagerAppState(
         recommendationState = recommendationEngine.exportSnapshot(),
     )
 
+    /**
+     * 用完整快照恢复当前工作区。
+     *
+     * 恢复推荐状态后，还会重新校正活动文件，避免快照里的活动文件已经不存在时留下悬空引用。
+     */
     fun restoreSnapshot(snapshot: AppSnapshot) {
         preferredLocale = snapshot.locale
         locale = preferredLocale
@@ -218,6 +252,12 @@ class FileManagerAppState(
         snapshotVersion++
     }
 
+    /**
+     * 把外部快照内容合并进当前工作区。
+     *
+     * 这个过程会合并文件条目、搜索标签、最近搜索、推荐日志和推荐状态，
+     * 适合导入附加数据而不是完全覆盖当前状态。
+     */
     fun mergeSnapshot(snapshot: AppSnapshot) {
         snapshot.references.forEach { reference ->
             repository.upsertReference(reference)
@@ -266,6 +306,9 @@ class FileManagerAppState(
         snapshotVersion++
     }
 
+    /**
+     * 清空当前工作区中的本地数据和推荐学习状态。
+     */
     fun clearLocalData() {
         repository.clearAllData()
         recommendationEngine.clear()
@@ -405,6 +448,12 @@ class FileManagerAppState(
         snapshotVersion++
     }
 
+    /**
+     * 打开一个文件条目，并把这次行为写入推荐学习链路。
+     *
+     * 仓储层更新时间戳后，推荐引擎会收到同一时刻的打开事件，
+     * 以便同步更新时间规律和后继关系。
+     */
     fun openReference(referenceId: String) {
         val target = repository.findReferenceById(referenceId) ?: return
         val previousReferenceId = activeReferenceId
@@ -446,7 +495,7 @@ class FileManagerAppState(
                 lastOpenedAtMillis = openedAtMillis,
             )
         }
-        // 这里已经在 openReference() 里记过一次“打开”了，刷新元数据只更新详情，不再重复写入推荐学习信号。
+        // 这里已经在 openReference() 里记录过一次“打开”了，刷新元数据时不再重复写推荐学习信号。
         activeReferenceId = referenceId
         snapshotVersion++
     }
@@ -613,6 +662,12 @@ class FileManagerAppState(
         else -> FileSourceKind.ManualPath
     }
 
+    /**
+     * 生成推荐候选文件列表。
+     *
+     * 刚上传的新条目会优先留在“最近新增”区域展示，
+     * 不直接混入推荐候选，避免新上传提示和推荐排序互相干扰。
+     */
     private fun recommendationCandidates(): List<FileReference> {
         val now = nowMillis()
         return repository.references.filterNot { shouldShowInNewUploadList(it, now) }

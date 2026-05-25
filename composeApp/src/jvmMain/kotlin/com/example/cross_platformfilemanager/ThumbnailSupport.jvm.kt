@@ -14,6 +14,7 @@ import org.jetbrains.skia.Rect
 import org.jetbrains.skia.Surface
 import java.io.File
 
+// JVM 端当前使用本地文件系统缓存缩略图，主要服务桌面端图片条目预览。
 actual fun createThumbnailGenerator(): ThumbnailGenerator? = DesktopThumbnailGenerator()
 
 private class DesktopThumbnailGenerator : ThumbnailGenerator {

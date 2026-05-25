@@ -6,6 +6,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 
+/**
+ * 应用启动门面。
+ *
+ * 只有当快照恢复和字体加载都满足条件后，才真正展示主内容；
+ * 否则在启动阶段统一显示加载页或错误页。
+ */
 @Composable
 fun AppStartupGate(
     snapshotReady: Boolean,

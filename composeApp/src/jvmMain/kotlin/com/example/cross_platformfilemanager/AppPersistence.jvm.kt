@@ -6,6 +6,7 @@ import kotlinx.coroutines.swing.Swing
 import java.io.File
 import javax.swing.JFileChooser
 
+// JVM 端当前未接入工作区快照持久化，只提供文件选择能力。
 actual fun createAppSnapshotStore(): AppSnapshotStore? = null
 
 actual fun createBrowserReferencePicker(): BrowserReferencePicker? = DesktopFileReferencePicker()

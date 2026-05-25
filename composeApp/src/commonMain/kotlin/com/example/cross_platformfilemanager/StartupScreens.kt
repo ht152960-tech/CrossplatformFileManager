@@ -22,6 +22,12 @@ import androidx.compose.ui.layout.ContentScale
 import org.jetbrains.compose.resources.painterResource
 import taggo.composeapp.generated.resources.TaggoLogoSplashSafe2048
 
+/**
+ * 启动加载页。
+ *
+ * 这里只负责展示应用启动中的视觉占位，
+ * 不承载业务逻辑，真正的启动判断由 [AppStartupGate] 统一控制。
+ */
 @Composable
 fun StartupSplashScreen(
     snapshotReady: Boolean,
@@ -55,6 +61,11 @@ fun StartupSplashScreen(
     }
 }
 
+/**
+ * 启动失败页。
+ *
+ * 当前主要用于字体加载失败等启动前置条件不满足的场景。
+ */
 @Composable
 fun StartupFontErrorScreen() {
     Box(

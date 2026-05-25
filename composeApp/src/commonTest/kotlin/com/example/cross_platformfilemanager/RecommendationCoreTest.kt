@@ -4,6 +4,12 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+/**
+ * 推荐算法核心回归测试。
+ *
+ * 这些测试覆盖时间规律、后继关系、在线学习、快照恢复、候选去重和多样性约束，
+ * 用来保证推荐链路的基础行为稳定。
+ */
 class RecommendationCoreTest {
 
     @Test
@@ -221,6 +227,7 @@ class RecommendationCoreTest {
         )
 
         // 这里验证同一个信号连续触发时不会被重复写入，避免历史记录和最近打开状态被噪声撑大。
+        // 验证同一信号连续触发时不会被重复写入，避免历史记录被噪声放大。
         repository.recordSearch("  A  ")
         repository.recordSearch("a")
         assertEquals(listOf("a"), repository.recentSearches)
@@ -408,6 +415,7 @@ class RecommendationCoreTest {
         )
 
         // 这里确保推荐结果不会把空 ID 或重复候选带进去，同时 limit 边界能直接返回空列表。
+        // 确保空 ID、重复候选和 limit 边界都被推荐入口正确处理。
         assertTrue(
             engine.recommend(candidates, previousFileId = null, nowMillis = 100L, limit = 0).isEmpty(),
         )

@@ -2,6 +2,12 @@ package com.example.cross_platformfilemanager
 
 import kotlin.math.exp
 
+/**
+ * 本地推荐引擎，负责把打开事件、时间规律、后继关系和在线学习结果组织成完整推荐流程。
+ *
+ * 引擎只依赖仓储接口保存和恢复状态，不依赖具体存储实现，
+ * 这样后续从内存实现切换到数据库实现时，主要改动可以收敛在仓储层。
+ */
 class RecommendationEngine(
     private val stateDao: RecommendationStateDao = InMemoryRecommendationRepository(),
     private val eventDao: RecommendationEventDao? = null,
@@ -19,6 +25,12 @@ class RecommendationEngine(
         stateDao.loadState()?.let { restoreSnapshot(it) }
     }
 
+    /**
+     * 生成查询词、标签和文件条目的搜索建议。
+     *
+     * 这个入口主要服务搜索联想，不直接参与基于打开事件的综合分计算，
+     * 因此只补充方法职责和数据来源，不展开推荐算法细节。
+     */
     fun suggest(
         query: String,
         references: List<FileReference>,
@@ -173,6 +185,12 @@ class RecommendationEngine(
             .take(8)
     }
 
+    /**
+     * 导出当前推荐状态快照。
+     *
+     * 快照包含时间规律、后继关系、学习权重和最近一次打开文件，
+     * 供上层整体保存，而不是直接暴露各个 Store 的内部结构。
+     */
     fun exportSnapshot(): RecommendationEngineSnapshot = RecommendationEngineSnapshot(
         filePatterns = filePatternStore.snapshot(),
         transitionSnapshot = transitionStore.snapshot(),
@@ -180,6 +198,12 @@ class RecommendationEngine(
         lastOpenedFileId = lastOpenedFileId,
     )
 
+    /**
+     * 用已保存的推荐状态恢复引擎。
+     *
+     * 传入空值时按“重置推荐学习状态”处理；
+     * 传入快照时分别恢复各个 Store，再统一保存一次当前状态。
+     */
     fun restoreSnapshot(snapshot: RecommendationEngineSnapshot?) {
         if (snapshot == null) {
             clear()
@@ -192,6 +216,11 @@ class RecommendationEngine(
         persist()
     }
 
+    /**
+     * 清空推荐算法相关状态和事件记录。
+     *
+     * 这里清理的是推荐学习链路的数据，不负责改动文件条目本身的业务数据。
+     */
     fun clear() {
         filePatternStore.clear()
         transitionStore.clear()
@@ -201,6 +230,14 @@ class RecommendationEngine(
         resolvedEventDao.clearEvents()
     }
 
+    /**
+     * 记录一次文件打开事件。
+     *
+     * 这一步会同时驱动三类状态更新：
+     * - 更新时间规律样本
+     * - 累计前一个文件到当前文件的后继关系
+     * - 记录最近一次打开文件，用作下一次推荐上下文
+     */
     fun recordFileOpen(
         fileId: String,
         openedAtMillis: Long = nowMillis(),
@@ -222,6 +259,16 @@ class RecommendationEngine(
         return log
     }
 
+    /**
+     * 计算候选文件的推荐结果，并按综合分返回前若干项。
+     *
+     * 综合分由三类信号组成：
+     * - 时间规律分：当前时刻与文件典型打开周期的接近程度
+     * - 后继关系分：当前上下文文件之后接着打开该文件的概率
+     * - 最近打开分：样本不足时的稳定回退信号
+     *
+     * 排序前会先清理无效条目和重复候选，排序后再做一次轻量多样性选择。
+     */
     fun recommend(
         references: List<FileReference>,
         previousFileId: String? = lastOpenedFileId,
@@ -233,7 +280,7 @@ class RecommendationEngine(
         val scoredCandidates = references
             .asSequence()
             .filter { it.id.isNotBlank() }
-            // 候选列表做一次最末端去重，避免上游重复引用把同一个文件算进推荐结果两次。
+            // 候选文件先去重，避免同一文件条目被重复计入推荐结果。
             .distinctBy { recommendationDedupKey(it) }
             .filterNot { contextFileId != null && it.id == contextFileId }
             .map { reference ->
@@ -249,7 +296,7 @@ class RecommendationEngine(
                     (weightStore.totalIntervalWeight() * intervalScore) +
                         (weightStore.totalTransitionWeight() * transitionScore) +
                         (weightStore.totalRecencyWeight() * recencyScore)
-                // 样本少或者上下文缺失时，不让结构化信号单独决定排序，而是回退到更稳的最近打开时间。
+                // 样本不足或缺少上下文时，对结构化信号做保守回退，避免偶然行为放大。
                 val finalScore =
                     (structuralScore * confidence) +
                         (recencyScore * (1.0 - confidence))
@@ -264,7 +311,7 @@ class RecommendationEngine(
             }
             .sortedWith(
                 compareByDescending<ScoredRecommendation> { it.finalScore }
-                    // 分数接近时，优先选择历史样本更多的文件，减少低样本偶然性。
+                    // 综合分接近时，优先选择历史样本更多的文件，降低低样本抖动。
                     .thenByDescending { filePatternStore.get(it.file.id)?.openCount ?: 0 }
                     .thenByDescending { it.file.lastOpenedAtMillis }
                     .thenBy { normalize(it.file.title) }
@@ -275,6 +322,12 @@ class RecommendationEngine(
         return selectWithDiversity(scoredCandidates, limit)
     }
 
+    /**
+     * 记录一次推荐点击反馈，并把点击结果作为在线学习样本。
+     *
+     * 只有被点击文件确实出现在本次展示的推荐列表中，才会触发学习，
+     * 这样可以避免把普通文件打开误判为推荐反馈。
+     */
     fun recordRecommendationClick(
         clickedFileId: String,
         shownRecommendations: List<ScoredRecommendation>,
@@ -348,7 +401,7 @@ class RecommendationEngine(
             else -> 1.0
         }
 
-        // 没有 previousFileId 时，后继关系无法提供有效信息，所以整体信心再保守一点。
+        // 没有前一个文件上下文时，后继关系无法发挥作用，因此整体置信度更保守。
         return if (hasContext) {
             supportConfidence
         } else {
@@ -356,6 +409,11 @@ class RecommendationEngine(
         }
     }
 
+    /**
+     * 在综合分排序后做一次轻量多样性筛选。
+     *
+     * 目标不是推翻综合分，而是在分数接近时，略微压低同类文件连续出现的概率。
+     */
     private fun selectWithDiversity(
         scoredCandidates: List<ScoredRecommendation>,
         limit: Int,

@@ -7,6 +7,7 @@ import kotlin.js.JsAny
 import kotlin.js.Promise
 import kotlin.js.ExperimentalWasmJsInterop
 
+// Wasm 端通过浏览器桥接对象把外部引用解析成可入库的文件草稿。
 actual fun createBrowserReferenceResolver(): BrowserReferenceResolver? = BrowserReferenceResolverWasm()
 
 private external interface BrowserResolveInteropWasm {
