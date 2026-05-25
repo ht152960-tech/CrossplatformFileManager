@@ -1866,6 +1866,7 @@ private fun SideMenuPanel(
     if (showAllTagsDialog) {
         AlertDialog(
             onDismissRequest = { showAllTagsDialog = false },
+            containerColor = Color.White,
             title = { Text(if (locale == AppLocale.ZhCn) "\u5168\u90e8\u6807\u7b7e" else "All tags") },
             text = {
                 Column(
