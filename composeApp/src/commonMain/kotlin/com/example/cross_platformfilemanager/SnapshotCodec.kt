@@ -1,13 +1,18 @@
 package com.example.cross_platformfilemanager
 
 internal object SnapshotCodec {
-    private const val FORMAT_VERSION = 7
+    private const val FORMAT_VERSION = 10
 
     fun encode(snapshot: AppSnapshot): String {
         val out = StringBuilder()
         out.appendString(snapshot.schemaVersion.toString())
         out.appendString(snapshot.locale.name)
         out.appendString(snapshot.query)
+        out.appendString(snapshot.searchTags.size.toString())
+        snapshot.searchTags.forEach { tag ->
+            out.appendString(tag.value)
+            out.appendString(tag.source.name)
+        }
         out.appendString(snapshot.selectedTag.orEmpty())
         out.appendString(snapshot.selectedFileType.orEmpty())
         out.appendString(if (snapshot.favoritesOnly) "1" else "0")
@@ -22,8 +27,11 @@ internal object SnapshotCodec {
             out.appendString(reference.fileType)
             out.appendString(reference.fileSizeBytes?.toString().orEmpty())
             out.appendString(reference.coverArtSource.orEmpty())
+            out.appendString(reference.thumbnailPath.orEmpty())
+            out.appendString(reference.thumbnailStatus.name)
             out.appendString(reference.notes)
             out.appendString(reference.createdAtMillis.toString())
+            out.appendString(reference.modifiedAtMillis.toString())
             out.appendString(reference.lastOpenedAtMillis.toString())
             out.appendString(if (reference.isFavorite) "1" else "0")
             out.appendString(reference.tags.size.toString())
@@ -87,6 +95,21 @@ internal object SnapshotCodec {
             }
         }
         val query = cursor.readString()
+        val searchTags = if (schemaVersion >= 10) {
+            val count = cursor.readString().toInt()
+            buildList {
+                repeat(count) {
+                    add(
+                        SearchTag(
+                            value = cursor.readString(),
+                            source = SearchTagSource.valueOf(cursor.readString()),
+                        )
+                    )
+                }
+            }
+        } else {
+            emptyList()
+        }
         val selectedTag = cursor.readString().takeIf { it.isNotBlank() }
         val selectedFileType = if (schemaVersion >= 3) cursor.readString().takeIf { it.isNotBlank() } else null
         val favoritesOnly = if (schemaVersion >= 3) cursor.readString() == "1" else false
@@ -102,8 +125,19 @@ internal object SnapshotCodec {
                 val fileType = cursor.readString()
                 val fileSizeBytes = if (schemaVersion >= 5) cursor.readString().toLongOrNull() else null
                 val coverArtSource = if (schemaVersion >= 7) cursor.readString().takeIf { it.isNotBlank() } else null
+                val thumbnailPath = if (schemaVersion >= 9) cursor.readString().takeIf { it.isNotBlank() } else null
+                val thumbnailStatus = if (schemaVersion >= 9) {
+                    cursor.readString().let(ThumbnailStatus::valueOf)
+                } else {
+                    ThumbnailStatus.NONE
+                }
                 val notes = cursor.readString()
                 val createdAtMillis = cursor.readString().toLong()
+                val modifiedAtMillis = if (schemaVersion >= 8) {
+                    cursor.readString().toLong()
+                } else {
+                    createdAtMillis
+                }
                 val lastOpenedAtMillis = cursor.readString().toLong()
                 val isFavorite = cursor.readString() == "1"
                 val tagCount = cursor.readString().toInt()
@@ -120,9 +154,12 @@ internal object SnapshotCodec {
                         fileType = fileType,
                         fileSizeBytes = fileSizeBytes,
                         coverArtSource = coverArtSource,
+                        thumbnailPath = thumbnailPath,
+                        thumbnailStatus = thumbnailStatus,
                         tags = tags,
                         notes = notes,
                         createdAtMillis = createdAtMillis,
+                        modifiedAtMillis = modifiedAtMillis,
                         lastOpenedAtMillis = lastOpenedAtMillis,
                         isFavorite = isFavorite,
                     )
@@ -168,6 +205,7 @@ internal object SnapshotCodec {
             schemaVersion = schemaVersion,
             locale = locale,
             query = query,
+            searchTags = searchTags,
             selectedTag = selectedTag,
             selectedFileType = selectedFileType,
             favoritesOnly = favoritesOnly,

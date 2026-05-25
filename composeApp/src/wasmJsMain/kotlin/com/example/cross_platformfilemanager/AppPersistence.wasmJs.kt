@@ -11,8 +11,6 @@ private const val LOCAL_STORAGE_KEY = "file-atlas.snapshot"
 
 actual fun createAppSnapshotStore(): AppSnapshotStore? = BrowserSnapshotStore()
 
-actual fun createLocalDataController(): LocalDataController? = BrowserLocalDataController()
-
 private class BrowserSnapshotStore : AppSnapshotStore {
     override suspend fun load(): AppSnapshot? {
         val encoded = loadEncodedSnapshot() ?: return null
@@ -22,35 +20,6 @@ private class BrowserSnapshotStore : AppSnapshotStore {
     override suspend fun save(snapshot: AppSnapshot) {
         val encoded = SnapshotCodec.encode(snapshot)
         saveEncodedSnapshot(encoded)
-    }
-}
-
-private class BrowserLocalDataController : LocalDataController {
-    override suspend fun exportSnapshot(): String? {
-        val encoded = loadEncodedSnapshot() ?: return null
-        return encoded
-    }
-
-    override suspend fun importSnapshot(): String? {
-        val api = browserPersistenceApi() ?: return null
-        return try {
-            val imported: JsAny? = importSnapshotPromise(api).await()
-            imported as String?
-        } catch (_: Throwable) {
-            null
-        }
-    }
-
-    override suspend fun clearAllData() {
-        val api = browserPersistenceApi()
-        if (api != null) {
-            try {
-                val ignored: JsAny? = clearAllDataPromise(api).await()
-                return
-            } catch (_: Throwable) {
-            }
-        }
-        window.localStorage.removeItem(LOCAL_STORAGE_KEY)
     }
 }
 
@@ -82,7 +51,3 @@ private fun browserPersistenceApi(): JsAny? = js("window.fileAtlasPersistence ??
 private fun loadSnapshotPromise(api: JsAny): Promise<JsAny?> = js("api.loadSnapshot()")
 
 private fun saveSnapshotPromise(api: JsAny, encoded: String): Promise<JsAny?> = js("api.saveSnapshot(encoded)")
-
-private fun importSnapshotPromise(api: JsAny): Promise<JsAny?> = js("api.importSnapshot()")
-
-private fun clearAllDataPromise(api: JsAny): Promise<JsAny?> = js("api.clearAllData()")

@@ -7,14 +7,6 @@ interface AppSnapshotStore {
 
 expect fun createAppSnapshotStore(): AppSnapshotStore?
 
-interface LocalDataController {
-    suspend fun exportSnapshot(): String?
-    suspend fun importSnapshot(): String?
-    suspend fun clearAllData()
-}
-
-expect fun createLocalDataController(): LocalDataController?
-
 data class BrowserReferenceDraft(
     val title: String,
     val source: String,
@@ -52,20 +44,24 @@ fun BrowserReferenceDraft.toReference(
     lastOpenedAtMillis: Long = createdAtMillis,
     tags: List<String> = emptyList(),
     isFavorite: Boolean = false,
-): FileReference = FileReference(
-    id = id,
-    title = title.trim().ifBlank { "Untitled file" },
-    source = source.trim().ifBlank { "browser-handle:unknown" },
-    sourceKind = sourceKind,
-    fileType = fileType.trim().ifBlank { "FILE" },
-    fileSizeBytes = fileSizeBytes,
-    coverArtSource = coverArtSource?.trim()?.takeIf { it.isNotBlank() },
-    tags = tags.map { it.trim() }.filter { it.isNotBlank() }.distinct(),
-    notes = notes.trim(),
-    createdAtMillis = createdAtMillis,
-    lastOpenedAtMillis = lastOpenedAtMillis,
-    isFavorite = isFavorite,
-)
+): FileReference {
+    val normalized = normalized()
+    val reference = FileReference(
+        id = id,
+        title = normalized.title.ifBlank { "Untitled file" },
+        source = normalized.source.ifBlank { "browser-handle:unknown" },
+        sourceKind = sourceKind,
+        fileType = normalized.fileType.ifBlank { "FILE" },
+        fileSizeBytes = normalized.fileSizeBytes,
+        coverArtSource = normalized.coverArtSource,
+        tags = tags.map { it.trim() }.filter { it.isNotBlank() }.distinct(),
+        notes = normalized.notes,
+        createdAtMillis = createdAtMillis,
+        lastOpenedAtMillis = lastOpenedAtMillis,
+        isFavorite = isFavorite,
+    )
+    return reference.copy(thumbnailStatus = reference.initialThumbnailStatus())
+}
 
 fun FileReference.toBrowserReferenceDraft(): BrowserReferenceDraft = BrowserReferenceDraft(
     title = title,

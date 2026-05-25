@@ -9,7 +9,10 @@ class FileManagerAppState(
     private val repository: InMemoryFileRepository = InMemoryFileRepository(),
     private val recommendationEngine: RecommendationEngine = RecommendationEngine(),
     private val browserReferenceResolver: BrowserReferenceResolver? = null,
+    private val thumbnailGenerator: ThumbnailGenerator? = null,
 ) : RecommendationReadOnlyState {
+    val searchTags = androidx.compose.runtime.mutableStateListOf<SearchTag>()
+    val startupDefaultLocale = AppLocale.ZhCn
     private val defaultDraftTitle = ""
     private val defaultDraftSource = ""
     private val defaultDraftType = ""
@@ -18,7 +21,8 @@ class FileManagerAppState(
     private val defaultDraftTags = ""
     private val defaultDraftNotes = ""
 
-    var locale by mutableStateOf(AppLocale.ZhCn)
+    var preferredLocale by mutableStateOf(startupDefaultLocale)
+    var locale by mutableStateOf(startupDefaultLocale)
     var query by mutableStateOf("")
     var selectedTag by mutableStateOf<String?>(null)
     var selectedFileType by mutableStateOf<String?>(null)
@@ -40,6 +44,9 @@ class FileManagerAppState(
 
     val subtitle: String
         get() = strings.subtitle
+
+    val appName: String
+        get() = strings.appName
 
     val allFilesTab: String
         get() = strings.allFilesTab
@@ -119,9 +126,6 @@ class FileManagerAppState(
     val addReference: String
         get() = strings.addReference
 
-    val allResults: String
-        get() = strings.allResults
-
     val emptyResultsTitle: String
         get() = strings.emptyResultsTitle
 
@@ -137,40 +141,13 @@ class FileManagerAppState(
         )
 
     val searchResults: List<SearchResult>
-        get() {
-            if (query.isBlank() && selectedTag == null && selectedFileType == null && !favoritesOnly) {
-                return repository.search("", null, null, false)
-            }
-            return repository.search(query, selectedTag, selectedFileType, favoritesOnly)
-        }
-
-    val querySuggestions: List<Suggestion>
-        get() = recommendationEngine.suggest(
-            query = query,
-            references = repository.references,
-            recentSearches = repository.recentSearches,
-            selectedTag = selectedTag,
-        ).filter { it.kind != SuggestionKind.File }
-
-    val fileSuggestions: List<Suggestion>
-        get() = recommendationEngine.suggest(
-            query = query,
-            references = repository.references,
-            recentSearches = repository.recentSearches,
-            selectedTag = selectedTag,
-        ).filter { it.kind == SuggestionKind.File }
+        get() = repository.search(searchTags.toList())
 
     val topTags: List<String>
         get() = repository.topTags()
 
     val allTags: List<String>
         get() = repository.allTags()
-
-    val tagSummaries: List<TagSummary>
-        get() = repository.tagSummaries()
-
-    val fileTypeSummaries: List<FileTypeSummary>
-        get() = repository.fileTypeSummaries()
 
     val recentReferences: List<FileReference>
         get() = repository.recentReferences()
@@ -180,7 +157,7 @@ class FileManagerAppState(
 
     override val recommendedReferences: List<FileReference>
         get() = recommendationEngine.recommend(
-            references = repository.references,
+            references = recommendationCandidates(),
             previousFileId = activeReferenceId,
             nowMillis = nowMillis(),
             limit = 10,
@@ -188,25 +165,30 @@ class FileManagerAppState(
 
     override val scoredRecommendedReferences: List<ScoredRecommendation>
         get() = recommendationEngine.recommend(
-            references = repository.references,
+            references = recommendationCandidates(),
             previousFileId = activeReferenceId,
             nowMillis = nowMillis(),
             limit = 10,
         )
 
     val recentAddedReferences: List<FileReference>
-        get() = repository.references
-            .sortedByDescending { it.createdAtMillis }
-            .take(5)
+        get() {
+            val now = nowMillis()
+            return repository.references
+                .asSequence()
+                .filter { shouldShowInNewUploadList(it, now) }
+                .sortedByDescending { it.createdAtMillis }
+                .take(5)
+                .toList()
+        }
 
     val activeReference: FileReference?
         get() = repository.references.firstOrNull { it.id == activeReferenceId }
 
-    fun dashboardStats(): DashboardStats = repository.stats()
-
     fun exportSnapshot(): AppSnapshot = AppSnapshot(
-        locale = locale,
+        locale = preferredLocale,
         query = query,
+        searchTags = searchTags.toList(),
         selectedTag = selectedTag,
         selectedFileType = selectedFileType,
         favoritesOnly = favoritesOnly,
@@ -218,8 +200,11 @@ class FileManagerAppState(
     )
 
     fun restoreSnapshot(snapshot: AppSnapshot) {
-        locale = snapshot.locale
+        preferredLocale = snapshot.locale
+        locale = preferredLocale
         query = snapshot.query
+        searchTags.clear()
+        searchTags.addAll(snapshot.searchTags)
         selectedTag = snapshot.selectedTag
         selectedFileType = snapshot.selectedFileType
         favoritesOnly = snapshot.favoritesOnly
@@ -236,6 +221,9 @@ class FileManagerAppState(
     fun mergeSnapshot(snapshot: AppSnapshot) {
         snapshot.references.forEach { reference ->
             repository.upsertReference(reference)
+        }
+        snapshot.searchTags.forEach { tag ->
+            addSearchTag(tag)
         }
         repository.replaceRecentSearches(
             (repository.recentSearches + snapshot.recentSearches)
@@ -269,10 +257,12 @@ class FileManagerAppState(
     }
 
     fun toggleLocale() {
-        locale = when (locale) {
+        val nextLocale = when (locale) {
             AppLocale.ZhCn -> AppLocale.EnUs
             AppLocale.EnUs -> AppLocale.ZhCn
         }
+        locale = nextLocale
+        preferredLocale = nextLocale
         snapshotVersion++
     }
 
@@ -285,8 +275,10 @@ class FileManagerAppState(
     }
 
     private fun resetWorkspaceFields() {
-        locale = AppLocale.ZhCn
+        preferredLocale = startupDefaultLocale
+        locale = startupDefaultLocale
         query = ""
+        searchTags.clear()
         selectedTag = null
         selectedFileType = null
         favoritesOnly = false
@@ -309,7 +301,6 @@ class FileManagerAppState(
             .filter { it.isNotBlank() }
             .distinct()
 
-        val previousReferenceId = activeReferenceId
         val saved = repository.upsertReference(
             BrowserReferenceDraft(
                 title = draftTitle,
@@ -328,16 +319,37 @@ class FileManagerAppState(
         )
 
         activeReferenceId = saved.id
-        recommendationEngine.recordFileOpen(
-            fileId = saved.id,
-            openedAtMillis = saved.lastOpenedAtMillis,
-            previousFileId = previousReferenceId,
-        )
-        query = saved.title
-        selectedTag = saved.tags.firstOrNull()
-        commitSearch()
         snapshotVersion++
         return saved
+    }
+
+    fun replaceReference(referenceId: String, draft: BrowserReferenceDraft): FileReference? {
+        val current = repository.findReferenceById(referenceId) ?: return null
+        val normalized = draft.normalized()
+        val updatedBase = normalized.toReference(
+            id = current.id,
+            sourceKind = guessSourceKind(normalized.source.ifBlank { current.source }),
+            createdAtMillis = current.createdAtMillis,
+            lastOpenedAtMillis = current.lastOpenedAtMillis,
+            tags = current.tags,
+            isFavorite = current.isFavorite,
+        )
+        val updated = updatedBase.copy(
+            title = normalized.title.ifBlank { current.title },
+            source = normalized.source.ifBlank { current.source },
+            fileType = normalized.fileType.ifBlank { current.fileType },
+            fileSizeBytes = normalized.fileSizeBytes ?: guessFileSizeFromNotes(normalized.notes) ?: current.fileSizeBytes,
+            coverArtSource = normalized.coverArtSource ?: current.coverArtSource,
+            notes = normalized.notes.ifBlank { current.notes },
+            thumbnailPath = null,
+            thumbnailStatus = updatedBase.initialThumbnailStatus(),
+        )
+
+        current.thumbnailPath?.let { path -> thumbnailGenerator?.deleteThumbnail(path) }
+        val replaced = repository.replaceReference(referenceId, updated) ?: return null
+        activeReferenceId = replaced.id
+        snapshotVersion++
+        return replaced
     }
 
     fun applyBrowserDraft(draft: BrowserReferenceDraft) {
@@ -351,36 +363,45 @@ class FileManagerAppState(
         snapshotVersion++
     }
 
-    fun commitSearch() {
-        repository.recordSearch(query)
-        repository.recordRecommendation(query, selectedTag, recommendations)
-        snapshotVersion++
-    }
+    fun submitSearch(rawInput: String): Boolean {
+        val trimmed = rawInput.trim()
+        if (trimmed.isBlank()) return false
 
-    fun toggleTagFilter(tag: String) {
-        val normalizedTag = tag.trim()
-        val isDeselecting = selectedTag == normalizedTag
-        selectedTag = if (isDeselecting) null else normalizedTag
-        query = if (isDeselecting) "" else normalizedTag
-        repository.recordSearch(query)
-        repository.recordRecommendation(query, selectedTag, recommendations)
-        snapshotVersion++ 
-    }
+        val tokens = tokenizeSubmittedSearch(trimmed)
+        if (tokens.isEmpty()) return false
 
-    fun toggleFileTypeFilter(fileType: String?) {
-        val normalized = fileType?.trim()?.takeIf { it.isNotBlank() }
-        selectedFileType = if (normalized == null) {
-            null
-        } else if (selectedFileType == normalized) {
-            null
-        } else {
-            normalized
+        query = trimmed
+        tokens.forEach { token ->
+            addSearchTag(SearchTag(value = token, source = SearchTagSource.Input))
         }
+        repository.recordSearch(trimmed)
+        snapshotVersion++
+        return true
+    }
+
+    fun resetSearchSession() {
+        query = ""
+        searchTags.clear()
         snapshotVersion++
     }
 
-    fun toggleFavoritesOnly() {
-        favoritesOnly = !favoritesOnly
+    fun addSearchTag(tag: SearchTag): Boolean {
+        val normalizedValue = normalizeSearchTagToken(tag.value)
+        if (normalizedValue.isBlank()) return false
+        if (searchTags.any { normalizeSearchTagToken(it.value) == normalizedValue }) return false
+        searchTags.add(SearchTag(value = normalizedValue, source = tag.source))
+        snapshotVersion++
+        return true
+    }
+
+    fun removeSearchTag(tagValue: String) {
+        val normalizedValue = normalizeSearchTagToken(tagValue)
+        if (normalizedValue.isBlank()) return
+        val removed = searchTags.removeAll { normalizeSearchTagToken(it.value) == normalizedValue }
+        if (!removed) return
+        if (searchTags.isEmpty()) {
+            query = ""
+        }
         snapshotVersion++
     }
 
@@ -466,6 +487,8 @@ class FileManagerAppState(
     }
 
     fun deleteReference(referenceId: String) {
+        val current = repository.findReferenceById(referenceId) ?: return
+        current.thumbnailPath?.let { path -> thumbnailGenerator?.deleteThumbnail(path) }
         if (!repository.deleteReference(referenceId)) {
             return
         }
@@ -521,11 +544,77 @@ class FileManagerAppState(
         snapshotVersion++
     }
 
+    suspend fun generateThumbnailForReference(referenceId: String) {
+        val current = repository.findReferenceById(referenceId) ?: return
+        println("Thumbnail request: fileId=${current.id}, sourceKind=${current.sourceKind}, fileType=${current.fileType}, source=${current.source}")
+        if (!current.needsThumbnailGeneration()) {
+            println("Thumbnail skipped as unsupported: fileId=${current.id}, fileType=${current.fileType}")
+            repository.updateReference(referenceId) { existing ->
+                existing.copy(thumbnailPath = null, thumbnailStatus = ThumbnailStatus.UNSUPPORTED)
+            }
+            snapshotVersion++
+            return
+        }
+        if (current.thumbnailStatus == ThumbnailStatus.GENERATING) {
+            return
+        }
+        if (current.thumbnailStatus == ThumbnailStatus.READY && !current.thumbnailPath.isNullOrBlank()) {
+            return
+        }
+
+        repository.updateReference(referenceId) { existing ->
+            existing.copy(thumbnailStatus = ThumbnailStatus.GENERATING)
+        }
+        snapshotVersion++
+
+        println("Thumbnail generation start: fileId=${current.id}, fileType=${current.fileType}, mimeType=${current.fileType}")
+        val result = thumbnailGenerator?.generateThumbnail(repository.findReferenceById(referenceId) ?: current)
+            ?: ThumbnailResult.Unsupported("thumbnail generator unavailable")
+
+        repository.updateReference(referenceId) { existing ->
+            when (result) {
+                is ThumbnailResult.Ready -> existing.copy(
+                    thumbnailPath = result.thumbnailPath,
+                    thumbnailStatus = ThumbnailStatus.READY,
+                )
+
+                is ThumbnailResult.Failed -> {
+                    println("Thumbnail generation failed for ${existing.id}: ${result.reason}")
+                    existing.copy(
+                        thumbnailPath = null,
+                        thumbnailStatus = ThumbnailStatus.FAILED,
+                    )
+                }
+
+                is ThumbnailResult.Unsupported -> {
+                    println("Thumbnail generation unsupported for ${existing.id}: ${result.reason}")
+                    existing.copy(
+                        thumbnailPath = null,
+                        thumbnailStatus = ThumbnailStatus.UNSUPPORTED,
+                    )
+                }
+            }
+        }
+        when (result) {
+            is ThumbnailResult.Ready -> println(
+                "Thumbnail saved: fileId=${current.id}, saveMode=thumbnailPathDataUrl, key=inline-data-url, writtenBack=true, length=${result.thumbnailPath.length}"
+            )
+            is ThumbnailResult.Failed -> println("Thumbnail save skipped after failure: fileId=${current.id}")
+            is ThumbnailResult.Unsupported -> println("Thumbnail save skipped as unsupported: fileId=${current.id}")
+        }
+        snapshotVersion++
+    }
+
     private fun guessSourceKind(source: String): FileSourceKind = when {
         source.startsWith("http://", ignoreCase = true) -> FileSourceKind.Url
         source.startsWith("https://", ignoreCase = true) -> FileSourceKind.Url
         source.startsWith("browser-handle:", ignoreCase = true) -> FileSourceKind.BrowserHandle
         source.contains("://") -> FileSourceKind.RemoteReference
         else -> FileSourceKind.ManualPath
+    }
+
+    private fun recommendationCandidates(): List<FileReference> {
+        val now = nowMillis()
+        return repository.references.filterNot { shouldShowInNewUploadList(it, now) }
     }
 }

@@ -6,13 +6,10 @@ import kotlinx.browser.window
 import kotlinx.coroutines.await
 import kotlin.js.JsAny
 import kotlin.js.Promise
-import org.w3c.files.Blob
 
 private const val LOCAL_STORAGE_KEY = "file-atlas.snapshot"
 
 actual fun createAppSnapshotStore(): AppSnapshotStore? = BrowserSnapshotStore()
-
-actual fun createLocalDataController(): LocalDataController? = BrowserLocalDataController()
 
 private class BrowserSnapshotStore : AppSnapshotStore {
     override suspend fun load(): AppSnapshot? {
@@ -23,36 +20,6 @@ private class BrowserSnapshotStore : AppSnapshotStore {
     override suspend fun save(snapshot: AppSnapshot) {
         val encoded = SnapshotCodec.encode(snapshot)
         saveEncodedSnapshot(encoded)
-    }
-}
-
-private class BrowserLocalDataController : LocalDataController {
-    override suspend fun exportSnapshot(): String? {
-        val encoded = loadEncodedSnapshot() ?: return null
-        downloadSnapshot(encoded)
-        return encoded
-    }
-
-    override suspend fun importSnapshot(): String? {
-        val api = browserPersistenceApi() ?: return null
-        return try {
-            val imported: JsAny? = importSnapshotPromise(api).await()
-            imported as String?
-        } catch (_: Throwable) {
-            null
-        }
-    }
-
-    override suspend fun clearAllData() {
-        val api = browserPersistenceApi()
-        if (api != null) {
-            try {
-                val ignored: JsAny? = clearAllDataPromise(api).await()
-                return
-            } catch (_: Throwable) {
-            }
-        }
-        window.localStorage.removeItem(LOCAL_STORAGE_KEY)
     }
 }
 
@@ -84,20 +51,3 @@ private fun browserPersistenceApi(): JsAny? = window.asDynamic().fileAtlasPersis
 private fun loadSnapshotPromise(api: JsAny): Promise<JsAny?> = js("api.loadSnapshot()")
 
 private fun saveSnapshotPromise(api: JsAny, encoded: String): Promise<JsAny?> = js("api.saveSnapshot(encoded)")
-
-private fun importSnapshotPromise(api: JsAny): Promise<JsAny?> = js("api.importSnapshot()")
-
-private fun clearAllDataPromise(api: JsAny): Promise<JsAny?> = js("api.clearAllData()")
-
-private fun downloadSnapshot(encoded: String) {
-    val blob = Blob(arrayOf(encoded))
-    val url = window.asDynamic().URL.createObjectURL(blob)
-    val anchor = window.document.createElement("a").unsafeCast<dynamic>()
-    anchor.href = url
-    anchor.download = "file-atlas.snapshot"
-    anchor.style.display = "none"
-    window.document.body?.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    window.asDynamic().URL.revokeObjectURL(url)
-}

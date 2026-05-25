@@ -8,8 +8,6 @@ import javax.swing.JFileChooser
 
 actual fun createAppSnapshotStore(): AppSnapshotStore? = null
 
-actual fun createLocalDataController(): LocalDataController? = null
-
 actual fun createBrowserReferencePicker(): BrowserReferencePicker? = DesktopFileReferencePicker()
 
 actual fun createBrowserReferenceResolver(): BrowserReferenceResolver? = null
