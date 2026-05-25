@@ -1,6 +1,8 @@
 package com.example.cross_platformfilemanager
 
-import kotlinx.browser.window
+import kotlinx.coroutines.await
+import kotlin.js.JsAny
+import kotlin.js.Promise
 
 // Wasm 端和 JS 一样，只对标准网页地址做外部打开。
 class WasmPlatform : Platform {
@@ -9,11 +11,31 @@ class WasmPlatform : Platform {
 
 actual fun getPlatform(): Platform = WasmPlatform()
 
-actual fun openReferenceExternally(reference: FileReference): Boolean {
-    val target = reference.source.trim()
-    if (target.isBlank()) return false
-    if (!target.startsWith("http://", ignoreCase = true) && !target.startsWith("https://", ignoreCase = true)) {
-        return false
-    }
-    return window.open(target, "_blank") != null
+private external interface BrowserOpenInteropWasm {
+    fun openReference(source: String): Promise<JsAny?>
 }
+
+actual suspend fun openReferenceExternally(reference: FileReference): Boolean {
+    return openReferenceExternallyWithResult(reference).opened
+}
+
+actual suspend fun openReferenceExternallyWithResult(reference: FileReference): OpenReferenceResult {
+    val target = reference.source.trim()
+    if (target.isBlank()) return OpenReferenceResult(opened = false)
+    val bridge = browserInterop() ?: return OpenReferenceResult(opened = false)
+    val result: JsAny? = bridge.openReference(target).await()
+    val payload = result?.toString().orEmpty()
+    return when {
+        payload == "ok" -> OpenReferenceResult(opened = true)
+        payload.startsWith("error:") -> OpenReferenceResult(
+            opened = false,
+            message = payload.removePrefix("error:").ifBlank { null },
+        )
+        payload.toBooleanStrictOrNull() == true -> OpenReferenceResult(opened = true)
+        else -> OpenReferenceResult(opened = false)
+    }
+}
+
+@OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+private fun browserInterop(): BrowserOpenInteropWasm? =
+    js("(globalThis.fileAtlasBrowser || null)")

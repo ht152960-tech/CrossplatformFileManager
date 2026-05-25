@@ -11,12 +11,16 @@ class JVMPlatform : Platform {
 
 actual fun getPlatform(): Platform = JVMPlatform()
 
-actual fun openReferenceExternally(reference: FileReference): Boolean {
+actual suspend fun openReferenceExternally(reference: FileReference): Boolean {
+    return openReferenceExternallyWithResult(reference).opened
+}
+
+actual suspend fun openReferenceExternallyWithResult(reference: FileReference): OpenReferenceResult {
     val target = reference.source.trim()
-    if (target.isBlank()) return false
+    if (target.isBlank()) return OpenReferenceResult(opened = false)
 
     return runCatching {
-        if (!Desktop.isDesktopSupported()) return false
+        if (!Desktop.isDesktopSupported()) return OpenReferenceResult(opened = false)
 
         val desktop = Desktop.getDesktop()
         when {
@@ -25,15 +29,15 @@ actual fun openReferenceExternally(reference: FileReference): Boolean {
             }
             target.startsWith("file:", ignoreCase = true) -> {
                 val file = File(URI(target))
-                if (!file.exists()) return false
+                if (!file.exists()) return OpenReferenceResult(opened = false)
                 desktop.open(file)
             }
             else -> {
                 val file = File(target)
-                if (!file.exists()) return false
+                if (!file.exists()) return OpenReferenceResult(opened = false)
                 desktop.open(file)
             }
         }
-        true
-    }.getOrDefault(false)
+        OpenReferenceResult(opened = true)
+    }.getOrDefault(OpenReferenceResult(opened = false))
 }

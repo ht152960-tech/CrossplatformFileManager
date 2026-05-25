@@ -6,6 +6,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -66,18 +67,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.jetbrains.compose.resources.painterResource
+import taggo.composeapp.generated.resources.TaggoLogoBig2048
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Description
@@ -102,12 +110,31 @@ private enum class AppPage {
     Search,
 }
 
+private enum class ReferenceEditorMode {
+    Add,
+    Replace,
+}
+
 private enum class FileSortMode {
+    RecentOpened,
     RecentAdded,
     Name,
-    Type,
-    Tags,
-    RecentOpened,
+    FileSize,
+}
+
+private enum class SortDirection {
+    Ascending,
+    Descending,
+}
+
+private enum class AllFilesTypeFilter {
+    All,
+    Image,
+    Video,
+    Document,
+    Spreadsheet,
+    Presentation,
+    Other,
 }
 
 @Composable
@@ -116,22 +143,33 @@ fun App() {
     val snapshotStore = remember { createAppSnapshotStore() }
     val browserReferencePicker = remember { createBrowserReferencePicker() }
     val browserReferenceResolver = remember { createBrowserReferenceResolver() }
-    val appState = remember(browserReferenceResolver) {
-        FileManagerAppState(browserReferenceResolver = browserReferenceResolver)
+    val thumbnailGenerator = remember { createThumbnailGenerator() }
+    val appState = remember(browserReferenceResolver, thumbnailGenerator) {
+        FileManagerAppState(
+            browserReferenceResolver = browserReferenceResolver,
+            thumbnailGenerator = thumbnailGenerator,
+        )
     }
     val coroutineScope = rememberCoroutineScope()
     val pageScrollState = rememberScrollState()
     val fontLoadState = rememberAppFontLoadState()
+    val fullCjkFontLoadState = rememberFullCjkFontLoadState()
     val appStartMillis = remember { nowMillis() }
 
     var currentPage by remember { mutableStateOf(AppPage.Home) }
     var searchDraft by remember { mutableStateOf("") }
-    var sortMode by remember { mutableStateOf(FileSortMode.RecentAdded) }
+    var sortMode by remember { mutableStateOf(FileSortMode.RecentOpened) }
+    var sortDirection by remember { mutableStateOf(defaultSortDirection(FileSortMode.RecentOpened)) }
+    var allFilesTypeFilter by remember { mutableStateOf(AllFilesTypeFilter.All) }
     var showManualAddDialog by remember { mutableStateOf(false) }
     var manualAddNotice by remember { mutableStateOf<String?>(null) }
+    var referenceEditorMode by remember { mutableStateOf(ReferenceEditorMode.Add) }
+    var referenceEditorTargetId by remember { mutableStateOf<String?>(null) }
+    var draftFileSizeText by remember { mutableStateOf("") }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showSideMenu by remember { mutableStateOf(false) }
     var snapshotReady by remember { mutableStateOf(false) }
+    var searchFeedbackMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         reportStartupTrace("App composition entered")
@@ -168,55 +206,95 @@ fun App() {
     }
 
     fun startSearchFromHome() {
-        val trimmedQuery = searchDraft.trim()
-        if (trimmedQuery.isBlank()) {
+        appState.resetSearchSession()
+        val validationMessage = searchValidationMessage(searchDraft, appState.locale)
+        if (validationMessage != null) {
+            searchFeedbackMessage = validationMessage
+            currentPage = AppPage.Search
             return
         }
-        appState.query = trimmedQuery
-        appState.selectedTag = null
-        appState.selectedFileType = null
-        appState.favoritesOnly = false
-        appState.commitSearch()
+        if (appState.submitSearch(searchDraft)) {
+            searchDraft = ""
+            searchFeedbackMessage = null
+        }
         currentPage = AppPage.Search
     }
 
     fun startSearchFromSearchPage() {
-        val trimmedQuery = searchDraft.trim()
-        appState.query = trimmedQuery
-        appState.selectedTag = null
-        appState.selectedFileType = null
-        appState.favoritesOnly = false
-        if (trimmedQuery.isNotBlank()) {
-            appState.commitSearch()
-        } else {
-            appState.snapshotVersion++
+        val validationMessage = searchValidationMessage(searchDraft, appState.locale)
+        if (validationMessage != null) {
+            searchFeedbackMessage = validationMessage
+            currentPage = AppPage.Search
+            return
+        }
+        if (appState.submitSearch(searchDraft)) {
+            searchDraft = ""
+            searchFeedbackMessage = null
         }
         currentPage = AppPage.Search
     }
 
     fun addPickedReference(draft: BrowserReferenceDraft) {
         appState.applyBrowserDraft(draft)
-        appState.addDraftReference()
+        val saved = appState.addDraftReference()
+        coroutineScope.launch {
+            appState.generateThumbnailForReference(saved.id)
+        }
         clearDraftFields(appState)
+        draftFileSizeText = ""
         currentPage = AppPage.Home
     }
 
     fun showAddReferenceDialog(notice: String? = null) {
         clearDraftFields(appState)
+        draftFileSizeText = ""
+        referenceEditorMode = ReferenceEditorMode.Add
+        referenceEditorTargetId = null
         manualAddNotice = notice
         showManualAddDialog = true
     }
 
+    fun showReplaceReferenceDialog(reference: FileReference) {
+        clearDraftFields(appState)
+        appState.draftTitle = reference.title
+        appState.draftSource = reference.source
+        appState.draftType = reference.fileType
+        appState.draftFileSizeBytes = reference.fileSizeBytes ?: guessFileSizeFromNotes(reference.notes)
+        appState.draftCoverArtSource = reference.coverArtSource.orEmpty()
+        appState.draftTags = reference.tags.joinToString(", ")
+        appState.draftNotes = reference.notes
+        draftFileSizeText = appState.draftFileSizeBytes?.toString().orEmpty()
+        referenceEditorMode = ReferenceEditorMode.Replace
+        referenceEditorTargetId = reference.id
+        manualAddNotice = if (appState.locale == AppLocale.ZhCn) {
+            "替换会保留当前标签和打开历史。"
+        } else {
+            "Replacement keeps the current tags and open history."
+        }
+        showManualAddDialog = true
+    }
+
+    fun currentDraftReference(): BrowserReferenceDraft = BrowserReferenceDraft(
+        title = appState.draftTitle,
+        source = appState.draftSource,
+        fileType = appState.draftType,
+        fileSizeBytes = appState.draftFileSizeBytes,
+        coverArtSource = appState.draftCoverArtSource.ifBlank { null },
+        notes = appState.draftNotes,
+    )
+
     @Composable
     fun AppMainSurface() {
-        val fullCjkFontReady = true
+        val fullCjkFontReady = fullCjkFontLoadState.fullCjkFontReady
         val displayLocale = appState.locale
-        val fontFamily = rememberAppFontFamily()
-        val appTextStyle = LocalTextStyle.current.copy(fontFamily = fontFamily)
+        val uiFontFamily = rememberAppFontFamily()
+        val fullCjkFontFamily = rememberFullCjkFontFamily()
+        val appTextStyle = LocalTextStyle.current.copy(fontFamily = uiFontFamily)
+        val fullCjkTextStyle = LocalTextStyle.current.copy(fontFamily = fullCjkFontFamily)
         CompositionLocalProvider(LocalTextStyle provides appTextStyle) {
             MaterialTheme(
                 colorScheme = appColorScheme(),
-                typography = appTypography(fontFamily),
+                typography = appTypography(uiFontFamily),
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -239,6 +317,8 @@ fun App() {
                                     appState = appState,
                                     locale = displayLocale,
                                     fullCjkFontReady = fullCjkFontReady,
+                                    fullCjkTextStyle = fullCjkTextStyle,
+                                    fullCjkFontFamily = fullCjkFontFamily,
                                     searchDraft = searchDraft,
                                     onSearchDraftChange = { searchDraft = it },
                                     onOpenMenu = { showSideMenu = true },
@@ -249,15 +329,11 @@ fun App() {
                                             coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
                                                 runCatching { browserReferencePicker.pickReference() }
                                                     .onSuccess { draft ->
-                                                        if (draft == null) {
-                                                            showAddReferenceDialog(browserPickerUnavailableMessage(displayLocale))
-                                                        } else {
+                                                        if (draft != null) {
                                                             addPickedReference(draft)
                                                         }
                                                     }
-                                                    .onFailure {
-                                                        showAddReferenceDialog(browserPickerUnavailableMessage(displayLocale))
-                                                    }
+                                                    .onFailure { }
                                             }
                                         }
                                     },
@@ -270,18 +346,52 @@ fun App() {
                                     appState = appState,
                                     locale = displayLocale,
                                     fullCjkFontReady = fullCjkFontReady,
+                                    fullCjkFontFamily = fullCjkFontFamily,
                                     sortMode = sortMode,
-                                    onSortModeChange = { sortMode = it },
+                                    sortDirection = sortDirection,
+                                    typeFilter = allFilesTypeFilter,
+                                    onSortModeChange = { nextMode ->
+                                        if (sortMode == nextMode) {
+                                            sortDirection = sortDirection.toggled()
+                                        } else {
+                                            sortMode = nextMode
+                                            sortDirection = defaultSortDirection(nextMode)
+                                        }
+                                    },
+                                    onTypeFilterChange = { allFilesTypeFilter = it },
                                     onBackHome = { currentPage = AppPage.Home },
                                     onOpenReference = ::openReference,
                                 )
 
                                 AppPage.Detail -> DetailPage(
                                     appState = appState,
+                                    browserReferencePicker = browserReferencePicker,
+                                    browserReferenceResolver = browserReferenceResolver,
                                     locale = displayLocale,
                                     fullCjkFontReady = fullCjkFontReady,
+                                    fullCjkFontFamily = fullCjkFontFamily,
                                     reference = appState.activeReference,
                                     onBackHome = { currentPage = AppPage.Home },
+                                    onReplaceReference = { reference ->
+                                        if (browserReferencePicker != null) {
+                                            coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                runCatching { browserReferencePicker.pickReference() }
+                                                    .onSuccess { draft ->
+                                                        if (draft != null) {
+                                                            val replaced = appState.replaceReference(reference.id, draft)
+                                                            if (replaced != null) {
+                                                                appState.generateThumbnailForReference(replaced.id)
+                                                            }
+                                                            clearDraftFields(appState)
+                                                            draftFileSizeText = ""
+                                                        }
+                                                    }
+                                                    .onFailure { }
+                                            }
+                                        } else {
+                                            showReplaceReferenceDialog(reference)
+                                        }
+                                    },
                                     onDeleteReference = { showDeleteConfirm = true },
                                 )
 
@@ -289,16 +399,20 @@ fun App() {
                                     appState = appState,
                                     locale = displayLocale,
                                     fullCjkFontReady = fullCjkFontReady,
+                                    fullCjkTextStyle = fullCjkTextStyle,
+                                    fullCjkFontFamily = fullCjkFontFamily,
                                     searchDraft = searchDraft,
-                                    onSearchDraftChange = { searchDraft = it },
+                                    searchFeedbackMessage = searchFeedbackMessage,
+                                    onSearchDraftChange = {
+                                        searchDraft = it
+                                        searchFeedbackMessage = null
+                                    },
                                     onSearch = ::startSearchFromSearchPage,
                                     onBackHome = { currentPage = AppPage.Home },
                                     onOpenReference = ::openReference,
                                     onTagClick = { tag ->
-                                        appState.selectedTag = if (appState.selectedTag == tag) null else tag
-                                        appState.selectedFileType = null
-                                        appState.favoritesOnly = false
-                                        appState.commitSearch()
+                                        appState.addSearchTag(SearchTag(value = tag, source = SearchTagSource.LibraryTag))
+                                        searchFeedbackMessage = null
                                         currentPage = AppPage.Search
                                     },
                                 )
@@ -318,7 +432,10 @@ fun App() {
                                 exit = slideOutHorizontally { -it },
                             ) {
                                 SideMenuPanel(
+                                    appState = appState,
                                     locale = displayLocale,
+                                    fullCjkFontReady = fullCjkFontReady,
+                                    fullCjkFontFamily = fullCjkFontFamily,
                                     onClose = { showSideMenu = false },
                                     onToggleLanguage = appState::toggleLocale,
                                 )
@@ -330,17 +447,50 @@ fun App() {
                                 appState = appState,
                                 locale = displayLocale,
                                 fullCjkFontReady = fullCjkFontReady,
+                                fullCjkTextStyle = fullCjkTextStyle,
                                 notice = manualAddNotice,
+                                editorMode = referenceEditorMode,
+                                draftFileSizeText = draftFileSizeText,
+                                onDraftFileSizeTextChange = { text ->
+                                    draftFileSizeText = text
+                                    appState.draftFileSizeBytes = text.trim().toLongOrNull()
+                                },
                                 onDismiss = {
                                     manualAddNotice = null
                                     showManualAddDialog = false
+                                    referenceEditorMode = ReferenceEditorMode.Add
+                                    referenceEditorTargetId = null
+                                    draftFileSizeText = ""
                                 },
                                 onConfirm = {
-                                    appState.addDraftReference()
+                                    when (referenceEditorMode) {
+                                        ReferenceEditorMode.Add -> {
+                                            val saved = appState.addDraftReference()
+                                            coroutineScope.launch {
+                                                appState.generateThumbnailForReference(saved.id)
+                                            }
+                                            currentPage = AppPage.Home
+                                        }
+
+                                        ReferenceEditorMode.Replace -> {
+                                            referenceEditorTargetId?.let { referenceId ->
+                                                val draft = currentDraftReference()
+                                                coroutineScope.launch {
+                                                    val replaced = appState.replaceReference(referenceId, draft)
+                                                    if (replaced != null) {
+                                                        appState.generateThumbnailForReference(replaced.id)
+                                                    }
+                                                }
+                                            }
+                                            currentPage = AppPage.Detail
+                                        }
+                                    }
                                     clearDraftFields(appState)
+                                    draftFileSizeText = ""
                                     manualAddNotice = null
                                     showManualAddDialog = false
-                                    currentPage = AppPage.Home
+                                    referenceEditorMode = ReferenceEditorMode.Add
+                                    referenceEditorTargetId = null
                                 },
                             )
                         }
@@ -350,7 +500,7 @@ fun App() {
                             AlertDialog(
                                 onDismissRequest = { showDeleteConfirm = false },
                                 title = { Text(if (displayLocale == AppLocale.ZhCn) "\u5220\u9664\u6587\u4ef6" else "Delete file") },
-                                text = { Text(displayTextForUi(reference?.title.orEmpty(), true)) },
+                                text = { Text(displayTextForUi(reference?.title.orEmpty(), true), fontFamily = fullCjkFontFamily) },
                                 confirmButton = {
                                     TextButton(
                                         onClick = {
@@ -380,6 +530,7 @@ fun App() {
     AppStartupGate(
         snapshotReady = snapshotReady,
         fontLoadState = fontLoadState,
+        fullCjkFontLoadState = fullCjkFontLoadState,
     ) {
         AppMainSurface()
     }
@@ -390,6 +541,8 @@ private fun HomePage(
     appState: FileManagerAppState,
     locale: AppLocale,
     fullCjkFontReady: Boolean,
+    fullCjkTextStyle: androidx.compose.ui.text.TextStyle,
+    fullCjkFontFamily: FontFamily,
     searchDraft: String,
     onSearchDraftChange: (String) -> Unit,
     onOpenMenu: () -> Unit,
@@ -398,16 +551,22 @@ private fun HomePage(
     onSearch: () -> Unit,
     onOpenReference: (FileReference) -> Unit,
 ) {
-    val recommendedReferences = resolveRecommendedReferences(
-        recommendationState = appState,
-        fallbackReferences = appState.recentReferences,
-    )
+    val recommendedReferences = resolveRecommendedReferences(appState)
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         TopBarCard(
             locale = locale,
             onMenuClick = onOpenMenu,
-            title = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u7ba1\u7406\u5668" else "File Atlas",
+            title = appState.appName,
+            leading = {
+                Image(
+                    painter = painterResource(TaggoLogoBig2048),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(32.dp),
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+            },
             trailing = {
                 SearchBarInline(
                     query = searchDraft,
@@ -415,6 +574,7 @@ private fun HomePage(
                     onSearch = onSearch,
                     placeholder = appState.searchPlaceholder,
                     buttonLabel = if (locale == AppLocale.ZhCn) "\u641c\u7d22" else "Search",
+                    textStyle = fullCjkTextStyle,
                 )
             },
         )
@@ -445,6 +605,7 @@ private fun HomePage(
                 AdaptiveFileGrid(
                     items = appState.recentAddedReferences,
                     fullCjkFontReady = fullCjkFontReady,
+                    fullCjkFontFamily = fullCjkFontFamily,
                     onOpen = onOpenReference,
                 )
             }
@@ -472,6 +633,7 @@ private fun HomePage(
                 AdaptiveFileGrid(
                     items = recommendedReferences,
                     fullCjkFontReady = fullCjkFontReady,
+                    fullCjkFontFamily = fullCjkFontFamily,
                     onOpen = onOpenReference,
                 )
             }
@@ -484,13 +646,23 @@ private fun AllFilesPage(
     appState: FileManagerAppState,
     locale: AppLocale,
     fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
     sortMode: FileSortMode,
+    sortDirection: SortDirection,
+    typeFilter: AllFilesTypeFilter,
     onSortModeChange: (FileSortMode) -> Unit,
+    onTypeFilterChange: (AllFilesTypeFilter) -> Unit,
     onBackHome: () -> Unit,
     onOpenReference: (FileReference) -> Unit,
 ) {
-    val sortedFiles = remember(appState.allReferences, sortMode) {
-        sortReferences(appState.allReferences, sortMode)
+    val availableTypeFilters = remember(appState.allReferences) {
+        resolveAvailableTypeFilters(appState.allReferences)
+    }
+    val filteredFiles = remember(appState.allReferences, typeFilter) {
+        filterReferencesByType(appState.allReferences, typeFilter)
+    }
+    val sortedFiles = remember(filteredFiles, sortMode, sortDirection) {
+        sortReferences(filteredFiles, sortMode, sortDirection)
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -500,56 +672,90 @@ private fun AllFilesPage(
             onBack = onBackHome,
         )
 
-        SectionCard(
-            title = if (locale == AppLocale.ZhCn) "\u6392\u5e8f\u6761\u4ef6" else "Sort by",
-            subtitle = if (locale == AppLocale.ZhCn) {
-                "\u5207\u6362\u6392\u5e8f\u65b9\u5f0f\u540e\uff0c\u4e0b\u9762\u7684\u7f51\u683c\u4f1a\u7acb\u5373\u66f4\u65b0\u3002"
-            } else {
-                "Switch the order and the grid updates immediately."
-            },
-        ) {
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SortChip(
-                    label = if (locale == AppLocale.ZhCn) "\u6700\u8fd1\u6dfb\u52a0" else "Recent added",
-                    selected = sortMode == FileSortMode.RecentAdded,
-                    onClick = { onSortModeChange(FileSortMode.RecentAdded) },
-                )
-                SortChip(
-                    label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u540d" else "Name",
-                    selected = sortMode == FileSortMode.Name,
-                    onClick = { onSortModeChange(FileSortMode.Name) },
-                )
-                SortChip(
-                    label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u7c7b\u578b" else "Type",
-                    selected = sortMode == FileSortMode.Type,
-                    onClick = { onSortModeChange(FileSortMode.Type) },
-                )
-                SortChip(
-                    label = if (locale == AppLocale.ZhCn) "\u6807\u7b7e" else "Tags",
-                    selected = sortMode == FileSortMode.Tags,
-                    onClick = { onSortModeChange(FileSortMode.Tags) },
-                )
-            }
-        }
-
-        if (sortedFiles.isEmpty()) {
+        if (appState.allReferences.isEmpty()) {
             EmptyPanel(
-                title = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u6587\u4ef6" else "No files uploaded yet",
+                title = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u6587\u4ef6" else "No files yet",
                 body = if (locale == AppLocale.ZhCn) {
-                    "\u5148\u9009\u62e9\u4e00\u4e2a\u6587\u4ef6\uff0c\u5217\u8868\u5c31\u4f1a\u51fa\u73b0\u3002"
+                    "\u5f53\u524d\u6587\u4ef6\u5217\u8868\u4e3a\u7a7a\u3002"
                 } else {
-                    "Pick a file first and it will show up here."
+                    "The file list is currently empty."
                 },
             )
         } else {
-            AdaptiveFileGrid(
-                items = sortedFiles,
-                fullCjkFontReady = fullCjkFontReady,
-                onOpen = onOpenReference,
-            )
+            SectionCard(
+                title = if (locale == AppLocale.ZhCn) "\u6392\u5e8f" else "Sort",
+                subtitle = if (locale == AppLocale.ZhCn) {
+                    "\u518d\u70b9\u5f53\u524d\u6309\u94ae\u53ef\u5207\u6362\u5347\u964d\u5e8f\uff0c\u5207\u5230\u5176\u4ed6\u6392\u5e8f\u65f6\u4f1a\u6062\u590d\u8be5\u6392\u5e8f\u7684\u9ed8\u8ba4\u65b9\u5411\u3002"
+                } else {
+                    "Tap the current option again to flip the direction. Switching to another sort resets it to that mode's default direction."
+                },
+            ) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SortChip(
+                        label = sortChipLabel(FileSortMode.RecentOpened, sortMode, sortDirection, locale),
+                        selected = sortMode == FileSortMode.RecentOpened,
+                        onClick = { onSortModeChange(FileSortMode.RecentOpened) },
+                    )
+                    SortChip(
+                        label = sortChipLabel(FileSortMode.Name, sortMode, sortDirection, locale),
+                        selected = sortMode == FileSortMode.Name,
+                        onClick = { onSortModeChange(FileSortMode.Name) },
+                    )
+                    SortChip(
+                        label = sortChipLabel(FileSortMode.RecentAdded, sortMode, sortDirection, locale),
+                        selected = sortMode == FileSortMode.RecentAdded,
+                        onClick = { onSortModeChange(FileSortMode.RecentAdded) },
+                    )
+                    SortChip(
+                        label = sortChipLabel(FileSortMode.FileSize, sortMode, sortDirection, locale),
+                        selected = sortMode == FileSortMode.FileSize,
+                        onClick = { onSortModeChange(FileSortMode.FileSize) },
+                    )
+                }
+            }
+
+            SectionCard(
+                title = if (locale == AppLocale.ZhCn) "\u7c7b\u578b" else "Type",
+                subtitle = if (locale == AppLocale.ZhCn) {
+                    "\u53ea\u663e\u793a\u5f53\u524d\u6587\u4ef6\u5e93\u91cc\u771f\u6b63\u5b58\u5728\u7684\u5927\u7c7b\uff0c\u4e0d\u91cd\u7f6e\u5f53\u524d\u6392\u5e8f\u3002"
+                } else {
+                    "Only categories that exist in the current library are shown, and switching type keeps the current sort."
+                },
+            ) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    availableTypeFilters.forEach { filter ->
+                        SortChip(
+                            label = typeFilterLabel(filter, locale),
+                            selected = typeFilter == filter,
+                            onClick = { onTypeFilterChange(filter) },
+                        )
+                    }
+                }
+            }
+
+            if (sortedFiles.isEmpty()) {
+                EmptyPanel(
+                    title = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u8be5\u7c7b\u578b\u6587\u4ef6" else "No files in this type",
+                    body = if (locale == AppLocale.ZhCn) {
+                        "\u5207\u6362\u5230\u5176\u4ed6\u7c7b\u578b\uff0c\u6216\u8005\u4fdd\u6301\u201c\u5168\u90e8\u201d\u67e5\u770b\u6240\u6709\u6587\u4ef6\u3002"
+                    } else {
+                        "Switch to another type, or keep All selected to browse every file."
+                    },
+                )
+            } else {
+                AdaptiveFileGrid(
+                    items = sortedFiles,
+                    fullCjkFontReady = fullCjkFontReady,
+                    fullCjkFontFamily = fullCjkFontFamily,
+                    onOpen = onOpenReference,
+                )
+            }
         }
     }
 }
@@ -559,38 +765,32 @@ private fun SearchResultsPage(
     appState: FileManagerAppState,
     locale: AppLocale,
     fullCjkFontReady: Boolean,
+    fullCjkTextStyle: androidx.compose.ui.text.TextStyle,
+    fullCjkFontFamily: FontFamily,
     searchDraft: String,
+    searchFeedbackMessage: String?,
     onSearchDraftChange: (String) -> Unit,
     onSearch: () -> Unit,
     onBackHome: () -> Unit,
     onOpenReference: (FileReference) -> Unit,
     onTagClick: (String) -> Unit,
 ) {
-    val activeTag = appState.selectedTag
-    val showSearchPrompt = appState.query.isBlank() &&
-        activeTag == null &&
-        appState.selectedFileType == null &&
-        !appState.favoritesOnly
+    val activeSearchTags = appState.searchTags.toList()
+    val showSearchPrompt = activeSearchTags.isEmpty()
     val searchResults = if (showSearchPrompt) emptyList() else appState.searchResults
-    val resultStatus = if (appState.query.isNotBlank()) {
+    val showTagLibrary = searchDraft.isBlank() && activeSearchTags.isEmpty()
+    val resultStatus = if (activeSearchTags.isNotEmpty()) {
+        val summary = activeSearchTags.joinToString(separator = " ") { "[${displayTextForUi(it.value, fullCjkFontReady)}]" }
         if (locale == AppLocale.ZhCn) {
-            "\u201c${displayTextForUi(appState.query, fullCjkFontReady)}\u201d\u7684\u641c\u7d22\u7ed3\u679c \u00b7 ${searchResults.size} \u4e2a"
+            "$summary · ${searchResults.size} 个结果"
         } else {
-            "\"${displayTextForUi(appState.query, fullCjkFontReady)}\" search results \u00b7 ${searchResults.size}"
+            "$summary · ${searchResults.size} results"
         }
     } else {
-        if (showSearchPrompt) {
-            if (locale == AppLocale.ZhCn) {
-                "\u8f93\u5165\u5173\u952e\u5b57\u540e\u518d\u641c\u7d22"
-            } else {
-                "Enter a keyword to search"
-            }
+        if (locale == AppLocale.ZhCn) {
+            "输入关键词，或点击下方高频标签开始搜索"
         } else {
-            if (locale == AppLocale.ZhCn) {
-                "\u641c\u7d22\u7ed3\u679c \u00b7 ${searchResults.size} \u4e2a"
-            } else {
-                "Search results \u00b7 ${searchResults.size}"
-            }
+            "Type keywords or tap a frequent tag to start searching"
         }
     }
 
@@ -607,17 +807,32 @@ private fun SearchResultsPage(
             onSearch = onSearch,
             placeholder = appState.searchPlaceholder,
             buttonLabel = if (locale == AppLocale.ZhCn) "\u641c\u7d22" else "Search",
+            textStyle = fullCjkTextStyle,
+            supportingText = searchFeedbackMessage,
         )
 
-        SearchFilterSection(
-            title = appState.tagLibraryTitle,
-            subtitle = appState.tagLibrarySubtitle,
-            tags = appState.allTags,
-            selectedTag = activeTag,
-            emptyHint = appState.tagLibraryEmpty,
-            fullCjkFontReady = fullCjkFontReady,
-            onTagClick = onTagClick,
-        )
+        if (activeSearchTags.isNotEmpty()) {
+            ActiveSearchTagsSection(
+                tags = activeSearchTags,
+                locale = locale,
+                fullCjkFontReady = fullCjkFontReady,
+                fullCjkFontFamily = fullCjkFontFamily,
+                onRemove = appState::removeSearchTag,
+            )
+        }
+
+        if (showTagLibrary) {
+            SearchFilterSection(
+                title = if (locale == AppLocale.ZhCn) "高频标签" else "Frequent tags",
+                subtitle = if (locale == AppLocale.ZhCn) "点击任意标签即可加入当前搜索" else "Tap a tag to add it to the current search",
+                tags = appState.topTags,
+                selectedTags = activeSearchTags.map { normalizeSearchTagToken(it.value) }.toSet(),
+                emptyHint = appState.tagLibraryEmpty,
+                fullCjkFontReady = fullCjkFontReady,
+                fullCjkFontFamily = fullCjkFontFamily,
+                onTagClick = onTagClick,
+            )
+        }
 
         Text(
             text = resultStatus,
@@ -625,26 +840,32 @@ private fun SearchResultsPage(
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(horizontal = 4.dp),
+            fontFamily = fullCjkFontFamily,
         )
 
         if (showSearchPrompt) {
             SearchEmptyState(
-                title = if (locale == AppLocale.ZhCn) "\u8fd8\u6ca1\u6709\u8f93\u5165\u641c\u7d22\u5173\u952e\u5b57" else "No search keyword yet",
+                title = if (locale == AppLocale.ZhCn) "还没有搜索标签" else "No search tags yet",
                 body = if (locale == AppLocale.ZhCn) {
-                    "\u8f93\u5165\u4e00\u4e2a\u5173\u952e\u5b57\u540e\u518d\u70b9\u641c\u7d22\u3002"
+                    "输入关键词，或点击下方高频标签开始搜索。"
                 } else {
-                    "Type a keyword first, then press Search."
+                    "Type keywords, or tap a frequent tag below to start searching."
                 },
             )
         } else if (searchResults.isEmpty()) {
             SearchEmptyState(
-                title = appState.emptyResultsTitle,
-                body = appState.emptyResultsBody,
+                title = if (locale == AppLocale.ZhCn) "没有找到相关文件" else "No matching files found",
+                body = if (locale == AppLocale.ZhCn) {
+                    "可以删除部分搜索标签、换一个关键词。当前只搜索文件名、标签、路径和文件类型，不搜索正文内容。"
+                } else {
+                    "Try removing some tags or changing a keyword. Search only checks file names, tags, paths, and file types."
+                },
             )
         } else {
             AdaptiveFileGrid(
                 items = searchResults.map { it.reference },
                 fullCjkFontReady = fullCjkFontReady,
+                fullCjkFontFamily = fullCjkFontFamily,
                 onOpen = onOpenReference,
             )
         }
@@ -657,9 +878,10 @@ private fun SearchFilterSection(
     title: String,
     subtitle: String,
     tags: List<String>,
-    selectedTag: String?,
+    selectedTags: Set<String>,
     emptyHint: String,
     fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
     onTagClick: (String) -> Unit,
 ) {
     Card(
@@ -699,8 +921,9 @@ private fun SearchFilterSection(
                     tags.forEach { tag ->
                         TagFilterChip(
                             tag = tag,
-                            selected = selectedTag == tag,
+                            selected = selectedTags.contains(normalizeSearchTagToken(tag)),
                             fullCjkFontReady = fullCjkFontReady,
+                            fullCjkFontFamily = fullCjkFontFamily,
                             onClick = { onTagClick(tag) },
                         )
                     }
@@ -715,6 +938,7 @@ private fun TagFilterChip(
     tag: String,
     selected: Boolean,
     fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
     onClick: () -> Unit,
 ) {
     FilterChip(
@@ -726,6 +950,7 @@ private fun TagFilterChip(
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                fontFamily = fullCjkFontFamily,
             )
         },
         leadingIcon = if (selected) {
@@ -748,8 +973,75 @@ private fun TagFilterChip(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TagPill(tag: String, fullCjkFontReady: Boolean) {
+private fun ActiveSearchTagsSection(
+    tags: List<SearchTag>,
+    locale: AppLocale,
+    fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
+    onRemove: (String) -> Unit,
+) {
+    SectionCard(
+        title = if (locale == AppLocale.ZhCn) "当前搜索标签" else "Active search tags",
+        subtitle = if (locale == AppLocale.ZhCn) "删除任意标签后会立刻用剩余标签重新搜索" else "Removing a tag immediately refreshes the results",
+    ) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            tags.forEach { tag ->
+                SearchTagChip(
+                    tag = tag,
+                    fullCjkFontReady = fullCjkFontReady,
+                    fullCjkFontFamily = fullCjkFontFamily,
+                    onRemove = { onRemove(tag.value) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchTagChip(
+    tag: SearchTag,
+    fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
+    onRemove: () -> Unit,
+) {
+    Surface(
+        color = if (tag.source == SearchTagSource.LibraryTag) Color(0xFFDDEBFF) else Color(0xFFE2E8F0),
+        contentColor = if (tag.source == SearchTagSource.LibraryTag) Color(0xFF1D4ED8) else Color(0xFF334155),
+        shape = RoundedCornerShape(999.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        ) {
+            Text(
+                text = displayTextForUi(tag.value, fullCjkFontReady),
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontFamily = fullCjkFontFamily,
+            )
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier.size(20.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TagPill(tag: String, fullCjkFontReady: Boolean, fullCjkFontFamily: FontFamily) {
     Surface(
         color = Color(0xFFE2E8F0),
         contentColor = Color(0xFF334155),
@@ -762,7 +1054,53 @@ private fun TagPill(tag: String, fullCjkFontReady: Boolean) {
             fontSize = 12.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            fontFamily = fullCjkFontFamily,
         )
+    }
+}
+
+@Composable
+private fun RemovableTagChip(
+    tag: String,
+    fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
+    onRemove: () -> Unit,
+    actionIcon: ImageVector = Icons.Outlined.Remove,
+) {
+    Box {
+        Surface(
+            color = Color(0xFFE2E8F0),
+            contentColor = Color(0xFF334155),
+            shape = RoundedCornerShape(999.dp),
+        ) {
+            Text(
+                text = displayTextForUi(tag, fullCjkFontReady),
+                modifier = Modifier.padding(start = 12.dp, end = 24.dp, top = 8.dp, bottom = 8.dp),
+                fontWeight = FontWeight.Medium,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontFamily = fullCjkFontFamily,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 6.dp, y = (-6).dp)
+                .size(18.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(Color.White)
+                .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(999.dp))
+                .clickable(onClick = onRemove),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = actionIcon,
+                contentDescription = null,
+                tint = Color(0xFF475569),
+                modifier = Modifier.size(12.dp),
+            )
+        }
     }
 }
 
@@ -817,10 +1155,14 @@ private fun SearchEmptyState(
 @Composable
 private fun DetailPage(
     appState: FileManagerAppState,
+    browserReferencePicker: BrowserReferencePicker?,
+    browserReferenceResolver: BrowserReferenceResolver?,
     locale: AppLocale,
     fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
     reference: FileReference?,
     onBackHome: () -> Unit,
+    onReplaceReference: (FileReference) -> Unit,
     onDeleteReference: () -> Unit,
 ) {
     if (reference == null) {
@@ -853,33 +1195,128 @@ private fun DetailPage(
 
     val coroutineScope = rememberCoroutineScope()
     var showTagDialog by remember(reference.id) { mutableStateOf(false) }
-    var showRemoveTagDialog by remember(reference.id) { mutableStateOf(false) }
     var newTagDraft by remember(reference.id) { mutableStateOf("") }
     var openFileMessage by remember(reference.id) { mutableStateOf<String?>(null) }
+    var tagFeedbackMessage by remember(reference.id) { mutableStateOf<String?>(null) }
+    var pendingOpenReplacement by remember(reference.id) { mutableStateOf<BrowserReferenceDraft?>(null) }
+    val isBrowserSelectedReference = reference.source.startsWith("browser-", ignoreCase = true)
+    val tagCandidates = remember(reference.tags, appState.topTags) {
+        resolveDetailTagCandidates(reference.tags, appState.topTags)
+    }
+    val canUseWebReopenFlow = browserReferencePicker != null &&
+        browserReferenceResolver != null &&
+        isBrowserSelectedReference
+    val canOpenFile = canOpenReferenceExternally(reference) || canUseWebReopenFlow
+    val openButtonLabel = if (locale == AppLocale.ZhCn) "\u2197 \u6253\u5f00\u6b64\u6587\u4ef6" else "\u2197 Open this file"
+
+    fun addTagToCurrentReference(rawTag: String): Boolean {
+        val cleaned = rawTag.trim()
+        if (cleaned.isBlank()) {
+            tagFeedbackMessage = null
+            return false
+        }
+
+        val existingTag = resolveExistingTagExact(tagCandidates, cleaned) ?: cleaned
+        if (reference.tags.any { it.trim() == existingTag }) {
+            tagFeedbackMessage = if (locale == AppLocale.ZhCn) {
+                "\u8be5\u6587\u4ef6\u5df2\u5305\u542b\u6b64\u6807\u7b7e"
+            } else {
+                "This file already has that tag."
+            }
+            return false
+        }
+
+        appState.updateReferenceTags(
+            reference.id,
+            reference.tags.plus(existingTag).joinToString(", "),
+        )
+        tagFeedbackMessage = null
+        newTagDraft = ""
+        return true
+    }
+
+    fun removeTagFromCurrentReference(tag: String) {
+        appState.updateReferenceTags(
+            reference.id,
+            removeTagExact(reference.tags, tag),
+        )
+        tagFeedbackMessage = null
+    }
 
     LaunchedEffect(reference.id, reference.source, reference.sourceKind) {
         // 鏂囦欢鏉ユ簮涓€鏃﹀彉鍖栵紝灏辨妸涓婁竴娆＄殑鎵撳紑澶辫触鎻愮ず娓呮帀锛岄伩鍏嶆棫鐘舵€佽瀵肩敤鎴枫€?        openFileMessage = null
+        tagFeedbackMessage = null
     }
 
     fun handleOpenFile() {
         coroutineScope.launch {
+            suspend fun replaceAndOpen(draft: BrowserReferenceDraft) {
+                val replaced = appState.replaceReference(reference.id, draft) ?: return
+                appState.generateThumbnailForReference(replaced.id)
+                appState.openReference(replaced.id)
+                val refreshed = appState.activeReference?.takeIf { it.id == replaced.id } ?: replaced
+                val openResult = openReferenceExternallyWithResult(refreshed)
+                val localizedMessage = openResult.message?.let { localizeWebOpenMessage(it, locale) }
+                openFileMessage = if (openResult.opened) {
+                    null
+                } else if (localizedMessage != null) {
+                    localizedMessage
+                } else if (canUseWebReopenFlow) {
+                    webFileReselectionMessage(locale)
+                } else {
+                    openFileFailureMessage(refreshed, locale)
+                }
+            }
+
+            if (canUseWebReopenFlow) {
+                val needsRefresh = isBrowserSelectedReference
+                if (needsRefresh) {
+                    appState.refreshReference(reference.id)
+                    val resolvedReference = appState.activeReference?.takeIf { it.id == reference.id } ?: reference
+                    val refreshOpenResult = openReferenceExternallyWithResult(resolvedReference)
+                    if (refreshOpenResult.opened) {
+                        openFileMessage = null
+                        return@launch
+                    }
+                    val localizedRefreshMessage = refreshOpenResult.message?.let { localizeWebOpenMessage(it, locale) }
+                    if (localizedRefreshMessage != null) {
+                        openFileMessage = localizedRefreshMessage
+                        return@launch
+                    }
+                }
+
+                val pickedDraft = runCatching { browserReferencePicker.pickReference() }.getOrNull()
+                if (pickedDraft == null) {
+                    openFileMessage = webFileReselectionMessage(locale)
+                    return@launch
+                }
+
+                if (webDraftWeaklyMatches(reference, pickedDraft)) {
+                    replaceAndOpen(pickedDraft)
+                } else {
+                    pendingOpenReplacement = pickedDraft
+                }
+                return@launch
+            }
+
             val needsRefresh = reference.sourceKind == FileSourceKind.BrowserHandle && reference.source.startsWith("browser-", ignoreCase = true)
             val resolvedReference = if (needsRefresh) {
-                // 娴忚鍣ㄥ彞鏌勫厛灏介噺鍒锋柊鎴愮湡瀹炶矾寰勶紝鍐嶄氦缁欑郴缁熸墦寮€锛岃繖鏍锋寜閽笉浼氱偣浜嗘病鍔ㄩ潤銆?                appState.refreshReference(reference.id)
+                appState.refreshReference(reference.id)
                 appState.activeReference ?: reference
             } else {
                 reference
             }
 
             val openableReference = appState.activeReference?.takeIf { it.id == resolvedReference.id } ?: resolvedReference
-            val opened = openReferenceExternally(openableReference)
-            if (opened) {
+            val openResult = openReferenceExternallyWithResult(openableReference)
+            if (openResult.opened) {
                 if (!(needsRefresh && openableReference.source.startsWith("browser-", ignoreCase = true))) {
                     appState.openReference(openableReference.id)
                 }
                 openFileMessage = null
             } else {
-                openFileMessage = openFileFailureMessage(openableReference, locale)
+                openFileMessage = openResult.message?.let { localizeWebOpenMessage(it, locale) }
+                    ?: openFileFailureMessage(openableReference, locale)
             }
         }
     }
@@ -895,7 +1332,9 @@ private fun DetailPage(
             reference = reference,
             locale = locale,
             fullCjkFontReady = fullCjkFontReady,
-            canOpenFile = reference.source.trim().isNotBlank(),
+            fullCjkFontFamily = fullCjkFontFamily,
+            canOpenFile = canOpenFile,
+            openButtonLabel = openButtonLabel,
             onOpenFile = ::handleOpenFile,
         )
 
@@ -918,14 +1357,23 @@ private fun DetailPage(
                 )
                 InfoRow(
                     label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u8def\u5f84" else "File path",
-                    value = displayTextForUi(reference.source, fullCjkFontReady).ifBlank {
+                    value = summarizeReferenceSource(reference, locale, fullCjkFontReady).ifBlank {
                         if (locale == AppLocale.ZhCn) "\u6682\u672a\u4fdd\u5b58\u8def\u5f84" else "No file path saved"
                     },
+                    valueFontFamily = fullCjkFontFamily,
                 )
                 if (reference.coverArtSource?.isNotBlank() == true) {
                     InfoRow(
                         label = if (locale == AppLocale.ZhCn) "\u5c01\u9762\u6765\u6e90" else "Cover art source",
                         value = displayTextForUi(reference.coverArtSource.orEmpty(), fullCjkFontReady),
+                        valueFontFamily = fullCjkFontFamily,
+                    )
+                }
+                if (reference.thumbnailPath?.isNotBlank() == true) {
+                    InfoRow(
+                        label = if (locale == AppLocale.ZhCn) "\u7f29\u7565\u56fe\u7f13\u5b58" else "Thumbnail cache",
+                        value = thumbnailStatusLabel(reference, locale),
+                        valueFontFamily = fullCjkFontFamily,
                     )
                 }
                 if (openFileMessage != null) {
@@ -934,7 +1382,13 @@ private fun DetailPage(
                         color = MaterialTheme.colorScheme.error,
                         fontSize = 12.sp,
                     )
-                } else if (!canOpenReferenceExternally(reference)) {
+                } else if (canUseWebReopenFlow && !canOpenReferenceExternally(reference)) {
+                    Text(
+                        text = webFileReselectionMessage(locale),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                    )
+                } else if (!canOpenFile) {
                     Text(
                         text = if (locale == AppLocale.ZhCn) {
                             "\u8fd9\u4e2a\u6587\u4ef6\u8fd8\u6ca1\u6709\u53ef\u76f4\u63a5\u6253\u5f00\u7684\u672c\u5730\u8def\u5f84\u3002"
@@ -951,116 +1405,82 @@ private fun DetailPage(
         SectionCard(
             title = if (locale == AppLocale.ZhCn) "\u6807\u7b7e" else "Tags",
             subtitle = if (locale == AppLocale.ZhCn) {
-                "\u53f3\u4e0a\u89d2\u6309\u94ae\u53ea\u4f1a\u4ece\u672c\u6587\u4ef6\u79fb\u9664\u6807\u7b7e\uff0c\u4e0d\u4f1a\u5220\u9664\u6807\u7b7e\u672c\u8eab\u3002"
+                "\u7528\u6807\u7b7e\u7ed9\u6587\u4ef6\u5206\u7c7b\uff0c\u4fbf\u4e8e\u641c\u7d22\u548c\u63a8\u8350"
             } else {
-                "Use the top-right button to remove a tag from this file without deleting the tag everywhere."
+                "Use tags to organize files for search and recommendations."
             },
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(
-                        enabled = reference.tags.isNotEmpty(),
-                        onClick = { showRemoveTagDialog = true },
-                    ) {
-                        Text(if (locale == AppLocale.ZhCn) "\u2212 \u79fb\u9664\u6807\u7b7e" else "\u2212 Remove tag")
-                    }
-                }
-
                 if (reference.tags.isEmpty()) {
-                    EmptyPanel(
-                        title = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u6807\u7b7e" else "No tags yet",
-                        body = if (locale == AppLocale.ZhCn) {
-                            "\u53ef\u4ee5\u5148\u70b9\u51fb\u53f3\u4fa7\u7684\u201c+\u65b0\u589e\u6807\u7b7e\u201d\u3002"
-                        } else {
-                            "Use the + add tag button to create one."
-                        },
+                    Text(
+                        text = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u6807\u7b7e" else "No tags yet",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
                     )
                 } else {
-                    Row(
-                        modifier = Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        reference.tags.forEach { tag ->
-                            TagPill(tag = tag, fullCjkFontReady = fullCjkFontReady)
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(onClick = { showTagDialog = true }) {
-                        Text(if (locale == AppLocale.ZhCn) "+ \u65b0\u589e\u6807\u7b7e" else "+ Add tag")
-                    }
-                }
-            }
-        }
-
-        Button(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = onDeleteReference,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFDC2626),
-                contentColor = Color.White,
-            ),
-        ) {
-            Text(if (locale == AppLocale.ZhCn) "\u5220\u9664\u6b64\u6587\u4ef6" else "Delete this file")
-        }
-    }
-
-    if (showRemoveTagDialog) {
-        AlertDialog(
-            onDismissRequest = { showRemoveTagDialog = false },
-            title = { Text(if (locale == AppLocale.ZhCn) "\u79fb\u9664\u6807\u7b7e" else "Remove tag") },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(
-                        text = if (locale == AppLocale.ZhCn) {
-                            "\u9009\u4e00\u4e2a\u6807\u7b7e\uff0c\u53ea\u4ece\u5f53\u524d\u6587\u4ef6\u79fb\u9664\u3002"
-                        } else {
-                            "Pick a tag to remove it from this file only."
-                        },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                    )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         reference.tags.forEach { tag ->
-                            // Removing a tag only affects this file, not the global tag store.
-                            AssistChip(
-                                onClick = {
-                                    appState.updateReferenceTags(
-                                        reference.id,
-                                        removeTag(reference.tags, tag),
-                                    )
-                                    showRemoveTagDialog = false
-                                },
-                                label = { Text(displayTextForUi(tag, fullCjkFontReady)) },
+                            RemovableTagChip(
+                                tag = tag,
+                                fullCjkFontReady = fullCjkFontReady,
+                                fullCjkFontFamily = fullCjkFontFamily,
+                                onRemove = { removeTagFromCurrentReference(tag) },
                             )
                         }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { showRemoveTagDialog = false }) {
-                    Text(if (locale == AppLocale.ZhCn) "\u5b8c\u6210" else "Done")
+
+                if (!tagFeedbackMessage.isNullOrBlank()) {
+                    Text(
+                        text = tagFeedbackMessage.orEmpty(),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                    )
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRemoveTagDialog = false }) {
-                    Text(if (locale == AppLocale.ZhCn) "\u53d6\u6d88" else "Cancel")
+
+                TextButton(onClick = { showTagDialog = true }) {
+                    Text(if (locale == AppLocale.ZhCn) "+ \u6dfb\u52a0\u6807\u7b7e" else "+ Add tag")
                 }
+            }
+        }
+
+        SectionCard(
+            title = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u64cd\u4f5c" else "File actions",
+            subtitle = if (locale == AppLocale.ZhCn) {
+                "\u4fdd\u7559\u5f53\u524d\u6807\u7b7e\u548c\u8bb0\u5f55\uff0c\u53ea\u66f4\u6362\u8fd9\u4e2a\u6761\u76ee\u6307\u5411\u7684\u672c\u5730\u6587\u4ef6\u3002"
+            } else {
+                "Keep the current tags and history, and only replace the local file linked to this entry."
             },
-        )
+        ) {
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { onReplaceReference(reference) },
+            ) {
+                Text(if (locale == AppLocale.ZhCn) "\u66f4\u6362\u6587\u4ef6\u8def\u5f84" else "Change file path")
+            }
+        }
+
+        SectionCard(
+            title = if (locale == AppLocale.ZhCn) "\u5371\u9669\u64cd\u4f5c" else "Danger zone",
+            subtitle = if (locale == AppLocale.ZhCn) {
+                "\u4ece\u5e94\u7528\u4e2d\u5220\u9664\u8fd9\u4e2a\u6587\u4ef6\u6761\u76ee\uff0c\u4e0d\u4f1a\u5220\u9664\u672c\u5730\u539f\u6587\u4ef6\u3002"
+            } else {
+                "Remove this file entry from the app. The original local file will not be deleted."
+            },
+        ) {
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onDeleteReference,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = Color(0xFFDC2626),
+                ),
+            ) {
+                Text(if (locale == AppLocale.ZhCn) "\u5220\u9664\u6587\u4ef6\u6761\u76ee" else "Delete file entry")
+            }
+        }
     }
 
     if (showTagDialog) {
@@ -1072,37 +1492,64 @@ private fun DetailPage(
             title = { Text(if (locale == AppLocale.ZhCn) "\u6dfb\u52a0\u6807\u7b7e" else "Add tag") },
             text = {
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 420.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     OutlinedTextField(
                         modifier = Modifier.fillMaxWidth(),
                         value = newTagDraft,
                         onValueChange = { newTagDraft = it },
-                        label = { Text(if (locale == AppLocale.ZhCn) "\u8f93\u5165\u6807\u7b7e" else "Tag name") },
+                        label = { Text(if (locale == AppLocale.ZhCn) "\u6807\u7b7e\u540d" else "Tag name") },
+                        placeholder = {
+                            Text(
+                                if (locale == AppLocale.ZhCn) "\u8f93\u5165\u6807\u7b7e" else "Type a tag",
+                            )
+                        },
                         singleLine = true,
+                        textStyle = LocalTextStyle.current.copy(fontFamily = fullCjkFontFamily),
                     )
+
+                    if (!tagFeedbackMessage.isNullOrBlank()) {
+                        Text(
+                            text = tagFeedbackMessage.orEmpty(),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                        )
+                    }
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = if (locale == AppLocale.ZhCn) "\u5df2\u6709\u6807\u7b7e" else "Existing tags",
+                            text = if (locale == AppLocale.ZhCn) "\u5e38\u7528\u6807\u7b7e" else "Common tags",
                             fontWeight = FontWeight.Medium,
                         )
-                        if (reference.tags.isEmpty()) {
+                        if (tagCandidates.isEmpty()) {
                             Text(
-                                text = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u6807\u7b7e" else "No tags yet",
+                                text = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u5019\u9009\u6807\u7b7e" else "No tag suggestions yet",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 12.sp,
                             )
                         } else {
-                            Row(
-                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                reference.tags.forEach { tag ->
-                                    AssistChip(
-                                        onClick = { newTagDraft = displayTextForUi(tag, fullCjkFontReady) },
-                                        label = { Text(displayTextForUi(tag, fullCjkFontReady)) },
+                                tagCandidates.forEach { tag ->
+                                    FilterChip(
+                                        selected = false,
+                                        onClick = {
+                                            if (addTagToCurrentReference(tag)) {
+                                                newTagDraft = ""
+                                                showTagDialog = false
+                                            }
+                                        },
+                                        label = {
+                                            Text(
+                                                text = displayTextForUi(tag, fullCjkFontReady),
+                                                fontFamily = fullCjkFontFamily,
+                                            )
+                                        },
                                     )
                                 }
                             }
@@ -1113,18 +1560,15 @@ private fun DetailPage(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val cleaned = newTagDraft.trim()
-                        if (cleaned.isNotBlank()) {
-                            appState.updateReferenceTags(
-                                reference.id,
-                                mergeTags(reference.tags, cleaned),
-                            )
+                        val added = addTagToCurrentReference(newTagDraft)
+                        if (added) {
+                            newTagDraft = ""
+                            showTagDialog = false
                         }
-                        newTagDraft = ""
-                        showTagDialog = false
                     },
+                    enabled = newTagDraft.trim().isNotEmpty(),
                 ) {
-                    Text(if (locale == AppLocale.ZhCn) "\u786e\u5b9a\u65b0\u589e" else "Add")
+                    Text(if (locale == AppLocale.ZhCn) "\u6dfb\u52a0" else "Add")
                 }
             },
             dismissButton = {
@@ -1134,6 +1578,64 @@ private fun DetailPage(
                         showTagDialog = false
                     },
                 ) {
+                    Text(if (locale == AppLocale.ZhCn) "\u53d6\u6d88" else "Cancel")
+                }
+            },
+        )
+    }
+
+    if (pendingOpenReplacement != null) {
+        val draft = pendingOpenReplacement!!
+        AlertDialog(
+            onDismissRequest = { pendingOpenReplacement = null },
+            title = {
+                Text(if (locale == AppLocale.ZhCn) "\u6240\u9009\u6587\u4ef6\u53ef\u80fd\u4e0d\u662f\u539f\u6587\u4ef6" else "The selected file may not be the original")
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = if (locale == AppLocale.ZhCn) {
+                            "\u65b0\u9009\u62e9\u7684\u6587\u4ef6\u548c\u5f53\u524d\u6761\u76ee\u7684\u540d\u79f0\u3001\u7c7b\u578b\u6216\u5927\u5c0f\u4e0d\u5b8c\u5168\u4e00\u81f4\u3002"
+                        } else {
+                            "The newly selected file does not fully match the current entry's name, type, or size."
+                        },
+                    )
+                    Text(
+                        text = if (locale == AppLocale.ZhCn) {
+                            "\u4f60\u53ef\u4ee5\u53d6\u6d88\uff0c\u6216\u8005\u7ee7\u7eed\u7528\u8fd9\u4e2a\u6587\u4ef6\u66ff\u6362\u5f53\u524d\u5f15\u7528\u3002"
+                        } else {
+                            "You can cancel, or continue and replace the current reference with this file."
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val replacement = pendingOpenReplacement ?: return@TextButton
+                        pendingOpenReplacement = null
+                        coroutineScope.launch {
+                            val replaced = appState.replaceReference(reference.id, replacement) ?: return@launch
+                            appState.generateThumbnailForReference(replaced.id)
+                            appState.openReference(replaced.id)
+                            val refreshed = appState.activeReference?.takeIf { it.id == replaced.id } ?: replaced
+                            val openResult = openReferenceExternallyWithResult(refreshed)
+                            openFileMessage = if (openResult.opened) {
+                                null
+                            } else {
+                                openResult.message?.let { localizeWebOpenMessage(it, locale) }
+                                    ?: webFileReselectionMessage(locale)
+                            }
+                        }
+                    },
+                ) {
+                    Text(if (locale == AppLocale.ZhCn) "\u4f5c\u4e3a\u66ff\u6362\u5f15\u7528\u7ee7\u7eed" else "Continue as replacement")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingOpenReplacement = null }) {
                     Text(if (locale == AppLocale.ZhCn) "\u53d6\u6d88" else "Cancel")
                 }
             },
@@ -1147,6 +1649,7 @@ private fun TopBarCard(
     title: String,
     onMenuClick: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null,
+    leading: @Composable RowScope.() -> Unit = {},
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     Card(
@@ -1181,6 +1684,8 @@ private fun TopBarCard(
                 Spacer(modifier = Modifier.width(8.dp))
             }
 
+            leading()
+
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineSmall,
@@ -1198,17 +1703,41 @@ private fun LanguageToggleButton(
     locale: AppLocale,
     onClick: () -> Unit,
 ) {
-    OutlinedButton(onClick = onClick) {
-        Text(if (locale == AppLocale.ZhCn) "EN" else "\u4e2d\u6587")
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = if (locale == AppLocale.ZhCn) "\u4e2d\u6587" else "English",
+            modifier = Modifier.weight(1f),
+            fontWeight = FontWeight.Medium,
+        )
+        Icon(
+            imageVector = Icons.Outlined.ArrowDropDown,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+        )
     }
 }
 
 @Composable
 private fun SideMenuPanel(
+    appState: FileManagerAppState,
     locale: AppLocale,
+    fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
     onClose: () -> Unit,
     onToggleLanguage: () -> Unit,
 ) {
+    var showAllTagsDialog by remember { mutableStateOf(false) }
+    var pendingDeleteTag by remember { mutableStateOf<String?>(null) }
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopStart,
@@ -1250,12 +1779,178 @@ private fun SideMenuPanel(
                     fontSize = 12.sp,
                 )
 
-                LanguageToggleButton(
-                    locale = locale,
-                    onClick = onToggleLanguage,
-                )
+                var languageMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    LanguageToggleButton(
+                        locale = locale,
+                        onClick = { languageMenuExpanded = true },
+                    )
+                    DropdownMenu(
+                        expanded = languageMenuExpanded,
+                        onDismissRequest = { languageMenuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    if (locale == AppLocale.ZhCn) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                    Text("\u4e2d\u6587")
+                                }
+                            },
+                            onClick = {
+                                languageMenuExpanded = false
+                                if (locale != AppLocale.ZhCn) {
+                                    onToggleLanguage()
+                                }
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    if (locale == AppLocale.EnUs) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                    Text("English")
+                                }
+                            },
+                            onClick = {
+                                languageMenuExpanded = false
+                                if (locale != AppLocale.EnUs) {
+                                    onToggleLanguage()
+                                }
+                            },
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                        .clickable { showAllTagsDialog = true }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = if (locale == AppLocale.ZhCn) "\u5168\u90e8\u6807\u7b7e" else "All tags",
+                        modifier = Modifier.weight(1f),
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = ">",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
             }
         }
+    }
+
+    if (showAllTagsDialog) {
+        AlertDialog(
+            onDismissRequest = { showAllTagsDialog = false },
+            title = { Text(if (locale == AppLocale.ZhCn) "\u5168\u90e8\u6807\u7b7e" else "All tags") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    if (appState.allTags.isEmpty()) {
+                        Text(
+                            text = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u6807\u7b7e" else "No tags yet",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                        )
+                    } else {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            appState.allTags.forEach { tag ->
+                                RemovableTagChip(
+                                    tag = tag,
+                                    fullCjkFontReady = fullCjkFontReady,
+                                    fullCjkFontFamily = fullCjkFontFamily,
+                                    onRemove = { pendingDeleteTag = tag },
+                                    actionIcon = Icons.Outlined.Close,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAllTagsDialog = false }) {
+                    Text(if (locale == AppLocale.ZhCn) "\u5173\u95ed" else "Close")
+                }
+            },
+        )
+    }
+
+    val deleteTarget = pendingDeleteTag
+    if (deleteTarget != null) {
+        val affectedFileCount = appState.allReferences.count { reference ->
+            reference.tags.any { normalize(it) == normalize(deleteTarget) }
+        }
+        AlertDialog(
+            onDismissRequest = { pendingDeleteTag = null },
+            title = { Text(if (locale == AppLocale.ZhCn) "\u5220\u9664\u6807\u7b7e" else "Delete tag") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (locale == AppLocale.ZhCn) {
+                            "\u5220\u9664\u540e\u4f1a\u4ece\u6240\u6709\u6587\u4ef6\u4e2d\u79fb\u9664\u6b64\u6807\u7b7e\u3002"
+                        } else {
+                            "This will remove the tag from all files."
+                        },
+                    )
+                    Text(
+                        if (locale == AppLocale.ZhCn) {
+                            "\u8be5\u6807\u7b7e\u5c06\u4ece $affectedFileCount \u4e2a\u6587\u4ef6\u4e2d\u79fb\u9664\u3002"
+                        } else {
+                            "This tag will be removed from $affectedFileCount files."
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        appState.deleteTagEverywhere(deleteTarget)
+                        pendingDeleteTag = null
+                    },
+                ) {
+                    Text(if (locale == AppLocale.ZhCn) "\u5220\u9664" else "Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteTag = null }) {
+                    Text(if (locale == AppLocale.ZhCn) "\u53d6\u6d88" else "Cancel")
+                }
+            },
+        )
     }
 }
 
@@ -1266,6 +1961,8 @@ private fun SearchBarCard(
     onSearch: () -> Unit,
     placeholder: String,
     buttonLabel: String,
+    textStyle: androidx.compose.ui.text.TextStyle,
+    supportingText: String? = null,
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -1290,10 +1987,20 @@ private fun SearchBarCard(
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+                    textStyle = textStyle,
                 )
                 Button(onClick = onSearch) {
                     Text(buttonLabel)
                 }
+            }
+            val feedback = supportingText?.trim()?.takeIf { it.isNotEmpty() }
+            if (feedback != null) {
+                Text(
+                    text = feedback,
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                )
             }
         }
     }
@@ -1306,6 +2013,7 @@ private fun SearchBarInline(
     onSearch: () -> Unit,
     placeholder: String,
     buttonLabel: String,
+    textStyle: androidx.compose.ui.text.TextStyle,
 ) {
     Row(
         modifier = Modifier.widthIn(min = 280.dp, max = 520.dp),
@@ -1320,6 +2028,7 @@ private fun SearchBarInline(
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+            textStyle = textStyle,
         )
         Button(onClick = onSearch) {
             Text(buttonLabel)
@@ -1424,6 +2133,7 @@ private fun EmptyPanel(title: String, body: String) {
 private fun AdaptiveFileGrid(
     items: List<FileReference>,
     fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
     onOpen: (FileReference) -> Unit,
 ) {
     if (items.isEmpty()) return
@@ -1451,6 +2161,7 @@ private fun AdaptiveFileGrid(
                         FileTileCard(
                             reference = reference,
                             fullCjkFontReady = fullCjkFontReady,
+                            fullCjkFontFamily = fullCjkFontFamily,
                             onOpen = { onOpen(reference) },
                             modifier = Modifier.width(tileWidth),
                         )
@@ -1468,6 +2179,7 @@ private fun AdaptiveFileGrid(
 private fun FileTileCard(
     reference: FileReference,
     fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1495,6 +2207,7 @@ private fun FileTileCard(
                 reference = reference,
                 iconStyle = iconStyle,
                 fullCjkFontReady = fullCjkFontReady,
+                fullCjkFontFamily = fullCjkFontFamily,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(88.dp),
@@ -1510,6 +2223,7 @@ private fun FileTileCard(
                 minLines = 2,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                fontFamily = fullCjkFontFamily,
             )
         }
     }
@@ -1520,7 +2234,9 @@ private fun DetailHeroCard(
     reference: FileReference,
     locale: AppLocale,
     fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
     canOpenFile: Boolean,
+    openButtonLabel: String,
     onOpenFile: () -> Unit,
 ) {
     val iconStyle = fileTypeIconStyle(reference)
@@ -1541,6 +2257,7 @@ private fun DetailHeroCard(
                 reference = reference,
                 iconStyle = iconStyle,
                 fullCjkFontReady = fullCjkFontReady,
+                fullCjkFontFamily = fullCjkFontFamily,
                 modifier = Modifier
                     .size(120.dp),
                 cornerShape = RoundedCornerShape(30.dp),
@@ -1567,6 +2284,7 @@ private fun DetailHeroCard(
                             fontSize = 16.sp,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
+                            fontFamily = fullCjkFontFamily,
                         )
                     }
 
@@ -1574,7 +2292,7 @@ private fun DetailHeroCard(
                         onClick = onOpenFile,
                         enabled = canOpenFile,
                     ) {
-                        Text(if (locale == AppLocale.ZhCn) "\u2197 \u6253\u5f00\u6b64\u6587\u4ef6" else "\u2197 Open this file")
+                        Text(openButtonLabel)
                     }
                 }
             }
@@ -1587,18 +2305,29 @@ private fun FileCoverArtFrame(
     reference: FileReference,
     iconStyle: FileTypeIconStyle,
     fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
     modifier: Modifier = Modifier,
     cornerShape: RoundedCornerShape = RoundedCornerShape(16.dp),
     iconSize: androidx.compose.ui.unit.Dp = 24.dp,
 ) {
+    val thumbnailPainter = rememberThumbnailPainter(reference.thumbnailPath)
+    val hasThumbnail = thumbnailPainter != null && reference.thumbnailStatus == ThumbnailStatus.READY
     val hasCoverArt = reference.coverArtSource?.isNotBlank() == true
+    println("Thumbnail UI state: fileId=${reference.id}, hasThumbnailPath=${!reference.thumbnailPath.isNullOrBlank()}, thumbnailStatus=${reference.thumbnailStatus}, painterReady=$hasThumbnail, fallback=${!hasThumbnail}")
     Box(
         modifier = modifier
             .clip(cornerShape)
             .background(iconStyle.backgroundBrush),
         contentAlignment = Alignment.Center,
     ) {
-        if (hasCoverArt) {
+        if (hasThumbnail) {
+            Image(
+                painter = thumbnailPainter,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else if (hasCoverArt) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -1615,6 +2344,7 @@ private fun FileCoverArtFrame(
                     fontSize = 10.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    fontFamily = fullCjkFontFamily,
                 )
             }
         } else {
@@ -1630,7 +2360,7 @@ private fun FileCoverArtFrame(
                 )
                 if (FileTypeClassifier.classify(reference) == FileTypeCategory.Video || FileTypeClassifier.classify(reference) == FileTypeCategory.Audio) {
                     Text(
-                        text = "Reserved",
+                        text = if (reference.thumbnailStatus == ThumbnailStatus.GENERATING) "Loading" else "Reserved",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 10.sp,
                     )
@@ -1644,6 +2374,7 @@ private fun FileCoverArtFrame(
 private fun InfoRow(
     label: String,
     value: String,
+    valueFontFamily: FontFamily? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1659,6 +2390,7 @@ private fun InfoRow(
         Text(
             text = value,
             fontWeight = FontWeight.Medium,
+            fontFamily = valueFontFamily,
         )
     }
 }
@@ -1748,13 +2480,26 @@ private fun ManualAddDialog(
     appState: FileManagerAppState,
     locale: AppLocale,
     fullCjkFontReady: Boolean,
+    fullCjkTextStyle: androidx.compose.ui.text.TextStyle,
     notice: String?,
+    editorMode: ReferenceEditorMode,
+    draftFileSizeText: String,
+    onDraftFileSizeTextChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
+    val isReplaceMode = editorMode == ReferenceEditorMode.Replace
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (locale == AppLocale.ZhCn) "\u6dfb\u52a0\u6587\u4ef6" else "Add file") },
+        title = {
+            Text(
+                if (isReplaceMode) {
+                    if (locale == AppLocale.ZhCn) "\u66ff\u6362\u6587\u4ef6" else "Replace file"
+                } else {
+                    if (locale == AppLocale.ZhCn) "\u6dfb\u52a0\u6587\u4ef6" else "Add file"
+                },
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (!notice.isNullOrBlank()) {
@@ -1765,10 +2510,20 @@ private fun ManualAddDialog(
                 }
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
+                    value = draftFileSizeText,
+                    onValueChange = onDraftFileSizeTextChange,
+                    label = { Text(if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u5927\u5c0f\uff08\u5b57\u8282\uff09" else "File size (bytes)") },
+                    singleLine = true,
+                    textStyle = fullCjkTextStyle,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
                     value = appState.draftTitle,
                     onValueChange = { appState.draftTitle = it },
                     label = { Text(appState.referenceTitle) },
                     singleLine = true,
+                    textStyle = fullCjkTextStyle,
                 )
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
@@ -1776,6 +2531,7 @@ private fun ManualAddDialog(
                     onValueChange = { appState.draftSource = it },
                     label = { Text(appState.referenceLocation) },
                     singleLine = true,
+                    textStyle = fullCjkTextStyle,
                 )
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
@@ -1783,6 +2539,7 @@ private fun ManualAddDialog(
                     onValueChange = { appState.draftType = it },
                     label = { Text(appState.fileType) },
                     singleLine = true,
+                    textStyle = fullCjkTextStyle,
                 )
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
@@ -1790,26 +2547,47 @@ private fun ManualAddDialog(
                     onValueChange = { appState.draftCoverArtSource = it },
                     label = { Text(if (locale == AppLocale.ZhCn) "\u5c01\u9762\u6765\u6e90" else "Cover art source") },
                     singleLine = true,
+                    textStyle = fullCjkTextStyle,
                 )
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = appState.draftTags,
-                    onValueChange = { appState.draftTags = it },
-                    label = { Text(appState.tagsCommaSeparated) },
-                    singleLine = true,
-                )
+                if (!isReplaceMode) {
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = appState.draftTags,
+                        onValueChange = { appState.draftTags = it },
+                        label = { Text(appState.tagsCommaSeparated) },
+                        singleLine = true,
+                        textStyle = fullCjkTextStyle,
+                    )
+                } else {
+                    Text(
+                        text = if (locale == AppLocale.ZhCn) {
+                            "\u66ff\u6362\u65f6\u4f1a\u4fdd\u7559\u5f53\u524d\u6807\u7b7e\u3002"
+                        } else {
+                            "Current tags will be kept during replacement."
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
                     value = appState.draftNotes,
                     onValueChange = { appState.draftNotes = it },
                     label = { Text(appState.notes) },
                     minLines = 2,
+                    textStyle = fullCjkTextStyle,
                 )
             }
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text(appState.addReference)
+                Text(
+                    if (isReplaceMode) {
+                        if (locale == AppLocale.ZhCn) "\u66ff\u6362\u6b64\u5f15\u7528" else "Replace reference"
+                    } else {
+                        appState.addReference
+                    },
+                )
             }
         },
         dismissButton = {
@@ -1826,51 +2604,147 @@ private fun browserPickerUnavailableMessage(locale: AppLocale): String =
         AppLocale.EnUs -> "Browser file picker is not available. Please add a reference manually."
     }
 
-private fun sortReferences(references: List<FileReference>, sortMode: FileSortMode): List<FileReference> =
+private fun sortReferences(
+    references: List<FileReference>,
+    sortMode: FileSortMode,
+    sortDirection: SortDirection,
+): List<FileReference> =
     when (sortMode) {
-        FileSortMode.RecentAdded -> references.sortedByDescending { it.createdAtMillis }
-        FileSortMode.Name -> references.sortedWith(compareBy<FileReference> { normalize(it.title) }.thenByDescending { it.createdAtMillis })
-        FileSortMode.Type -> references.sortedWith(compareBy<FileReference> { normalize(it.fileType) }.thenBy { normalize(it.title) })
-        FileSortMode.Tags -> references.sortedWith(compareBy<FileReference> { normalize(it.tags.joinToString(", ")) }.thenBy { normalize(it.title) })
-        FileSortMode.RecentOpened -> references.sortedByDescending { it.lastOpenedAtMillis }
+        FileSortMode.RecentOpened -> references.sortedWith(compareByRecentOpened(sortDirection))
+        FileSortMode.RecentAdded -> references.sortedWith(compareByCreatedAt(sortDirection))
+        FileSortMode.Name -> references.sortedWith(compareByName(sortDirection))
+        FileSortMode.FileSize -> references.sortedWith(compareByFileSize(sortDirection))
     }
 
 private fun sortModeLabel(mode: FileSortMode, locale: AppLocale): String =
     when (mode) {
+        FileSortMode.RecentOpened -> if (locale == AppLocale.ZhCn) "\u6700\u8fd1\u6253\u5f00" else "Recent opened"
         FileSortMode.RecentAdded -> if (locale == AppLocale.ZhCn) "\u6700\u8fd1\u6dfb\u52a0" else "Recent added"
         FileSortMode.Name -> if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u540d" else "Name"
-        FileSortMode.Type -> if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u7c7b\u578b" else "Type"
-        FileSortMode.Tags -> if (locale == AppLocale.ZhCn) "\u6807\u7b7e" else "Tags"
-        FileSortMode.RecentOpened -> if (locale == AppLocale.ZhCn) "\u6700\u8fd1\u6253\u5f00" else "Recent opened"
+        FileSortMode.FileSize -> if (locale == AppLocale.ZhCn) "\u5927\u5c0f" else "Size"
+    }
+
+private fun defaultSortDirection(mode: FileSortMode): SortDirection =
+    when (mode) {
+        FileSortMode.RecentOpened -> SortDirection.Descending
+        FileSortMode.RecentAdded -> SortDirection.Descending
+        FileSortMode.Name -> SortDirection.Ascending
+        FileSortMode.FileSize -> SortDirection.Descending
+    }
+
+private fun SortDirection.toggled(): SortDirection =
+    when (this) {
+        SortDirection.Ascending -> SortDirection.Descending
+        SortDirection.Descending -> SortDirection.Ascending
+    }
+
+private fun sortChipLabel(
+    mode: FileSortMode,
+    activeMode: FileSortMode,
+    activeDirection: SortDirection,
+    locale: AppLocale,
+): String {
+    val direction = if (mode == activeMode) activeDirection else defaultSortDirection(mode)
+    val arrow = if (direction == SortDirection.Descending) "\u2193" else "\u2191"
+    return "${sortModeLabel(mode, locale)} $arrow"
+}
+
+private fun typeFilterLabel(filter: AllFilesTypeFilter, locale: AppLocale): String =
+    when (filter) {
+        AllFilesTypeFilter.All -> if (locale == AppLocale.ZhCn) "\u5168\u90e8" else "All"
+        AllFilesTypeFilter.Image -> if (locale == AppLocale.ZhCn) "\u56fe\u7247" else "Images"
+        AllFilesTypeFilter.Video -> if (locale == AppLocale.ZhCn) "\u89c6\u9891" else "Videos"
+        AllFilesTypeFilter.Document -> if (locale == AppLocale.ZhCn) "\u6587\u6863" else "Documents"
+        AllFilesTypeFilter.Spreadsheet -> if (locale == AppLocale.ZhCn) "\u8868\u683c" else "Spreadsheets"
+        AllFilesTypeFilter.Presentation -> if (locale == AppLocale.ZhCn) "\u6f14\u793a" else "Presentations"
+        AllFilesTypeFilter.Other -> if (locale == AppLocale.ZhCn) "\u5176\u4ed6" else "Other"
+    }
+
+private fun resolveAvailableTypeFilters(references: List<FileReference>): List<AllFilesTypeFilter> {
+    val filters = linkedSetOf(AllFilesTypeFilter.All)
+    references
+        .map(::resolveTypeFilter)
+        .forEach(filters::add)
+    return filters.toList()
+}
+
+private fun filterReferencesByType(
+    references: List<FileReference>,
+    filter: AllFilesTypeFilter,
+): List<FileReference> {
+    if (filter == AllFilesTypeFilter.All) return references
+    return references.filter { resolveTypeFilter(it) == filter }
+}
+
+private fun resolveTypeFilter(reference: FileReference): AllFilesTypeFilter =
+    when (FileTypeClassifier.classify(reference)) {
+        FileTypeCategory.Image -> AllFilesTypeFilter.Image
+        FileTypeCategory.Video -> AllFilesTypeFilter.Video
+        FileTypeCategory.TextDocument,
+        FileTypeCategory.PdfDocument -> AllFilesTypeFilter.Document
+        FileTypeCategory.Spreadsheet -> AllFilesTypeFilter.Spreadsheet
+        FileTypeCategory.Presentation -> AllFilesTypeFilter.Presentation
+        else -> AllFilesTypeFilter.Other
+    }
+
+private fun compareByRecentOpened(direction: SortDirection): Comparator<FileReference> =
+    Comparator { left, right ->
+        compareNullableLong(
+            left = left.lastOpenedAtMillis,
+            right = right.lastOpenedAtMillis,
+            direction = direction,
+        ).takeIf { it != 0 }
+            ?: compareByCreatedAt(SortDirection.Descending).compare(left, right)
+    }
+
+private fun compareByCreatedAt(direction: SortDirection): Comparator<FileReference> =
+    Comparator { left, right ->
+        compareLong(left.createdAtMillis, right.createdAtMillis, direction).takeIf { it != 0 }
+            ?: compareByName(SortDirection.Ascending).compare(left, right)
+    }
+
+private fun compareByName(direction: SortDirection): Comparator<FileReference> =
+    Comparator { left, right ->
+        compareString(normalize(left.title), normalize(right.title), direction).takeIf { it != 0 }
+            ?: compareLong(left.createdAtMillis, right.createdAtMillis, SortDirection.Descending)
+    }
+
+private fun compareByFileSize(direction: SortDirection): Comparator<FileReference> =
+    Comparator { left, right ->
+        compareNullableLong(
+            left = left.fileSizeBytes ?: guessFileSizeFromNotes(left.notes),
+            right = right.fileSizeBytes ?: guessFileSizeFromNotes(right.notes),
+            direction = direction,
+        ).takeIf { it != 0 }
+            ?: compareByCreatedAt(SortDirection.Descending).compare(left, right)
+    }
+
+private fun compareLong(left: Long, right: Long, direction: SortDirection): Int =
+    when (direction) {
+        SortDirection.Ascending -> left.compareTo(right)
+        SortDirection.Descending -> right.compareTo(left)
+    }
+
+private fun compareNullableLong(
+    left: Long?,
+    right: Long?,
+    direction: SortDirection,
+): Int = when {
+    left == null && right == null -> 0
+    left == null -> 1
+    right == null -> -1
+    else -> compareLong(left, right, direction)
+}
+
+private fun compareString(left: String, right: String, direction: SortDirection): Int =
+    when (direction) {
+        SortDirection.Ascending -> left.compareTo(right)
+        SortDirection.Descending -> right.compareTo(left)
     }
 
 private fun resolveRecommendedReferences(
     recommendationState: RecommendationReadOnlyState,
-    fallbackReferences: List<FileReference>,
-): List<FileReference> {
-    val recommended = recommendationState.recommendedReferences.take(10)
-    if (recommended.isEmpty()) {
-        return fallbackReferences.take(10)
-    }
-
-    val seenIds = linkedSetOf<String>()
-    val merged = mutableListOf<FileReference>()
-
-    recommended.forEach { reference ->
-        if (seenIds.add(reference.id)) {
-            merged += reference
-        }
-    }
-
-    fallbackReferences.forEach { reference ->
-        if (merged.size >= 10) return@forEach
-        if (seenIds.add(reference.id)) {
-            merged += reference
-        }
-    }
-
-    return merged.take(10)
-}
+): List<FileReference> = recommendationState.recommendedReferences.take(10)
 
 private fun mergeTags(existingTags: List<String>, newTag: String): String {
     val cleaned = newTag.trim()
@@ -1883,6 +2757,27 @@ private fun mergeTags(existingTags: List<String>, newTag: String): String {
     return merged.joinToString(", ")
 }
 
+private fun resolveDetailTagCandidates(
+    currentTags: List<String>,
+    topTags: List<String>,
+): List<String> =
+    topTags
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .filterNot { candidate -> currentTags.any { it.trim().equals(candidate, ignoreCase = true) } }
+        .distinct()
+        .take(MAX_DETAIL_TAG_CANDIDATES)
+
+private fun resolveExistingTagExact(
+    tags: List<String>,
+    target: String,
+): String? = tags.firstOrNull { it.trim() == target }
+
+private fun removeTagExact(existingTags: List<String>, tag: String): String =
+    existingTags
+        .filterNot { it.trim() == tag.trim() }
+        .joinToString(", ")
+
 private fun removeTag(existingTags: List<String>, tag: String): String =
     existingTags
         .filterNot { normalize(it) == normalize(tag) }
@@ -1892,8 +2787,44 @@ private fun canOpenReferenceExternally(reference: FileReference): Boolean {
     val source = reference.source.trim()
     if (source.isBlank()) return false
     return when (reference.sourceKind) {
-        FileSourceKind.ManualPath, FileSourceKind.Url -> true
+        FileSourceKind.ManualPath,
+        FileSourceKind.Url,
+        FileSourceKind.BrowserHandle,
+        -> true
         else -> false
+    }
+}
+
+private fun searchValidationMessage(query: String, locale: AppLocale): String? {
+    val trimmed = query.trim()
+    if (trimmed.isBlank()) {
+        return if (locale == AppLocale.ZhCn) {
+            "\u8bf7\u8f93\u5165\u5173\u952e\u8bcd\u3002"
+        } else {
+            "Enter a keyword."
+        }
+    }
+    if (tokenizeSubmittedSearch(trimmed).isNotEmpty()) return null
+    return if (locale == AppLocale.ZhCn) {
+        "请输入更具体的关键词；中文关键词至少两个字。"
+    } else {
+        "Enter a more specific keyword. Chinese keywords must contain at least two characters."
+    }
+}
+
+private const val MAX_DETAIL_TAG_CANDIDATES = 8
+
+private fun localizeWebOpenMessage(message: String, locale: AppLocale): String {
+    val normalized = message.trim()
+    if (!normalized.contains('\n')) return normalized
+    val parts = normalized
+        .split('\n')
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+    if (parts.isEmpty()) return normalized
+    return when (locale) {
+        AppLocale.ZhCn -> parts.first()
+        AppLocale.EnUs -> parts.last()
     }
 }
 
@@ -1926,6 +2857,66 @@ private fun openFileFailureMessage(reference: FileReference, locale: AppLocale):
         }
     }
 
+private fun webFileReselectionMessage(locale: AppLocale): String =
+    if (locale == AppLocale.ZhCn) {
+        "Web \u7248\u65e0\u6cd5\u76f4\u63a5\u8bbf\u95ee\u7535\u8111\u4e2d\u7684\u539f\u59cb\u8def\u5f84\uff0c\u8bf7\u91cd\u65b0\u9009\u62e9\u8be5\u6587\u4ef6\u4ee5\u6253\u5f00\u3002"
+    } else {
+        "Web cannot access the original local path directly. Reselect the file to open it."
+    }
+
+private fun summarizeReferenceSource(
+    reference: FileReference,
+    locale: AppLocale,
+    fullCjkFontReady: Boolean,
+): String {
+    val source = reference.source.trim()
+    if (source.isBlank()) return ""
+    return when (reference.sourceKind) {
+        FileSourceKind.BrowserHandle,
+        -> if (locale == AppLocale.ZhCn) {
+            "\u6d4f\u89c8\u5668\u5df2\u9009\u6587\u4ef6\uff1a${displayTextForUi(reference.title, fullCjkFontReady)}"
+        } else {
+            "Browser-selected file: ${displayTextForUi(reference.title, fullCjkFontReady)}"
+        }
+
+        else -> displayTextForUi(source, fullCjkFontReady)
+    }
+}
+
+private fun thumbnailStatusLabel(reference: FileReference, locale: AppLocale): String =
+    when (reference.thumbnailStatus) {
+        ThumbnailStatus.READY -> if (locale == AppLocale.ZhCn) "\u5df2\u751f\u6210" else "Ready"
+        ThumbnailStatus.FAILED -> if (locale == AppLocale.ZhCn) "\u751f\u6210\u5931\u8d25" else "Failed"
+        ThumbnailStatus.UNSUPPORTED -> if (locale == AppLocale.ZhCn) "\u5f53\u524d\u4e0d\u652f\u6301" else "Unsupported"
+        ThumbnailStatus.GENERATING -> if (locale == AppLocale.ZhCn) "\u751f\u6210\u4e2d" else "Generating"
+        ThumbnailStatus.NONE -> if (locale == AppLocale.ZhCn) "\u672a\u751f\u6210" else "Not generated"
+    }
+
+private fun webDraftWeaklyMatches(
+    existing: FileReference,
+    replacement: BrowserReferenceDraft,
+): Boolean {
+    val normalizedTitle = existing.title.trim()
+    val replacementTitle = replacement.title.trim()
+    if (normalizedTitle.isNotBlank() && replacementTitle.isNotBlank() && normalizedTitle != replacementTitle) {
+        return false
+    }
+
+    val existingSize = existing.fileSizeBytes ?: guessFileSizeFromNotes(existing.notes)
+    val replacementSize = replacement.fileSizeBytes ?: guessFileSizeFromNotes(replacement.notes)
+    if (existingSize != null && replacementSize != null && existingSize != replacementSize) {
+        return false
+    }
+
+    val existingType = existing.fileType.trim()
+    val replacementType = replacement.fileType.trim()
+    if (existingType.isNotBlank() && replacementType.isNotBlank() && existingType != replacementType) {
+        return false
+    }
+
+    return true
+}
+
 private fun clearDraftFields(appState: FileManagerAppState) {
     appState.draftTitle = ""
     appState.draftSource = ""
@@ -1940,9 +2931,9 @@ private fun appColorScheme() = lightColorScheme(
     primary = Color(0xFF2563EB),
     secondary = Color(0xFF0F766E),
     tertiary = Color(0xFF16A34A),
-    background = Color(0xFFF4F6FA),
+    background = Color.White,
     surface = Color.White,
-    surfaceVariant = Color(0xFFE8EEF7),
+    surfaceVariant = Color(0xFFF1F5F9),
     onPrimary = Color.White,
     onSecondary = Color.White,
     onTertiary = Color.White,
@@ -1953,9 +2944,9 @@ private fun appColorScheme() = lightColorScheme(
 
 private fun appBackgroundBrush(): Brush = Brush.verticalGradient(
     colors = listOf(
+        Color.White,
+        Color(0xFFFCFDFF),
         Color(0xFFF8FAFC),
-        Color(0xFFF1F5F9),
-        Color(0xFFEFF4FB),
     ),
 )
 

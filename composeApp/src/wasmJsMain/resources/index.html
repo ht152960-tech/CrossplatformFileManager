@@ -3,84 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CrossplatformFileManager</title>
+    <title></title>
     <style>
         html, body {
             width: 100%;
             height: 100%;
             margin: 0;
-            background: #07111f;
-            color: #e5eef9;
+            background: #ffffff;
+            color: #0f172a;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
 
         body {
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            overflow: hidden;
         }
 
         .boot-screen {
-            width: min(420px, calc(100vw - 48px));
-            padding: 28px 24px;
-            border-radius: 24px;
-            background:
-                radial-gradient(circle at top, rgba(37, 99, 235, 0.18), transparent 42%),
-                linear-gradient(180deg, #06101d 0%, #0a1627 100%);
-            box-shadow: 0 18px 48px rgba(15, 23, 42, 0.35);
-            text-align: center;
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+            transition: opacity 180ms ease;
         }
 
         body.app-ready .boot-screen {
-            position: fixed;
-            top: 12px;
-            left: 12px;
-            width: min(520px, calc(100vw - 24px));
-            max-height: calc(100vh - 24px);
-            overflow: auto;
-            z-index: 2147483647;
+            opacity: 0;
             pointer-events: none;
-            text-align: left;
         }
 
-        .boot-title {
-            font-size: 22px;
-            font-weight: 700;
-            margin: 0 0 10px;
+        .boot-stack {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 28px;
         }
 
-        .boot-copy {
-            margin: 0;
-            font-size: 14px;
-            line-height: 1.7;
-            color: rgba(226, 232, 240, 0.82);
+        .boot-logo {
+            width: 208px;
+            height: 138px;
+            display: block;
+            object-fit: contain;
+            transform: none;
         }
 
-        .boot-trace {
-            margin-top: 14px;
-            padding: 12px;
-            border-radius: 14px;
-            background: rgba(15, 23, 42, 0.34);
-            color: rgba(226, 232, 240, 0.86);
-            font-size: 11px;
-            line-height: 1.6;
-            text-align: left;
-            white-space: pre-wrap;
-            max-height: 180px;
-            overflow: auto;
+        .boot-spinner {
+            width: 38px;
+            height: 38px;
+            border-radius: 999px;
+            border: 4px solid rgba(148, 163, 184, 0.18);
+            border-top-color: rgba(37, 99, 235, 0.96);
+            animation: boot-spin 0.9s linear infinite;
+        }
+
+        @keyframes boot-spin {
+            to {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
 <body>
 <div class="boot-screen" aria-live="polite" aria-busy="true">
-    <div class="boot-title">Loading app...</div>
-    <p class="boot-copy">Starting the web app entry script.</p>
-    <div id="boot-trace" class="boot-trace">boot: starting...</div>
+    <div class="boot-stack">
+        <img class="boot-logo" src="taggo_logo_splash_safe_2048.png" alt="">
+        <div class="boot-spinner" aria-hidden="true"></div>
+    </div>
 </div>
 <script>
     (function () {
         const SNAPSHOT_KEY = "file-atlas.snapshot";
         const DRAFTS_KEY = "file-atlas.browser-drafts";
+        const runtimeDraftStore = new Map();
 
         function loadDraftStore() {
             try {
@@ -109,9 +105,17 @@
             saveDraftStore(store);
         }
 
+        function saveRuntimeDraft(id, value) {
+            runtimeDraftStore.set(id, value);
+        }
+
         function readBrowserDraft(id) {
             const store = loadDraftStore();
             return store[id] || null;
+        }
+
+        function readRuntimeDraft(id) {
+            return runtimeDraftStore.get(id) || null;
         }
 
         function encodeDraft(title, source, fileType, notes) {
@@ -180,6 +184,442 @@
             return pieces.filter(Boolean).join(" | ");
         }
 
+        function extractBrowserReferenceId(source) {
+            if (!source || typeof source !== "string") {
+                return null;
+            }
+            const handledPrefixes = ["browser-handle:", "browser-file:"];
+            const matchedPrefix = handledPrefixes.find((prefix) => source.startsWith(prefix));
+            if (!matchedPrefix) {
+                return null;
+            }
+            const referenceId = source.substring(matchedPrefix.length);
+            return referenceId || null;
+        }
+
+        const BROWSER_IMAGE_SUFFIXES = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"];
+        const BROWSER_VIDEO_SUFFIXES = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".mpg", ".mpeg"];
+        const BROWSER_TEXT_SUFFIXES = [".txt", ".md", ".json", ".xml", ".csv", ".log", ".html", ".htm"];
+        const BLOCKED_BROWSER_OPEN_SUFFIXES = [
+            ".exe", ".msi", ".bat", ".cmd", ".com", ".ps1", ".sh", ".apk",
+            ".iso", ".zip", ".rar", ".7z", ".tar", ".gz"
+        ];
+        const KNOWN_UNSUPPORTED_VIDEO_SUFFIXES = [".mpg", ".mpeg", ".avi", ".mkv"];
+        const BROWSER_PDF_MIME_TYPES = ["application/pdf"];
+        const BROWSER_TEXT_MIME_TYPES = ["application/json", "application/xml"];
+
+        function fileLooksLikeImage(file) {
+            if (!file) {
+                return false;
+            }
+            if (typeof file.type === "string" && file.type.startsWith("image/")) {
+                return true;
+            }
+            const name = typeof file.name === "string" ? file.name.toLowerCase() : "";
+            return BROWSER_IMAGE_SUFFIXES.some((suffix) => name.endsWith(suffix));
+        }
+
+        function fileLooksLikeVideo(file) {
+            if (!file) {
+                return false;
+            }
+            if (typeof file.type === "string" && file.type.startsWith("video/")) {
+                return true;
+            }
+            const name = typeof file.name === "string" ? file.name.toLowerCase() : "";
+            return BROWSER_VIDEO_SUFFIXES.some((suffix) => name.endsWith(suffix));
+        }
+
+        function fileHasSuffix(file, suffixes) {
+            const name = typeof (file && file.name) === "string" ? file.name.toLowerCase() : "";
+            return suffixes.some((suffix) => name.endsWith(suffix));
+        }
+
+        function isKnownUnsupportedVideoType(file) {
+            const fileType = typeof (file && file.type) === "string" ? file.type.toLowerCase() : "";
+            return fileType === "video/mpeg" || fileHasSuffix(file, KNOWN_UNSUPPORTED_VIDEO_SUFFIXES);
+        }
+
+        function fileHasMimePrefix(file, prefixes) {
+            const fileType = typeof (file && file.type) === "string" ? file.type.toLowerCase() : "";
+            return prefixes.some((prefix) => fileType.startsWith(prefix));
+        }
+
+        function fileHasMimeType(file, mimeTypes) {
+            const fileType = typeof (file && file.type) === "string" ? file.type.toLowerCase() : "";
+            return mimeTypes.includes(fileType);
+        }
+
+        function fileLooksLikePdf(file) {
+            return fileHasMimeType(file, BROWSER_PDF_MIME_TYPES) || fileHasSuffix(file, [".pdf"]);
+        }
+
+        function fileLooksLikeText(file) {
+            return fileHasMimePrefix(file, ["text/"]) ||
+                fileHasMimeType(file, BROWSER_TEXT_MIME_TYPES) ||
+                fileHasSuffix(file, BROWSER_TEXT_SUFFIXES);
+        }
+
+        function fileIsBlockedFromBrowserOpen(file) {
+            return fileHasSuffix(file, BLOCKED_BROWSER_OPEN_SUFFIXES);
+        }
+
+        function determineBrowserOpenSupport(file) {
+            if (!file) {
+                return {
+                    mode: "unsupported",
+                    message: "\u6d4f\u89c8\u5668\u65e0\u6cd5\u8bfb\u53d6\u8be5\u6587\u4ef6\u3002\nThe browser could not read this file."
+                };
+            }
+            if (fileIsBlockedFromBrowserOpen(file)) {
+                return {
+                    mode: "unsupported",
+                    message: "\u6d4f\u89c8\u5668\u4e0d\u652f\u6301\u6253\u5f00\u6216\u9884\u89c8\u8be5\u6587\u4ef6\u7c7b\u578b\u3002\nThis file type cannot be opened or previewed in the browser."
+                };
+            }
+            if (fileLooksLikeImage(file)) {
+                return { mode: "preview" };
+            }
+            if (fileLooksLikePdf(file)) {
+                return { mode: "preview" };
+            }
+            if (fileLooksLikeText(file)) {
+                return { mode: "preview" };
+            }
+            if (fileLooksLikeVideo(file)) {
+                if (isKnownUnsupportedVideoType(file)) {
+                    return {
+                        mode: "unsupported",
+                        message: "\u6d4f\u89c8\u5668\u4e0d\u652f\u6301\u64ad\u653e\u8be5\u89c6\u9891\u683c\u5f0f\u3002\nThis video format is not supported for browser playback."
+                    };
+                }
+                const probe = document.createElement("video");
+                const canPlay = typeof probe.canPlayType === "function" && !!probe.canPlayType(file.type || "");
+                return canPlay
+                    ? { mode: "video" }
+                    : {
+                        mode: "unsupported",
+                        message: "\u6d4f\u89c8\u5668\u4e0d\u652f\u6301\u64ad\u653e\u8be5\u89c6\u9891\u683c\u5f0f\u3002\nThis video format is not supported for browser playback."
+                    };
+            }
+            return {
+                mode: "unsupported",
+                message: "\u6d4f\u89c8\u5668\u4e0d\u652f\u6301\u6253\u5f00\u6216\u9884\u89c8\u8be5\u6587\u4ef6\u7c7b\u578b\u3002\nThis file type cannot be opened or previewed in the browser."
+            };
+        }
+
+        function classifyFileKind(file) {
+            if (fileLooksLikeImage(file)) {
+                return "image";
+            }
+            if (fileLooksLikeVideo(file)) {
+                return "video";
+            }
+            return "other";
+        }
+
+        function logThumbnail(stage, details) {
+            try {
+                console.log("[thumbnail]", stage, details || {});
+            } catch (error) {
+                // Ignore console failures.
+            }
+        }
+
+        function readyThumbnailResult(dataUrl) {
+            return `ready\t${dataUrl || ""}`;
+        }
+
+        function failedThumbnailResult(reason) {
+            return `failed\t${reason || "thumbnail generation failed"}`;
+        }
+
+        function unsupportedThumbnailResult(reason) {
+            return `unsupported\t${reason || "thumbnail generation unsupported"}`;
+        }
+
+        async function readRuntimeFile(source) {
+            const referenceId = extractBrowserReferenceId(source);
+            if (!referenceId) {
+                logThumbnail("readRuntimeFile.noReferenceId", { source });
+                return null;
+            }
+            const runtimeDraft = readRuntimeDraft(referenceId);
+            if (!runtimeDraft) {
+                logThumbnail("readRuntimeFile.noRuntimeDraft", { source, referenceId });
+                return null;
+            }
+            if (runtimeDraft.file) {
+                logThumbnail("readRuntimeFile.cachedFile", {
+                    source,
+                    referenceId,
+                    fileName: runtimeDraft.file.name,
+                    fileType: runtimeDraft.file.type,
+                    fileSize: runtimeDraft.file.size
+                });
+                return runtimeDraft.file;
+            }
+            if (runtimeDraft.handle && typeof runtimeDraft.handle.getFile === "function") {
+                try {
+                    const file = await runtimeDraft.handle.getFile();
+                    runtimeDraft.file = file;
+                    logThumbnail("readRuntimeFile.handleResolved", {
+                        source,
+                        referenceId,
+                        fileName: file.name,
+                        fileType: file.type,
+                        fileSize: file.size
+                    });
+                    return file;
+                } catch (error) {
+                    logThumbnail("readRuntimeFile.handleFailed", {
+                        source,
+                        referenceId,
+                        reason: String(error)
+                    });
+                    return null;
+                }
+            }
+            logThumbnail("readRuntimeFile.noFileOrHandle", { source, referenceId });
+            return null;
+        }
+
+        function blobToDataUrl(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+                reader.onerror = (error) => reject(error);
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        function canvasToBlob(canvas, quality) {
+            return new Promise((resolve) => {
+                canvas.toBlob((blob) => resolve(blob || null), "image/webp", quality);
+            });
+        }
+
+        async function generateImageThumbnail(file, source, maxSize, quality) {
+            let imageUrl = null;
+            let image = null;
+            try {
+                imageUrl = URL.createObjectURL(file);
+                logThumbnail("image.createObjectURL.success", { source, objectUrlPrefix: imageUrl.substring(0, 32) });
+            } catch (error) {
+                logThumbnail("image.createObjectURL.failed", { source, reason: String(error) });
+                return failedThumbnailResult(`createObjectURL failed: ${String(error)}`);
+            }
+
+            try {
+                image = await new Promise((resolve, reject) => {
+                    const nextImage = new Image();
+                    nextImage.onload = () => {
+                        logThumbnail("image.onload", { source, width: nextImage.width, height: nextImage.height });
+                        resolve(nextImage);
+                    };
+                    nextImage.onerror = (error) => {
+                        logThumbnail("image.onerror", { source, reason: String(error) });
+                        reject(error);
+                    };
+                    nextImage.src = imageUrl;
+                });
+
+                const width = Number(image.width) || 0;
+                const height = Number(image.height) || 0;
+                if (width <= 0 || height <= 0) {
+                    logThumbnail("image.invalidDimensions", { source, width, height });
+                    return null;
+                }
+
+                const boundedMaxSize = Math.max(1, Number(maxSize) || 320);
+                const scale = Math.min(boundedMaxSize / width, boundedMaxSize / height, 1);
+                const targetWidth = Math.max(1, Math.round(width * scale));
+                const targetHeight = Math.max(1, Math.round(height * scale));
+                const normalizedQuality = Math.min(Math.max((Number(quality) || 75) / 100, 0.1), 1);
+
+                const canvas = document.createElement("canvas");
+                canvas.width = targetWidth;
+                canvas.height = targetHeight;
+                const context = canvas.getContext("2d");
+                if (!context) {
+                    logThumbnail("image.canvasContext.failed", { source });
+                    return failedThumbnailResult("canvas context unavailable");
+                }
+                context.clearRect(0, 0, targetWidth, targetHeight);
+                context.drawImage(image, 0, 0, targetWidth, targetHeight);
+                logThumbnail("image.canvasDraw.success", { source, targetWidth, targetHeight });
+
+                const blob = await canvasToBlob(canvas, normalizedQuality);
+                if (!blob) {
+                    logThumbnail("image.canvasToBlob.failed", { source });
+                    return failedThumbnailResult("canvas.toBlob failed");
+                }
+                logThumbnail("image.canvasToBlob.success", { source, blobSize: blob.size });
+                const dataUrl = await blobToDataUrl(blob);
+                return dataUrl
+                    ? readyThumbnailResult(dataUrl)
+                    : failedThumbnailResult("blobToDataUrl returned no data");
+            } catch (error) {
+                logThumbnail("image.thumbnail.failed", { source, reason: String(error) });
+                return failedThumbnailResult(String(error));
+            } finally {
+                if (image && typeof image.close === "function") {
+                    image.close();
+                }
+                if (imageUrl) {
+                    URL.revokeObjectURL(imageUrl);
+                    logThumbnail("image.revokeObjectURL", { source });
+                }
+            }
+        }
+
+        async function generateVideoThumbnail(file, source, maxSize, quality) {
+            let videoUrl = null;
+            let video = null;
+            try {
+                videoUrl = URL.createObjectURL(file);
+                logThumbnail("video.createObjectURL.success", { source, objectUrlPrefix: videoUrl.substring(0, 32) });
+            } catch (error) {
+                logThumbnail("video.createObjectURL.failed", { source, reason: String(error) });
+                return failedThumbnailResult(`createObjectURL failed: ${String(error)}`);
+            }
+
+            try {
+                video = document.createElement("video");
+                video.preload = "metadata";
+                video.muted = true;
+                video.playsInline = true;
+                const canPlayResult = typeof video.canPlayType === "function" ? video.canPlayType(file.type || "") : "";
+                logThumbnail("video.canPlayType", {
+                    source,
+                    fileName: file && file.name,
+                    fileType: file && file.type,
+                    canPlayType: canPlayResult
+                });
+                if (!canPlayResult || isKnownUnsupportedVideoType(file)) {
+                    console.log("Web video thumbnail unsupported: browser cannot decode this video type", {
+                        fileName: file && file.name,
+                        fileType: file && file.type,
+                        canPlayType: canPlayResult
+                    });
+                    return unsupportedThumbnailResult("browser cannot decode this video type");
+                }
+                video.src = videoUrl;
+
+                await new Promise((resolve, reject) => {
+                    video.onloadedmetadata = () => {
+                        logThumbnail("video.loadedmetadata", {
+                            source,
+                            duration: video.duration,
+                            width: video.videoWidth,
+                            height: video.videoHeight
+                        });
+                        resolve();
+                    };
+                    video.onerror = (error) => {
+                        logThumbnail("video.error", { source, reason: String(error) });
+                        reject(error);
+                    };
+                });
+
+                const width = Number(video.videoWidth) || 0;
+                const height = Number(video.videoHeight) || 0;
+                if (width <= 0 || height <= 0) {
+                    logThumbnail("video.invalidDimensions", { source, width, height });
+                    return null;
+                }
+
+                const duration = Number(video.duration);
+                const targetTime = Number.isFinite(duration) && duration > 0
+                    ? Math.min(Math.max(duration * 0.1, 0.1), duration)
+                    : 3;
+                logThumbnail("video.targetTime", { source, duration, targetTime });
+
+                await new Promise((resolve, reject) => {
+                    video.onseeked = () => {
+                        logThumbnail("video.seeked", { source, currentTime: video.currentTime });
+                        resolve();
+                    };
+                    video.onerror = (error) => {
+                        logThumbnail("video.seek.error", { source, reason: String(error) });
+                        reject(error);
+                    };
+                    try {
+                        video.currentTime = targetTime;
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+
+                const boundedMaxSize = Math.max(1, Number(maxSize) || 320);
+                const scale = Math.min(boundedMaxSize / width, boundedMaxSize / height, 1);
+                const targetWidth = Math.max(1, Math.round(width * scale));
+                const targetHeight = Math.max(1, Math.round(height * scale));
+                const normalizedQuality = Math.min(Math.max((Number(quality) || 75) / 100, 0.1), 1);
+
+                const canvas = document.createElement("canvas");
+                canvas.width = targetWidth;
+                canvas.height = targetHeight;
+                const context = canvas.getContext("2d");
+                if (!context) {
+                    logThumbnail("video.canvasContext.failed", { source });
+                    return failedThumbnailResult("canvas context unavailable");
+                }
+                context.clearRect(0, 0, targetWidth, targetHeight);
+                context.drawImage(video, 0, 0, targetWidth, targetHeight);
+                logThumbnail("video.canvasDraw.success", { source, targetWidth, targetHeight });
+
+                const blob = await canvasToBlob(canvas, normalizedQuality);
+                if (!blob) {
+                    logThumbnail("video.canvasToBlob.failed", { source });
+                    return failedThumbnailResult("canvas.toBlob failed");
+                }
+                logThumbnail("video.canvasToBlob.success", { source, blobSize: blob.size });
+                const dataUrl = await blobToDataUrl(blob);
+                return dataUrl
+                    ? readyThumbnailResult(dataUrl)
+                    : failedThumbnailResult("blobToDataUrl returned no data");
+            } catch (error) {
+                logThumbnail("video.thumbnail.failed", { source, reason: String(error) });
+                return failedThumbnailResult(String(error));
+            } finally {
+                if (video) {
+                    video.pause();
+                    video.removeAttribute("src");
+                    video.load();
+                }
+                if (videoUrl) {
+                    URL.revokeObjectURL(videoUrl);
+                    logThumbnail("video.revokeObjectURL", { source });
+                }
+            }
+        }
+
+        async function generateThumbnail(source, maxSize, quality) {
+            const file = await readRuntimeFile(source);
+            const fileKind = classifyFileKind(file);
+            logThumbnail("generateThumbnail.start", {
+                source,
+                fileId: extractBrowserReferenceId(source),
+                fileName: file && file.name,
+                fileType: file && file.type,
+                fileSize: file && file.size,
+                fileKind: fileKind
+            });
+            if (!file) {
+                logThumbnail("generateThumbnail.noFile", { source });
+                return failedThumbnailResult("browser runtime file unavailable");
+            }
+            if (fileKind === "image") {
+                return await generateImageThumbnail(file, source, maxSize, quality);
+            }
+            if (fileKind === "video") {
+                return await generateVideoThumbnail(file, source, maxSize, quality);
+            }
+            logThumbnail("generateThumbnail.unsupportedKind", { source, fileKind });
+            return unsupportedThumbnailResult(`unsupported file kind: ${fileKind}`);
+        }
+
         function pickWithInput() {
             return new Promise((resolve) => {
                 const input = document.createElement("input");
@@ -197,6 +637,13 @@
                     const source = `browser-file:${id}`;
                     const fileType = guessFileType(file);
                     const notes = buildDraftNotes("Selected from browser file picker.", file);
+                    logThumbnail("pickReference.input.selected", {
+                        fileName: file.name,
+                        fileType: file.type,
+                        fileSize: file.size,
+                        fileKind: classifyFileKind(file)
+                    });
+                    saveRuntimeDraft(id, { file: file });
                     saveBrowserDraft(id, {
                         title: title,
                         source: source,
@@ -224,6 +671,13 @@
                     const source = `browser-handle:${id}`;
                     const fileType = guessFileType(file);
                     const notes = buildDraftNotes("Selected from browser file picker.", file);
+                    logThumbnail("pickReference.handle.selected", {
+                        fileName: file.name,
+                        fileType: file.type,
+                        fileSize: file.size,
+                        fileKind: classifyFileKind(file)
+                    });
+                    saveRuntimeDraft(id, { handle: handle, file: file });
                     saveBrowserDraft(id, {
                         title: title,
                         source: source,
@@ -261,6 +715,94 @@
                 );
             }
             return null;
+        }
+
+        async function openReference(source) {
+            if (!source || typeof source !== "string") {
+                return false;
+            }
+            if (source.startsWith("http://") || source.startsWith("https://")) {
+                return window.open(source, "_blank") !== null;
+            }
+            const file = await readRuntimeFile(source);
+            if (!file) {
+                return "error:\u6d4f\u89c8\u5668\u65e0\u6cd5\u8bfb\u53d6\u8be5\u6587\u4ef6\u3002\nThe browser could not read this file.";
+            }
+            const support = determineBrowserOpenSupport(file);
+            if (support.mode === "unsupported") {
+                return `error:${support.message}`;
+            }
+            try {
+                const objectUrl = URL.createObjectURL(file);
+                const openedWindow = support.mode === "video"
+                    ? openVideoPreviewWindow(file, objectUrl)
+                    : window.open(objectUrl, "_blank");
+                if (!openedWindow) {
+                    URL.revokeObjectURL(objectUrl);
+                    return "error:\u6d4f\u89c8\u5668\u62e6\u622a\u4e86\u6253\u5f00\u7a97\u53e3\u3002\nThe browser blocked the new window.";
+                }
+                window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+                return "ok";
+            } catch (error) {
+                return `error:${String(error)}`;
+            }
+        }
+
+        function openVideoPreviewWindow(file, objectUrl) {
+            const previewWindow = window.open("", "_blank");
+            if (!previewWindow) {
+                return null;
+            }
+            const escapedTitle = escapeHtml((file && file.name) || "Video");
+            previewWindow.document.open();
+            previewWindow.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${escapedTitle}</title>
+    <style>
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            background: #0f172a;
+            color: #e2e8f0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+        }
+        .title {
+            padding: 12px 16px;
+            font-size: 14px;
+            background: rgba(15, 23, 42, 0.92);
+        }
+        video {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            background: black;
+        }
+    </style>
+</head>
+<body>
+    <div class="title">${escapedTitle}</div>
+    <video controls autoplay playsinline src="${objectUrl}"></video>
+</body>
+</html>`);
+            previewWindow.document.close();
+            return previewWindow;
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll("\"", "&quot;")
+                .replaceAll("'", "&#39;");
         }
 
         function pickSnapshotFile() {
@@ -312,70 +854,39 @@
 
         window.fileAtlasBrowser = {
             pickReference: pickReference,
-            resolveReference: resolveReference
+            resolveReference: resolveReference,
+            openReference: openReference,
+            generateThumbnail: generateThumbnail
         };
         globalThis.fileAtlasBrowser = window.fileAtlasBrowser;
     })();
 </script>
 <script>
     (function () {
-        const bootStart = performance.now();
-        const traceNode = document.getElementById("boot-trace");
-        const traceLines = [];
-
-        function trace(message) {
-            const elapsed = Math.round(performance.now() - bootStart);
-            const line = `${elapsed}ms | ${message}`;
-            traceLines.push(line);
-            console.log(line);
-            if (traceNode) {
-                traceNode.textContent = traceLines.join("\n");
+        function loadComposeApp() {
+            if (document.querySelector('script[data-compose-app="true"]')) {
+                return;
             }
+
+            const script = document.createElement("script");
+            script.type = "application/javascript";
+            script.src = "composeApp.js";
+            script.dataset.composeApp = "true";
+            document.body.appendChild(script);
         }
 
-        window.fileAtlasBootTrace = trace;
-        trace("boot script running");
-
         window.addEventListener("file-atlas-ui-ready", () => {
-            trace("file-atlas-ui-ready received");
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
-                    trace("boot overlay pinned");
                     document.body.classList.add("app-ready");
                 });
             });
         }, { once: true });
 
-        function loadComposeApp() {
-            if (document.querySelector('script[data-compose-app="true"]')) {
-                trace("composeApp.js already present");
-                return;
-            }
-
-            trace("appending composeApp.js");
-            const script = document.createElement("script");
-            script.type = "application/javascript";
-            script.src = "composeApp.js";
-            script.dataset.composeApp = "true";
-            script.onload = () => trace("composeApp.js loaded");
-            script.onerror = () => trace("composeApp.js failed");
-            document.body.appendChild(script);
-        }
-
-        function startAppWhenReady() {
-            trace("startAppWhenReady");
-            loadComposeApp();
-        }
-
         if (document.readyState === "loading") {
-            trace("waiting for DOMContentLoaded");
-            document.addEventListener("DOMContentLoaded", () => {
-                trace("DOMContentLoaded");
-                startAppWhenReady();
-            }, { once: true });
+            document.addEventListener("DOMContentLoaded", loadComposeApp, { once: true });
         } else {
-            trace("DOM already ready");
-            startAppWhenReady();
+            loadComposeApp();
         }
     })();
 </script>

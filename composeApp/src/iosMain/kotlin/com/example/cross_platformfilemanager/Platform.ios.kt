@@ -9,4 +9,7 @@ class IOSPlatform : Platform {
 
 actual fun getPlatform(): Platform = IOSPlatform()
 
-actual fun openReferenceExternally(reference: FileReference): Boolean = false
+actual suspend fun openReferenceExternally(reference: FileReference): Boolean = false
+
+actual suspend fun openReferenceExternallyWithResult(reference: FileReference): OpenReferenceResult =
+    OpenReferenceResult(opened = false)
