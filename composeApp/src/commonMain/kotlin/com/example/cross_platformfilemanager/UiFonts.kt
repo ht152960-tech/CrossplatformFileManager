@@ -9,8 +9,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import org.jetbrains.compose.resources.Font
-import crossplatformfilemanager.composeapp.generated.resources.NotoSansSc
-import crossplatformfilemanager.composeapp.generated.resources.NotoSansScUi
+import taggo.composeapp.generated.resources.NotoSansSc
+import taggo.composeapp.generated.resources.NotoSansScUi
 
 @Composable
 fun rememberAppFontFamily(): FontFamily = FontFamily(Font(NotoSansScUi))

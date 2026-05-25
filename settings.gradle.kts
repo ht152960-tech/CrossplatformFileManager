@@ -1,4 +1,4 @@
-rootProject.name = "CrossplatformFileManager"
+rootProject.name = "Taggo"
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {

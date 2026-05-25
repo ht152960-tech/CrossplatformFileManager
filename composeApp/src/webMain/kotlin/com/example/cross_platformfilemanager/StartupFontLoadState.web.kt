@@ -4,8 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import crossplatformfilemanager.composeapp.generated.resources.NotoSansSc
-import crossplatformfilemanager.composeapp.generated.resources.NotoSansScUi
+import taggo.composeapp.generated.resources.NotoSansSc
+import taggo.composeapp.generated.resources.NotoSansScUi
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.preloadFont
 import kotlinx.browser.window

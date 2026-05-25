@@ -24,3 +24,11 @@ kotlin-js-store/
 # Temporary local tooling
 node_modules/
 *.log
+*.dom
+*.err
+backup/
+dev-*/
+prod-*/
+edge-*/
+chrome-cdp-profile*/
+chrome-thumbnail-acceptance-profile*/

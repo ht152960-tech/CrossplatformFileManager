@@ -7,7 +7,7 @@ import androidx.compose.ui.window.application
 fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
-        title = "CrossplatformFileManager",
+        title = "贴格 | Taggo",
     ) {
         App()
     }

@@ -8,7 +8,7 @@ Delete
 取消
 Cancel
 文件管理器
-File Atlas
+贴格
 搜索
 Search
 点击任意条目进入详情页。

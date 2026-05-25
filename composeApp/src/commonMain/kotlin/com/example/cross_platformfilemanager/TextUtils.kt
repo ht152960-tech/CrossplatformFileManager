@@ -3,8 +3,32 @@ package com.example.cross_platformfilemanager
 import kotlin.time.Clock
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 internal fun nowMillis(): Long = Clock.System.now().toEpochMilliseconds()
+
+internal fun shouldShowInNewUploadList(file: FileReference, nowMillis: Long): Boolean {
+    if (isSameLocalDate(file.createdAtMillis, nowMillis)) {
+        return true
+    }
+
+    val ageMillis = nowMillis - file.createdAtMillis
+    if (ageMillis >= NEW_UPLOAD_RETENTION_MILLIS) {
+        return false
+    }
+
+    return file.lastOpenedAtMillis <= file.createdAtMillis
+}
+
+private fun isSameLocalDate(leftMillis: Long, rightMillis: Long): Boolean {
+    if (leftMillis <= 0L || rightMillis <= 0L) return false
+    val timeZone = TimeZone.currentSystemDefault()
+    val leftDate = Instant.fromEpochMilliseconds(leftMillis).toLocalDateTime(timeZone).date
+    val rightDate = Instant.fromEpochMilliseconds(rightMillis).toLocalDateTime(timeZone).date
+    return leftDate == rightDate
+}
 
 internal fun normalize(value: String): String {
     val trimmed = value.trim().lowercase()
@@ -96,6 +120,8 @@ private val mojibakeMarkers = setOf(
     '绛', '绫', '绯', '绱', '绲', '绾', '绗', '缁', '缃', '钘',
     '鈥', '銆', '閰', '閿', '閫', '閮', '閰', '闈', '闊', '闆',
 )
+
+private const val NEW_UPLOAD_RETENTION_MILLIS = 48L * 60L * 60L * 1000L
 
 private fun looksLikeMojibake(value: String): Boolean =
     value.any { it.code in 0x80..0xFF } || value.any { it in mojibakeMarkers }

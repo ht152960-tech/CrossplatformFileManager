@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		7688E726DFD30B379EEE87A0 /* CrossplatformFileManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CrossplatformFileManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7688E726DFD30B379EEE87A0 /* Taggo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Taggo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -59,7 +59,7 @@
 		1B6D4609325A817DF12AB1FF /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				7688E726DFD30B379EEE87A0 /* CrossplatformFileManager.app */,
+				7688E726DFD30B379EEE87A0 /* Taggo.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -87,7 +87,7 @@
 			packageProductDependencies = (
 			);
 			productName = iosApp;
-			productReference = 7688E726DFD30B379EEE87A0 /* CrossplatformFileManager.app */;
+			productReference = 7688E726DFD30B379EEE87A0 /* Taggo.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */

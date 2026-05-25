@@ -1,7 +1,7 @@
-package crossplatformfilemanager.composeapp.generated.resources
+package taggo.composeapp.generated.resources
 
 import org.jetbrains.compose.resources.FontResource
 
-// 这个别名把生成器里的内部字体资源公开出来，commonMain 代码就能稳定引用。
+// Expose the generated font resources with stable aliases for shared code.
 val NotoSansSc: FontResource by lazy { Res.font.noto_sans_sc }
 val NotoSansScUi: FontResource by lazy { Res.font.noto_sans_sc_ui }

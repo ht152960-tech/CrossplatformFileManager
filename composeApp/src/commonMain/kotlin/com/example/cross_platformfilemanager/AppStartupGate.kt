@@ -1,22 +1,24 @@
 package com.example.cross_platformfilemanager
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.ui.Modifier
 import androidx.compose.runtime.remember
 
 @Composable
 fun AppStartupGate(
     snapshotReady: Boolean,
     fontLoadState: AppFontLoadState,
+    fullCjkFontLoadState: FullCjkFontLoadState,
     content: @Composable () -> Unit,
 ) {
     val gateStartMillis = remember { nowMillis() }
+
     val branch = when {
         fontLoadState.failed -> "failed"
-        !snapshotReady || !fontLoadState.uiFontReady -> "loading"
+        fullCjkFontLoadState.failed -> "failed"
+        !snapshotReady || !fontLoadState.uiFontReady || !fullCjkFontLoadState.fullCjkFontReady -> "loading"
         else -> "content"
     }
 
@@ -25,32 +27,41 @@ fun AppStartupGate(
         snapshotReady,
         fontLoadState.uiFontReady,
         fontLoadState.failed,
+        fullCjkFontLoadState.fullCjkFontReady,
+        fullCjkFontLoadState.failed,
     ) {
         reportStartupTrace(
             "AppStartupGate branch=$branch elapsed=${nowMillis() - gateStartMillis}ms " +
                 "snapshotReady=$snapshotReady " +
                 "uiFontReady=${fontLoadState.uiFontReady} " +
-                "uiFontFailed=${fontLoadState.failed}",
+                "uiFontFailed=${fontLoadState.failed} " +
+                "fullCjkFontReady=${fullCjkFontLoadState.fullCjkFontReady} " +
+                "fullCjkFontFailed=${fullCjkFontLoadState.failed}",
         )
     }
 
-    when {
-        fontLoadState.failed -> {
-            reportComposeAppMounted()
-            StartupFontErrorScreen()
-        }
+    Crossfade(
+        targetState = branch,
+        animationSpec = tween(durationMillis = 140),
+    ) { currentBranch ->
+        when (currentBranch) {
+            "failed" -> {
+                reportComposeAppMounted()
+                StartupFontErrorScreen()
+            }
 
-        !snapshotReady || !fontLoadState.uiFontReady -> {
-            StartupSplashScreen(
-                snapshotReady = snapshotReady,
-                uiFontReady = fontLoadState.uiFontReady,
-                fullCjkFontReady = false,
-            )
-        }
+            "loading" -> {
+                StartupSplashScreen(
+                    snapshotReady = snapshotReady,
+                    uiFontReady = fontLoadState.uiFontReady,
+                    fullCjkFontReady = fullCjkFontLoadState.fullCjkFontReady,
+                )
+            }
 
-        else -> {
-            reportComposeAppMounted()
-            content()
+            else -> {
+                reportComposeAppMounted()
+                content()
+            }
         }
     }
 }
