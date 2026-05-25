@@ -9,4 +9,4 @@ class AndroidPlatform : Platform {
 
 actual fun getPlatform(): Platform = AndroidPlatform()
 
-actual fun openReferenceExternally(reference: FileReference): Boolean = false
+actual suspend fun openReferenceExternally(reference: FileReference): Boolean = false

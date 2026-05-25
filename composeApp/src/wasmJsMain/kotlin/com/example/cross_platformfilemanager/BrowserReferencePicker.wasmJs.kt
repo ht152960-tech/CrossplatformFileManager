@@ -16,8 +16,7 @@ private class BrowserReferencePickerWasm : BrowserReferencePicker {
     override suspend fun pickReference(): BrowserReferenceDraft? {
         val bridge = browserInterop() ?: return null
         val encoded: JsAny? = bridge.pickReference().await()
-        val encodedString = encoded as? String ?: return null
-        return BrowserReferenceFormat.decode(encodedString)
+        return BrowserReferenceFormat.decode(encoded?.toString() ?: return null)
     }
 }
 
