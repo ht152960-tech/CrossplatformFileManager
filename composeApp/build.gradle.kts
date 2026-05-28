@@ -51,6 +51,17 @@ kotlin {
     }
     
     sourceSets {
+        val commonMain by getting
+        val jsMain by getting
+        val wasmJsMain by getting
+        val webMain by creating {
+            dependsOn(commonMain)
+        }
+
+        // Make browser-specific entrypoints and actuals available to both web targets.
+        jsMain.dependsOn(webMain)
+        wasmJsMain.dependsOn(webMain)
+
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)

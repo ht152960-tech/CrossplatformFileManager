@@ -3,12 +3,21 @@ package com.example.cross_platformfilemanager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 
+enum class StartupFontDiagnosticStatus {
+    Pending,
+    Ready,
+    Failed,
+    Timeout,
+    Unsupported,
+}
+
 /**
  * 主界面字体的加载状态。
  */
 data class AppFontLoadState(
     val uiFontReady: Boolean,
-    val failed: Boolean,
+    val status: StartupFontDiagnosticStatus,
+    val failureDetectionSupported: Boolean,
 )
 
 /**
@@ -19,7 +28,8 @@ data class AppFontLoadState(
  */
 data class FullCjkFontLoadState(
     val fullCjkFontReady: Boolean,
-    val failed: Boolean,
+    val status: StartupFontDiagnosticStatus,
+    val failureDetectionSupported: Boolean,
 )
 
 @Composable
@@ -32,3 +42,5 @@ expect fun rememberFullCjkFontLoadState(): FullCjkFontLoadState
 expect fun reportComposeAppMounted()
 
 expect fun reportStartupTrace(message: String)
+
+expect fun reportStartupTimeline(label: String)

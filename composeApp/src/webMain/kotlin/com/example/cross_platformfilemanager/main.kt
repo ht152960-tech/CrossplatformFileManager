@@ -10,7 +10,9 @@ import androidx.compose.ui.window.ComposeViewport
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
+    reportStartupTimeline("kotlin main entry")
     ComposeViewport {
+        reportStartupTimeline("root composition start")
         App()
     }
 }

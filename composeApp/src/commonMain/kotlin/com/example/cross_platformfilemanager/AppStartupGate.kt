@@ -1,7 +1,5 @@
 package com.example.cross_platformfilemanager
 
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -9,8 +7,7 @@ import androidx.compose.runtime.remember
 /**
  * 应用启动门面。
  *
- * 只有当快照恢复和字体加载都满足条件后，才真正展示主内容；
- * 否则在启动阶段统一显示加载页或错误页。
+ * 当前仅等待快照恢复，字体状态只用于启动诊断，不再阻塞首页展示。
  */
 @Composable
 fun AppStartupGate(
@@ -21,53 +18,44 @@ fun AppStartupGate(
 ) {
     val gateStartMillis = remember { nowMillis() }
 
-    val branch = when {
-        fontLoadState.failed -> "failed"
-        fullCjkFontLoadState.failed -> "failed"
-        !snapshotReady || !fontLoadState.uiFontReady || !fullCjkFontLoadState.fullCjkFontReady -> "loading"
-        else -> "content"
-    }
+    val branch = if (!snapshotReady) "loading" else "content"
 
     LaunchedEffect(
         branch,
         snapshotReady,
         fontLoadState.uiFontReady,
-        fontLoadState.failed,
+        fontLoadState.status,
+        fontLoadState.failureDetectionSupported,
         fullCjkFontLoadState.fullCjkFontReady,
-        fullCjkFontLoadState.failed,
+        fullCjkFontLoadState.status,
+        fullCjkFontLoadState.failureDetectionSupported,
     ) {
+        reportStartupTimeline("AppStartupGate branch=$branch")
         reportStartupTrace(
             "AppStartupGate branch=$branch elapsed=${nowMillis() - gateStartMillis}ms " +
                 "snapshotReady=$snapshotReady " +
                 "uiFontReady=${fontLoadState.uiFontReady} " +
-                "uiFontFailed=${fontLoadState.failed} " +
+                "uiFontStatus=${fontLoadState.status} " +
+                "uiFontFailureDetectionSupported=${fontLoadState.failureDetectionSupported} " +
                 "fullCjkFontReady=${fullCjkFontLoadState.fullCjkFontReady} " +
-                "fullCjkFontFailed=${fullCjkFontLoadState.failed}",
+                "fullCjkFontStatus=${fullCjkFontLoadState.status} " +
+                "fullCjkFontFailureDetectionSupported=${fullCjkFontLoadState.failureDetectionSupported}",
         )
     }
 
-    Crossfade(
-        targetState = branch,
-        animationSpec = tween(durationMillis = 140),
-    ) { currentBranch ->
-        when (currentBranch) {
-            "failed" -> {
-                reportComposeAppMounted()
-                StartupFontErrorScreen()
-            }
+    when (branch) {
+        "loading" -> {
+            StartupSplashScreen(
+                snapshotReady = snapshotReady,
+                uiFontReady = fontLoadState.uiFontReady,
+                fullCjkFontReady = fullCjkFontLoadState.fullCjkFontReady,
+            )
+        }
 
-            "loading" -> {
-                StartupSplashScreen(
-                    snapshotReady = snapshotReady,
-                    uiFontReady = fontLoadState.uiFontReady,
-                    fullCjkFontReady = fullCjkFontLoadState.fullCjkFontReady,
-                )
-            }
-
-            else -> {
-                reportComposeAppMounted()
-                content()
-            }
+        else -> {
+            reportComposeAppMounted()
+            reportStartupTimeline("AppStartupGate content invoked")
+            content()
         }
     }
 }
