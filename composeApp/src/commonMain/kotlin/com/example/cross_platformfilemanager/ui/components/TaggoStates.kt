@@ -28,20 +28,20 @@ import com.example.cross_platformfilemanager.ui.theme.TaggoTheme
 @Composable
 internal fun EmptyPanel(title: String, body: String) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = TaggoTheme.colors.surfaceVariant),
-        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = TaggoTheme.colors.panelBackgroundSoft),
+        shape = RoundedCornerShape(15.dp),
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(text = title, fontWeight = FontWeight.SemiBold)
+            Text(text = title, fontWeight = FontWeight.SemiBold, color = TaggoTheme.colors.textPrimary)
             Text(
                 text = body,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
+                color = TaggoTheme.colors.textSecondary,
+                fontSize = 11.sp,
             )
         }
     }
@@ -53,7 +53,7 @@ internal fun SearchEmptyState(
     body: String,
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = TaggoTheme.colors.surfaceVariant),
+        colors = CardDefaults.cardColors(containerColor = TaggoTheme.colors.panelBackgroundSoft),
         shape = RoundedCornerShape(20.dp),
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
@@ -61,22 +61,22 @@ internal fun SearchEmptyState(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 24.dp),
+                .padding(horizontal = 16.dp, vertical = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Box(
                 modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(TaggoTheme.colors.surface),
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(TaggoTheme.colors.panelBackground),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Search,
                     contentDescription = null,
                     tint = TaggoTheme.colors.textSecondary,
-                    modifier = Modifier.size(28.dp),
+                    modifier = Modifier.size(24.dp),
                 )
             }
             Text(

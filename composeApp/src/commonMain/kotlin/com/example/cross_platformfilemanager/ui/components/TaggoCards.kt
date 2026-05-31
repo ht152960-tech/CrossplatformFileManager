@@ -1,11 +1,12 @@
 package com.example.cross_platformfilemanager.ui.components
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -15,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cross_platformfilemanager.ui.adaptive.LocalTaggoWindowSizeClass
@@ -27,36 +30,44 @@ internal fun SectionCard(
     subtitle: String,
     trailing: (@Composable () -> Unit)? = null,
     responsiveHeader: Boolean = false,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 11.dp),
+    contentSpacing: Dp = 8.dp,
+    headerTextSpacing: Dp = 4.dp,
+    stackedHeaderSpacing: Dp = 6.dp,
+    subtitleFontSize: TextUnit = 11.sp,
     content: @Composable () -> Unit,
 ) {
     val windowSizeClass = LocalTaggoWindowSizeClass.current
     val stackedHeader = responsiveHeader && windowSizeClass != TaggoWindowSizeClass.Expanded
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = TaggoTheme.colors.surface),
-        shape = RoundedCornerShape(18.dp),
-        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = TaggoTheme.colors.panelBackground),
+        shape = RoundedCornerShape(17.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, TaggoTheme.colors.panelBorder, RoundedCornerShape(17.dp)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(contentPadding),
+            verticalArrangement = Arrangement.spacedBy(contentSpacing),
         ) {
             if (stackedHeader) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(stackedHeaderSpacing),
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(headerTextSpacing)) {
                         Text(
                             text = title,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
+                            color = TaggoTheme.colors.textPrimary,
                         )
                         Text(
                             text = subtitle,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp,
+                            color = TaggoTheme.colors.textSecondary,
+                            fontSize = subtitleFontSize,
                         )
                     }
                     if (trailing != null) {
@@ -75,17 +86,18 @@ internal fun SectionCard(
                 ) {
                     Column(
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(headerTextSpacing),
                     ) {
                         Text(
                             text = title,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
+                            color = TaggoTheme.colors.textPrimary,
                         )
                         Text(
                             text = subtitle,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp,
+                            color = TaggoTheme.colors.textSecondary,
+                            fontSize = subtitleFontSize,
                         )
                     }
                     trailing?.invoke()

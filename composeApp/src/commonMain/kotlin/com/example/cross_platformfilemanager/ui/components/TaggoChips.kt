@@ -48,7 +48,7 @@ internal fun TagFilterChip(
     onClick: () -> Unit,
 ) {
     val windowSizeClass = LocalTaggoWindowSizeClass.current
-    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 220.dp else 280.dp
+    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 190.dp else 220.dp
     FilterChip(
         selected = selected,
         onClick = onClick,
@@ -57,6 +57,7 @@ internal fun TagFilterChip(
             Text(
                 text = displayTextForUi(tag, fullCjkFontReady),
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 fontFamily = fullCjkFontFamily,
@@ -77,7 +78,7 @@ internal fun TagFilterChip(
             selectedContainerColor = TaggoTheme.colors.primaryAccentSoft,
             selectedLabelColor = TaggoTheme.colors.textPrimary,
             selectedLeadingIconColor = TaggoTheme.colors.primaryAccent,
-            containerColor = TaggoTheme.colors.surfaceVariant,
+            containerColor = TaggoTheme.colors.panelBackgroundSoft,
             labelColor = MaterialTheme.colorScheme.onSurface,
             iconColor = TaggoTheme.colors.textSecondary,
             disabledContainerColor = TaggoTheme.colors.surfaceVariant,
@@ -93,9 +94,9 @@ internal fun SearchTagChip(
     onRemove: () -> Unit,
 ) {
     val windowSizeClass = LocalTaggoWindowSizeClass.current
-    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 220.dp else 280.dp
+    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 190.dp else 220.dp
     Surface(
-        color = if (tag.source == SearchTagSource.LibraryTag) TaggoTheme.colors.primaryAccentSoft else TaggoTheme.colors.surfaceVariant,
+        color = if (tag.source == SearchTagSource.LibraryTag) TaggoTheme.colors.primaryAccentSoft else TaggoTheme.colors.panelBackgroundSoft,
         contentColor = if (tag.source == SearchTagSource.LibraryTag) TaggoTheme.colors.textPrimary else TaggoTheme.colors.textSecondary,
         shape = RoundedCornerShape(999.dp),
         modifier = Modifier.widthIn(max = maxChipWidth),
@@ -103,11 +104,12 @@ internal fun SearchTagChip(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            modifier = Modifier.padding(start = 10.dp, end = 3.dp, top = 3.dp, bottom = 3.dp),
         ) {
             Text(
                 text = displayTextForUi(tag.value, fullCjkFontReady),
                 fontWeight = FontWeight.Medium,
+                fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 fontFamily = fullCjkFontFamily,
@@ -133,18 +135,18 @@ internal fun TagPill(
     fullCjkFontFamily: FontFamily,
 ) {
     val windowSizeClass = LocalTaggoWindowSizeClass.current
-    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 160.dp else 220.dp
+    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 140.dp else 176.dp
     Surface(
-        color = TaggoTheme.colors.surfaceVariant,
+        color = TaggoTheme.colors.panelBackgroundSoft,
         contentColor = TaggoTheme.colors.textSecondary,
         shape = RoundedCornerShape(999.dp),
         modifier = Modifier.widthIn(max = maxChipWidth),
     ) {
         Text(
             text = displayTextForUi(tag, fullCjkFontReady),
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
             fontWeight = FontWeight.Medium,
-            fontSize = 12.sp,
+            fontSize = 11.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             fontFamily = fullCjkFontFamily,
@@ -162,23 +164,23 @@ internal fun RemovableTagChip(
     actionIcon: ImageVector = Icons.Outlined.Remove,
 ) {
     val windowSizeClass = LocalTaggoWindowSizeClass.current
-    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 220.dp else 280.dp
+    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 190.dp else 212.dp
     Box(
         modifier = Modifier
             .widthIn(max = maxChipWidth)
             .padding(top = 6.dp, end = 6.dp),
     ) {
         Surface(
-            color = TaggoTheme.colors.surfaceVariant,
+            color = TaggoTheme.colors.panelBackgroundSoft,
             contentColor = TaggoTheme.colors.textSecondary,
             shape = RoundedCornerShape(999.dp),
             modifier = Modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         ) {
             Text(
                 text = displayTextForUi(tag, fullCjkFontReady),
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                 fontWeight = FontWeight.Medium,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 fontFamily = fullCjkFontFamily,
@@ -188,10 +190,10 @@ internal fun RemovableTagChip(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .offset(x = 6.dp, y = (-6).dp)
-                .size(18.dp)
+                .size(17.dp)
                 .clip(RoundedCornerShape(999.dp))
-                .background(TaggoTheme.colors.surfaceElevated)
-                .border(1.dp, TaggoTheme.colors.borderStrong, RoundedCornerShape(999.dp))
+                .background(TaggoTheme.colors.panelBackground)
+                .border(1.dp, TaggoTheme.colors.panelBorder, RoundedCornerShape(999.dp))
                 .clickable(onClick = onRemove),
             contentAlignment = Alignment.Center,
         ) {
@@ -199,7 +201,7 @@ internal fun RemovableTagChip(
                 imageVector = actionIcon,
                 contentDescription = null,
                 tint = TaggoTheme.colors.textSecondary,
-                modifier = Modifier.size(12.dp),
+                modifier = Modifier.size(11.dp),
             )
         }
     }
@@ -212,7 +214,7 @@ internal fun SortChip(
     onClick: () -> Unit,
 ) {
     val windowSizeClass = LocalTaggoWindowSizeClass.current
-    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 180.dp else 220.dp
+    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 168.dp else 200.dp
     FilterChip(
         selected = selected,
         onClick = onClick,
@@ -220,6 +222,7 @@ internal fun SortChip(
         label = {
             Text(
                 text = label,
+                fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

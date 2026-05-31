@@ -64,7 +64,6 @@ internal fun FileCoverArtFrame(
     val thumbnailPainter = rememberThumbnailPainter(reference.thumbnailPath)
     val hasThumbnail = thumbnailPainter != null && reference.thumbnailStatus == ThumbnailStatus.READY
     val hasCoverArt = reference.coverArtSource?.isNotBlank() == true
-    println("Thumbnail UI state: fileId=${reference.id}, hasThumbnailPath=${!reference.thumbnailPath.isNullOrBlank()}, thumbnailStatus=${reference.thumbnailStatus}, painterReady=$hasThumbnail, fallback=${!hasThumbnail}")
     Box(
         modifier = modifier
             .clip(cornerShape)
@@ -76,7 +75,7 @@ internal fun FileCoverArtFrame(
                 painter = thumbnailPainter,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
             )
         } else if (hasCoverArt) {
             Column(
@@ -128,7 +127,7 @@ internal fun fileTypeIconStyle(reference: FileReference): FileTypeIconStyle {
     fun accentBrush(accent: Color): Brush =
         Brush.linearGradient(
             listOf(
-                colors.surfaceVariant,
+                colors.panelBackgroundSoft,
                 accent.copy(alpha = 0.18f),
             ),
         )
