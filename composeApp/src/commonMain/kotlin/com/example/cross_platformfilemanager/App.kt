@@ -67,6 +67,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
@@ -1195,15 +1196,31 @@ private fun SearchResultsPage(
     val compactLayout = windowSizeClass == TaggoWindowSizeClass.Compact
     val compactBottomPadding = if (compactLayout) 96.dp else 0.dp
     val activeSearchTags = appState.searchTags.toList()
-    val showSearchPrompt = activeSearchTags.isEmpty()
-    val searchResults = if (showSearchPrompt) emptyList() else appState.searchResults
-    val showTagLibrary = searchDraft.isBlank() && activeSearchTags.isEmpty()
-    val resultStatus = if (activeSearchTags.isNotEmpty()) {
+    val draftHasInput = searchDraft.trim().isNotEmpty()
+    val hasSubmittedSearch = activeSearchTags.isNotEmpty()
+    val showSearchPrompt = !hasSubmittedSearch && !draftHasInput
+    val showPendingDraftState = draftHasInput
+    val showStaleResultsHint = hasSubmittedSearch && draftHasInput
+    val searchResults = if (hasSubmittedSearch) appState.searchResults else emptyList()
+    val showTagLibrary = !draftHasInput && !hasSubmittedSearch
+    val resultStatus = if (showStaleResultsHint) {
+        if (locale == AppLocale.ZhCn) {
+            "已保留上一次结果，点击搜索可更新"
+        } else {
+            "Showing the previous results. Tap search to update them."
+        }
+    } else if (hasSubmittedSearch) {
         val summary = activeSearchTags.joinToString(separator = " ") { "[${displayTextForUi(it.value, fullCjkFontReady)}]" }
         if (locale == AppLocale.ZhCn) {
             "$summary · ${searchResults.size} 个结果"
         } else {
             "$summary · ${searchResults.size} results"
+        }
+    } else if (draftHasInput) {
+        if (locale == AppLocale.ZhCn) {
+            "输入完成后点击搜索"
+        } else {
+            "Finish typing, then tap search."
         }
     } else {
         if (locale == AppLocale.ZhCn) {
@@ -1273,13 +1290,31 @@ private fun SearchResultsPage(
                 fontFamily = fullCjkFontFamily,
             )
 
-            if (showSearchPrompt) {
+            if (showPendingDraftState && !hasSubmittedSearch) {
+                SearchEmptyState(
+                    title = if (locale == AppLocale.ZhCn) "输入完成后点击搜索" else "Ready to search",
+                    body = if (locale == AppLocale.ZhCn) {
+                        "当前只是搜索草稿，还没有开始查找文件。"
+                    } else {
+                        "This is only a draft query so far. Tap search to start looking for files."
+                    },
+                )
+            } else if (showSearchPrompt) {
                 SearchEmptyState(
                     title = if (locale == AppLocale.ZhCn) "还没有搜索标签" else "No search tags yet",
                     body = if (locale == AppLocale.ZhCn) {
                         "输入关键词，或点击下方高频标签开始搜索。"
                     } else {
                         "Type keywords, or tap a frequent tag below to start searching."
+                    },
+                )
+            } else if (showStaleResultsHint && searchResults.isEmpty()) {
+                SearchEmptyState(
+                    title = if (locale == AppLocale.ZhCn) "点击搜索更新结果" else "Tap search to update",
+                    body = if (locale == AppLocale.ZhCn) {
+                        "你已经修改了搜索草稿，当前没有把新关键词提交执行。"
+                    } else {
+                        "You changed the draft query, but the new keywords have not been submitted yet."
                     },
                 )
             } else if (searchResults.isEmpty()) {
@@ -1494,6 +1529,7 @@ private fun DetailPage(
     var newTagDraft by remember(reference.id) { mutableStateOf("") }
     var openFileMessage by remember(reference.id) { mutableStateOf<String?>(null) }
     var tagFeedbackMessage by remember(reference.id) { mutableStateOf<String?>(null) }
+    var tagFeedbackIsWarning by remember(reference.id) { mutableStateOf(false) }
     var pendingOpenReplacement by remember(reference.id) { mutableStateOf<BrowserReferenceDraft?>(null) }
     val isBrowserSelectedReference = reference.source.startsWith("browser-", ignoreCase = true)
     val tagCandidates = remember(reference.tags, appState.topTags) {
@@ -1505,10 +1541,18 @@ private fun DetailPage(
     val canOpenFile = canOpenReferenceExternally(reference) || canUseWebReopenFlow
     val openButtonLabel = if (locale == AppLocale.ZhCn) "\u2197 \u6253\u5f00\u6b64\u6587\u4ef6" else "\u2197 Open this file"
 
+    fun clearDuplicateTagWarning() {
+        if (tagFeedbackIsWarning) {
+            tagFeedbackMessage = null
+            tagFeedbackIsWarning = false
+        }
+    }
+
     fun addTagToCurrentReference(rawTag: String): Boolean {
         val cleaned = rawTag.trim()
         if (cleaned.isBlank()) {
             tagFeedbackMessage = null
+            tagFeedbackIsWarning = false
             return false
         }
 
@@ -1519,6 +1563,7 @@ private fun DetailPage(
             } else {
                 "This file already has that tag."
             }
+            tagFeedbackIsWarning = true
             return false
         }
 
@@ -1527,6 +1572,7 @@ private fun DetailPage(
             reference.tags.plus(existingTag).joinToString(", "),
         )
         tagFeedbackMessage = null
+        tagFeedbackIsWarning = false
         newTagDraft = ""
         return true
     }
@@ -1537,11 +1583,13 @@ private fun DetailPage(
             removeTagExact(reference.tags, tag),
         )
         tagFeedbackMessage = null
+        tagFeedbackIsWarning = false
     }
 
     LaunchedEffect(reference.id, reference.source, reference.sourceKind) {
         // 鏂囦欢鏉ユ簮涓€鏃﹀彉鍖栵紝灏辨妸涓婁竴娆＄殑鎵撳紑澶辫触鎻愮ず娓呮帀锛岄伩鍏嶆棫鐘舵€佽瀵肩敤鎴枫€?        openFileMessage = null
         tagFeedbackMessage = null
+        tagFeedbackIsWarning = false
     }
 
     fun handleOpenFile() {
@@ -1732,11 +1780,12 @@ private fun DetailPage(
                     }
                 }
 
-                if (!tagFeedbackMessage.isNullOrBlank()) {
+                if (!tagFeedbackMessage.isNullOrBlank() && !(showTagDialog && tagFeedbackIsWarning)) {
                     Text(
                         text = tagFeedbackMessage.orEmpty(),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (tagFeedbackIsWarning) TaggoTheme.colors.warning else MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
+                        fontWeight = if (tagFeedbackIsWarning) FontWeight.SemiBold else FontWeight.Normal,
                     )
                 }
 
@@ -1785,6 +1834,7 @@ private fun DetailPage(
     if (showTagDialog) {
         AlertDialog(
             onDismissRequest = {
+                clearDuplicateTagWarning()
                 showTagDialog = false
                 newTagDraft = ""
             },
@@ -1820,8 +1870,9 @@ private fun DetailPage(
                     if (!tagFeedbackMessage.isNullOrBlank()) {
                         Text(
                             text = tagFeedbackMessage.orEmpty(),
-                            color = TaggoTheme.colors.textSecondary,
+                            color = if (tagFeedbackIsWarning) TaggoTheme.colors.warning else TaggoTheme.colors.textSecondary,
                             fontSize = 12.sp,
+                            fontWeight = if (tagFeedbackIsWarning) FontWeight.SemiBold else FontWeight.Normal,
                         )
                     }
 
@@ -1881,6 +1932,7 @@ private fun DetailPage(
             dismissButton = {
                 TextButton(
                     onClick = {
+                        clearDuplicateTagWarning()
                         newTagDraft = ""
                         showTagDialog = false
                     },
@@ -2464,8 +2516,8 @@ private fun AdaptiveFileGrid(
         val tileWidth = (maxWidth - spacing * (columns - 1)) / columns
         val tileHeight = when (windowSizeClass) {
             TaggoWindowSizeClass.Compact -> 78.dp
-            TaggoWindowSizeClass.Medium -> 96.dp
-            TaggoWindowSizeClass.Expanded -> 196.dp
+            TaggoWindowSizeClass.Medium -> 104.dp
+            TaggoWindowSizeClass.Expanded -> 216.dp
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(spacing)) {
@@ -2508,7 +2560,7 @@ private fun FileTileCard(
     val windowSizeClass = LocalTaggoWindowSizeClass.current
     val compactLayout = windowSizeClass == TaggoWindowSizeClass.Compact
     val mediumLayout = windowSizeClass == TaggoWindowSizeClass.Medium
-    val desktopThumbnailSize = if (mediumLayout) 64.dp else 72.dp
+    val desktopThumbnailSize = if (mediumLayout) 68.dp else 72.dp
     val metaLine = remember(reference, fullCjkFontReady) {
         buildList {
             val fileTypeLabel = displayTextForUi(reference.fileType, fullCjkFontReady).ifBlank { "file" }
@@ -2632,56 +2684,73 @@ private fun FileTileCard(
                 }
             }
         } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp),
+            Box(
+                modifier = Modifier.fillMaxSize(),
             ) {
-                FileCoverArtFrame(
-                    reference = reference,
-                    iconStyle = iconStyle,
-                    fullCjkFontReady = fullCjkFontReady,
-                    fullCjkFontFamily = fullCjkFontFamily,
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(94.dp),
-                    cornerShape = RoundedCornerShape(14.dp),
-                    iconSize = 42.dp,
-                )
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                        .fillMaxSize()
+                        .background(TaggoTheme.colors.surfaceVariant),
                 ) {
-                    Text(
-                        text = displayTextForUi(reference.title, fullCjkFontReady),
-                        modifier = Modifier.fillMaxWidth(),
-                        color = TaggoTheme.colors.textPrimary,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp,
-                        minLines = 2,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        fontFamily = fullCjkFontFamily,
+                    FileCoverArtFrame(
+                        reference = reference,
+                        iconStyle = iconStyle,
+                        fullCjkFontReady = fullCjkFontReady,
+                        fullCjkFontFamily = fullCjkFontFamily,
+                        modifier = Modifier.fillMaxSize(),
+                        cornerShape = RoundedCornerShape(14.dp),
+                        iconSize = 42.dp,
                     )
-
-                    Text(
-                        text = metaLine,
-                        modifier = Modifier.fillMaxWidth(),
-                        color = TaggoTheme.colors.textMuted,
-                        fontSize = 10.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-
-                    if (reference.tags.isNotEmpty()) {
-                        ReferenceTagSummary(
-                            tags = reference.tags,
-                            locale = locale,
-                            fullCjkFontReady = fullCjkFontReady,
-                            fullCjkFontFamily = fullCjkFontFamily,
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    TaggoTheme.colors.panelBackground.copy(alpha = 0.82f),
+                                    TaggoTheme.colors.panelBackground.copy(alpha = 0.96f),
+                                ),
+                            ),
+                        ),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 9.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Text(
+                            text = displayTextForUi(reference.title, fullCjkFontReady),
+                            modifier = Modifier.fillMaxWidth(),
+                            color = TaggoTheme.colors.textPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp,
+                            minLines = 1,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            fontFamily = fullCjkFontFamily,
                         )
+
+                        Text(
+                            text = metaLine,
+                            modifier = Modifier.fillMaxWidth(),
+                            color = TaggoTheme.colors.textSecondary,
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+
+                        if (reference.tags.isNotEmpty()) {
+                            ReferenceTagSummary(
+                                tags = reference.tags,
+                                locale = locale,
+                                fullCjkFontReady = fullCjkFontReady,
+                                fullCjkFontFamily = fullCjkFontFamily,
+                            )
+                        }
                     }
                 }
             }
@@ -2696,7 +2765,10 @@ private fun ReferenceTagSummary(
     fullCjkFontReady: Boolean,
     fullCjkFontFamily: FontFamily,
 ) {
-    val visibleTags = tags.take(2)
+    val windowSizeClass = LocalTaggoWindowSizeClass.current
+    val visibleTags = remember(tags, windowSizeClass) {
+        resolveVisibleCardTags(tags, windowSizeClass)
+    }
     val remainingTagCount = tags.size - visibleTags.size
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -2708,6 +2780,7 @@ private fun ReferenceTagSummary(
                 tag = tag,
                 fullCjkFontReady = fullCjkFontReady,
                 fullCjkFontFamily = fullCjkFontFamily,
+                modifier = Modifier.weight(1f, fill = false),
             )
         }
         if (remainingTagCount > 0) {
@@ -2730,6 +2803,36 @@ private fun OverflowTagHint(
         fontSize = 11.sp,
         fontWeight = FontWeight.Medium,
     )
+}
+
+private fun resolveVisibleCardTags(
+    tags: List<String>,
+    windowSizeClass: TaggoWindowSizeClass,
+): List<String> {
+    if (tags.isEmpty()) return emptyList()
+    val maxVisibleCount = when (windowSizeClass) {
+        TaggoWindowSizeClass.Expanded -> 4
+        TaggoWindowSizeClass.Medium -> 3
+        TaggoWindowSizeClass.Compact -> 3
+    }
+    val characterBudget = when (windowSizeClass) {
+        TaggoWindowSizeClass.Expanded -> 30
+        TaggoWindowSizeClass.Medium -> 22
+        TaggoWindowSizeClass.Compact -> 20
+    }
+    val visible = mutableListOf<String>()
+    var usedCharacters = 0
+    for (tag in tags) {
+        if (visible.size >= maxVisibleCount) break
+        val normalizedLength = tag.trim().length.coerceAtMost(10)
+        val nextCost = if (visible.isEmpty()) normalizedLength else normalizedLength + 2
+        val remainingAfterThis = tags.size - (visible.size + 1)
+        val overflowReserve = if (remainingAfterThis > 0) 6 else 0
+        if (visible.isNotEmpty() && usedCharacters + nextCost + overflowReserve > characterBudget) break
+        visible += tag
+        usedCharacters += nextCost
+    }
+    return if (visible.isEmpty()) listOf(tags.first()) else visible
 }
 
 @Composable

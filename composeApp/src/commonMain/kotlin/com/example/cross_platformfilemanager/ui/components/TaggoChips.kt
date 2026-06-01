@@ -133,6 +133,7 @@ internal fun TagPill(
     tag: String,
     fullCjkFontReady: Boolean,
     fullCjkFontFamily: FontFamily,
+    modifier: Modifier = Modifier,
 ) {
     val windowSizeClass = LocalTaggoWindowSizeClass.current
     val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 140.dp else 176.dp
@@ -140,7 +141,7 @@ internal fun TagPill(
         color = TaggoTheme.colors.panelBackgroundSoft,
         contentColor = TaggoTheme.colors.textSecondary,
         shape = RoundedCornerShape(999.dp),
-        modifier = Modifier.widthIn(max = maxChipWidth),
+        modifier = modifier.widthIn(max = maxChipWidth),
     ) {
         Text(
             text = displayTextForUi(tag, fullCjkFontReady),

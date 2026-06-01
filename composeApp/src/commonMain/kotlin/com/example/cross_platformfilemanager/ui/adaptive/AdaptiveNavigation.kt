@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -21,6 +22,7 @@ import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,39 +61,57 @@ internal fun <Page> TaggoBottomNavigation(
 ) {
     if (items.isEmpty()) return
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, TaggoTheme.colors.border, RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)),
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+        color = TaggoTheme.colors.surface.copy(alpha = 0.96f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
     ) {
-        NavigationBar(
-            containerColor = TaggoTheme.colors.surface,
-            contentColor = TaggoTheme.colors.textMuted,
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    width = 1.dp,
+                    color = TaggoTheme.colors.panelBorder.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+                ),
         ) {
-            items.forEach { item ->
-                NavigationBarItem(
-                    selected = item.page == selectedPage,
-                    onClick = { onPageSelected(item.page) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = TaggoTheme.colors.primaryAccent,
-                        selectedTextColor = TaggoTheme.colors.textPrimary,
-                        indicatorColor = TaggoTheme.colors.primaryAccentSoft,
-                        unselectedIconColor = TaggoTheme.colors.textMuted,
-                        unselectedTextColor = TaggoTheme.colors.textMuted,
-                    ),
-                    icon = {
-                        item.icon?.let {
-                            Icon(imageVector = it, contentDescription = null)
-                        }
-                    },
-                    label = {
-                        Text(
-                            text = item.label,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                )
+            HorizontalDivider(
+                thickness = 1.dp,
+                color = TaggoTheme.colors.panelHighlight.copy(alpha = 0.75f),
+            )
+            NavigationBar(
+                containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                contentColor = TaggoTheme.colors.textMuted,
+                tonalElevation = 0.dp,
+                windowInsets = WindowInsets(0.dp),
+            ) {
+                items.forEach { item ->
+                    NavigationBarItem(
+                        selected = item.page == selectedPage,
+                        onClick = { onPageSelected(item.page) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = TaggoTheme.colors.primaryAccent,
+                            selectedTextColor = TaggoTheme.colors.textPrimary,
+                            indicatorColor = TaggoTheme.colors.primaryAccentSoft,
+                            unselectedIconColor = TaggoTheme.colors.textMuted,
+                            unselectedTextColor = TaggoTheme.colors.textMuted,
+                        ),
+                        icon = {
+                            item.icon?.let {
+                                Icon(imageVector = it, contentDescription = null)
+                            }
+                        },
+                        label = {
+                            Text(
+                                text = item.label,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                    )
+                }
             }
         }
     }
