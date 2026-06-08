@@ -665,11 +665,14 @@ class FileManagerAppState(
     /**
      * 生成推荐候选文件列表。
      *
-     * 刚上传的新条目会优先留在“最近新增”区域展示，
-     * 不直接混入推荐候选，避免新上传提示和推荐排序互相干扰。
+     * 正式规则要求文件上传满 24 小时后才能成为推荐候选。
+     * 本地 UI 验收可以通过集中式调试开关仅绕过这段等待时间，
+     * 推荐排序、理由、打开记录和其他候选规则仍由推荐引擎正常处理。
      */
     private fun recommendationCandidates(): List<FileReference> {
         val now = nowMillis()
-        return repository.references.filterNot { shouldShowInNewUploadList(it, now) }
+        return repository.references.filter { reference ->
+            isEligibleForRecommendation(reference, now)
+        }
     }
 }
