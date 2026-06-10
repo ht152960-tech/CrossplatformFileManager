@@ -48,6 +48,8 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -118,6 +120,8 @@ import com.example.cross_platformfilemanager.ui.adaptive.AdaptiveAppScaffold
 import com.example.cross_platformfilemanager.ui.adaptive.AdaptiveNavigationItem
 import com.example.cross_platformfilemanager.ui.adaptive.LocalTaggoWindowSizeClass
 import com.example.cross_platformfilemanager.ui.adaptive.TaggoBottomNavigation
+import com.example.cross_platformfilemanager.ui.adaptive.TaggoNavigationRail
+import com.example.cross_platformfilemanager.ui.adaptive.TaggoSidebarNavigation
 import com.example.cross_platformfilemanager.ui.adaptive.TaggoWindowSizeClass
 import com.example.cross_platformfilemanager.ui.theme.TaggoTheme
 import com.example.cross_platformfilemanager.ui.theme.TaggoThemeTokens.HomeWide
@@ -247,6 +251,75 @@ private fun SidebarBrandHeader(
                     fontFamily = fontFamily,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun MediumNavigationSidebar(
+    items: List<AdaptiveNavigationItem<AppPage>>,
+    selectedPage: AppPage,
+    brandFontFamily: FontFamily,
+    uploadLabel: String,
+    onPageSelected: (AppPage) -> Unit,
+    onUpload: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(148.dp)
+            .border(
+                width = 1.dp,
+                color = TaggoGlobalColors.Border,
+                shape = RoundedCornerShape(
+                    topEnd = TaggoGlobalRadius.Card,
+                    bottomEnd = TaggoGlobalRadius.Card,
+                ),
+            ),
+        color = TaggoGlobalColors.PanelBackgroundSoft,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = TaggoGlobalSpacing.Sm, vertical = TaggoGlobalSpacing.Md),
+            verticalArrangement = Arrangement.spacedBy(TaggoGlobalSpacing.Xs),
+        ) {
+            SidebarBrandHeader(
+                label = "Taggo",
+                fontFamily = brandFontFamily,
+            )
+            items.forEach { item ->
+                NavigationRailItem(
+                    selected = item.page == selectedPage,
+                    onClick = { onPageSelected(item.page) },
+                    colors = NavigationRailItemDefaults.colors(
+                        selectedIconColor = TaggoGlobalColors.PrimaryAccent,
+                        selectedTextColor = TaggoGlobalColors.TextPrimary,
+                        indicatorColor = TaggoGlobalColors.PrimaryAccentSoft,
+                        unselectedIconColor = TaggoGlobalColors.TextMuted,
+                        unselectedTextColor = TaggoGlobalColors.TextMuted,
+                    ),
+                    icon = {
+                        item.icon?.let { icon ->
+                            Icon(imageVector = icon, contentDescription = null)
+                        }
+                    },
+                    label = {
+                        Text(
+                            text = item.label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                )
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            SidebarUploadButton(
+                label = uploadLabel,
+                onClick = onUpload,
+            )
         }
     }
 }
@@ -508,89 +581,131 @@ fun App() {
         }
         CompositionLocalProvider(LocalTextStyle provides appTextStyle) {
             ProvideTaggoTheme(uiFontFamily = uiFontFamily) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background,
-                ) {
-                    AdaptiveAppScaffold(
-                        currentPage = currentPage,
-                        selectedNavigationPage = selectedNavigationPage,
-                        navigationItems = navigationItems,
-                        onPageSelected = { currentPage = it },
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val useMediumHomeNavigation = currentPage == AppPage.Home &&
+                        maxHeight <= MediumHomeMetrics.MaxDashboardHeight
+                    Surface(
                         modifier = Modifier.fillMaxSize(),
-                        bottomBar = { actualWindowSizeClass ->
-                            if (
-                                currentPage != AppPage.Home ||
-                                actualWindowSizeClass != TaggoWindowSizeClass.Compact
-                            ) {
-                                TaggoBottomNavigation(
-                                    items = navigationItems,
-                                    selectedPage = selectedNavigationPage,
-                                    onPageSelected = { currentPage = it },
+                        color = MaterialTheme.colorScheme.background,
+                    ) {
+                        AdaptiveAppScaffold(
+                            currentPage = currentPage,
+                            selectedNavigationPage = selectedNavigationPage,
+                            navigationItems = navigationItems,
+                            onPageSelected = { currentPage = it },
+                            modifier = Modifier.fillMaxSize(),
+                            sideBar = { actualWindowSizeClass ->
+                                if (
+                                    currentPage == AppPage.Home &&
+                                    (
+                                        actualWindowSizeClass == TaggoWindowSizeClass.Medium ||
+                                            (
+                                                actualWindowSizeClass == TaggoWindowSizeClass.Expanded &&
+                                                    useMediumHomeNavigation
+                                                )
+                                            )
+                                ) {
+                                    MediumNavigationSidebar(
+                                        items = navigationItems,
+                                        selectedPage = selectedNavigationPage,
+                                        brandFontFamily = uiFontFamily,
+                                        uploadLabel = if (displayLocale == AppLocale.ZhCn) "\u4e0a\u4f20\u6587\u4ef6" else "Upload file",
+                                        onPageSelected = { currentPage = it },
+                                        onUpload = ::pickFileFromExistingEntry,
+                                    )
+                                } else if (actualWindowSizeClass == TaggoWindowSizeClass.Expanded) {
+                                    TaggoSidebarNavigation(
+                                        items = navigationItems,
+                                        selectedPage = selectedNavigationPage,
+                                        onPageSelected = { currentPage = it },
+                                        footer = {
+                                            SidebarUploadButton(
+                                                label = if (displayLocale == AppLocale.ZhCn) "\u4e0a\u4f20\u6587\u4ef6" else "Upload file",
+                                                onClick = ::pickFileFromExistingEntry,
+                                            )
+                                        },
+                                    )
+                                } else {
+                                    TaggoNavigationRail(
+                                        items = navigationItems,
+                                        selectedPage = selectedNavigationPage,
+                                        onPageSelected = { currentPage = it },
+                                    )
+                                }
+                            },
+                            bottomBar = { actualWindowSizeClass ->
+                                if (
+                                    currentPage != AppPage.Home ||
+                                    actualWindowSizeClass != TaggoWindowSizeClass.Compact
+                                ) {
+                                    TaggoBottomNavigation(
+                                        items = navigationItems,
+                                        selectedPage = selectedNavigationPage,
+                                        onPageSelected = { currentPage = it },
+                                    )
+                                }
+                            },
+                            sideBarFooter = {
+                                SidebarUploadButton(
+                                    label = if (displayLocale == AppLocale.ZhCn) "\u4e0a\u4f20\u6587\u4ef6" else "Upload file",
+                                    onClick = ::pickFileFromExistingEntry,
                                 )
+                            },
+                        ) { actualWindowSizeClass ->
+                            val homeCompactLayout = currentPage == AppPage.Home &&
+                                actualWindowSizeClass == TaggoWindowSizeClass.Compact
+                            val homeWideOuterLayout = currentPage == AppPage.Home && !homeCompactLayout
+                            val pagePadding = when {
+                                homeWideOuterLayout -> PaddingValues(0.dp)
+                                homeCompactLayout -> PaddingValues(
+                                    start = CompactHomeMetrics.PageHorizontalPadding,
+                                    top = CompactHomeMetrics.PageTopPadding,
+                                    end = CompactHomeMetrics.PageHorizontalPadding,
+                                )
+                                else -> PaddingValues(20.dp)
                             }
-                        },
-                        sideBarFooter = {
-                            SidebarUploadButton(
-                                label = if (displayLocale == AppLocale.ZhCn) "\u4e0a\u4f20\u6587\u4ef6" else "Upload file",
-                                onClick = ::pickFileFromExistingEntry,
-                            )
-                        },
-                    ) { actualWindowSizeClass ->
-                        val homeCompactLayout = currentPage == AppPage.Home &&
-                            actualWindowSizeClass == TaggoWindowSizeClass.Compact
-                        val homeWideOuterLayout = currentPage == AppPage.Home && !homeCompactLayout
-                        val pagePadding = when {
-                            homeWideOuterLayout -> PaddingValues(0.dp)
-                            homeCompactLayout -> PaddingValues(
-                                start = CompactHomeMetrics.PageHorizontalPadding,
-                                top = CompactHomeMetrics.PageTopPadding,
-                                end = CompactHomeMetrics.PageHorizontalPadding,
-                            )
-                            else -> PaddingValues(20.dp)
-                        }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(TaggoTheme.colors.backgroundBrush),
-                        ) {
-                            Column(
+                            Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(pagePadding)
-                                    .then(
-                                        if (homeWideOuterLayout || homeCompactLayout) {
-                                            Modifier
-                                        } else {
-                                            Modifier.verticalScroll(pageScrollState)
-                                        },
-                                    ),
-                                verticalArrangement = Arrangement.spacedBy(if (homeWideOuterLayout) 0.dp else 18.dp),
+                                    .background(TaggoTheme.colors.backgroundBrush),
                             ) {
-                                when (currentPage) {
-                                    AppPage.Home -> HomePage(
-                                        appState = appState,
-                                        locale = displayLocale,
-                                        fullCjkFontReady = fullCjkFontReady,
-                                        fullCjkTextStyle = fullCjkTextStyle,
-                                        fullCjkFontFamily = fullCjkFontFamily,
-                                        searchDraft = searchDraft,
-                                        onSearchDraftChange = { searchDraft = it },
-                                        onOpenMenu = { showSideMenu = true },
-                                        onSearch = ::startSearchFromHome,
-                                        onOpenReference = ::openReference,
-                                        onOpenFile = ::openFileDirectly,
-                                        onOpenTags = { currentPage = AppPage.Tags },
-                                        onOpenAllFiles = {
-                                            allFilesTypeFilter = AllFilesTypeFilter.All
-                                            currentPage = AppPage.AllFiles
-                                        },
-                                        onOpenTypeFilter = { filter ->
-                                            allFilesTypeFilter = filter
-                                            currentPage = AppPage.AllFiles
-                                        },
-                                        onTagClick = ::openTagSearch,
-                                    )
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(pagePadding)
+                                        .then(
+                                            if (homeWideOuterLayout || homeCompactLayout) {
+                                                Modifier
+                                            } else {
+                                                Modifier.verticalScroll(pageScrollState)
+                                            },
+                                        ),
+                                    verticalArrangement = Arrangement.spacedBy(if (homeWideOuterLayout) 0.dp else 18.dp),
+                                ) {
+                                    when (currentPage) {
+                                        AppPage.Home -> HomePage(
+                                            appState = appState,
+                                            locale = displayLocale,
+                                            fullCjkFontReady = fullCjkFontReady,
+                                            fullCjkTextStyle = fullCjkTextStyle,
+                                            fullCjkFontFamily = fullCjkFontFamily,
+                                            searchDraft = searchDraft,
+                                            onSearchDraftChange = { searchDraft = it },
+                                            onOpenMenu = { showSideMenu = true },
+                                            onSearch = ::startSearchFromHome,
+                                            onOpenReference = ::openReference,
+                                            onOpenFile = ::openFileDirectly,
+                                            onOpenTags = { currentPage = AppPage.Tags },
+                                            onOpenAllFiles = {
+                                                allFilesTypeFilter = AllFilesTypeFilter.All
+                                                currentPage = AppPage.AllFiles
+                                            },
+                                            onOpenTypeFilter = { filter ->
+                                                allFilesTypeFilter = filter
+                                                currentPage = AppPage.AllFiles
+                                            },
+                                            onTagClick = ::openTagSearch,
+                                        )
 
                                     AppPage.Tags -> TagsPage(
                                         appState = appState,
@@ -804,6 +919,7 @@ fun App() {
                                     },
                                 )
                             }
+                        }
                         }
                     }
                 }
@@ -1201,33 +1317,55 @@ private fun HomeExpandedDashboard(
 
 private object MediumHomeMetrics {
     val MaxDashboardHeight = 560.dp
-    val PagePadding = TaggoGlobalSpacing.Xxl
-    val SectionGap = TaggoGlobalSpacing.Md
-    val ColumnGap = TaggoGlobalSpacing.Lg
-    val HeaderHeight = 54.dp
-    val HeaderGap = TaggoGlobalSpacing.Md
-    val HeaderTitleWidth = 174.dp
-    val AccountSize = 42.dp
-    val SearchHeight = 42.dp
-    val SearchMaxWidth = 360.dp
-    val SearchButtonWidth = 64.dp
-    val CardPadding = TaggoGlobalSpacing.Md
-    val CardContentGap = 8.dp
-    val SupportCardGap = TaggoGlobalSpacing.Md
-    val SupportColumnWidth = 300.dp
-    val RecommendationRowHeight = 68.dp
-    val RecommendationRowGap = 6.dp
+    val PagePadding = TaggoGlobalSpacing.Md
+    val SectionGap = TaggoGlobalSpacing.Sm
+    val ColumnGap = TaggoGlobalSpacing.Md
+    val HeaderHeight = 40.dp
+    val HeaderGap = 8.dp
+    val HeaderTitleGap = 0.dp
+    val HeaderTitleWidth = 166.dp
+    val AccountSize = 36.dp
+    val SearchHeight = 36.dp
+    val SearchMinWidth = 360.dp
+    val SearchMaxWidth = 420.dp
+    val CardPadding = 4.dp
+    val CardContentGap = 2.dp
+    val SupportCardGap = TaggoGlobalSpacing.Sm
+    val SupportColumnWidthCompact = 300.dp
+    val SupportColumnWidthMedium = 320.dp
+    val SupportColumnWidthWide = 340.dp
+    val FooterHeight = 22.dp
+    val RecommendationCardPadding = 10.dp
+    val RecommendationListBottomPadding = 24.dp
+    val RecommendationRowHeight = 80.dp
+    val RecommendationRowGap = TaggoGlobalSpacing.Sm
     val RecommendationIconSize = 44.dp
-    val RecommendationOpenWidth = 62.dp
-    val RecentRowHeight = 54.dp
-    val RecentIconSize = 36.dp
-    val RecentTimeWidth = 52.dp
-    val TagChipHeight = 32.dp
-    val TagGridGap = 7.dp
-    val TypeRowHeight = 34.dp
+    val RecentRowHeight = 40.dp
+    val RecentIconSize = 32.dp
+    val RecentTimeWidth = 56.dp
+    val RecentRowGap = 4.dp
+    val TagItemWidth = 124.dp
+    val TagNameWidth = 72.dp
+    val TagCountWidth = 20.dp
+    val TagItemHeight = 32.dp
+    val TagItemHorizontalPadding = 10.dp
+    val TagGridGap = TaggoGlobalSpacing.Sm
+    val TypeRowHeight = 28.dp
     val TypeNameWidth = 42.dp
     val TypeCountWidth = 24.dp
     val TypeBarHeight = 4.dp
+    val TypeRowGap = 2.dp
+    val PageTitleFontSize = 20.sp
+    val PageSubtitleFontSize = 11.sp
+    val SectionTitleFontSize = 15.sp
+    val RecommendationTitleFontSize = 14.sp
+    val RecentTitleFontSize = 13.sp
+    val AuxiliaryFontSize = 11.sp
+    val TypeNameFontSize = 12.sp
+    val CountFontSize = 11.sp
+    val RecommendationBadgeHorizontalPadding = 6.dp
+    val RecommendationBadgeVerticalPadding = 2.dp
+    const val RecommendationBadgeBackgroundAlpha = 0.58f
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -1250,160 +1388,257 @@ private fun HomeMediumDashboard(
     onOpenTypeFilter: (AllFilesTypeFilter) -> Unit,
     onTagClick: (String) -> Unit,
 ) {
-    val recentItems = appState.recentAddedReferences.take(3)
     val tagSummaries = remember(appState.allReferences, appState.topTags) {
         resolveDashboardTagSummaries(appState.allReferences, appState.topTags)
     }
     val typeSummaries = remember(appState.allReferences) {
         resolveDashboardTypeSummaries(appState.allReferences)
     }
-    val entryTags = tagSummaries.take(6)
-    val entryTypes = typeSummaries.filter { it.count > 0 }.take(5)
-    val supportScrollState = rememberScrollState()
-
     CompositionLocalProvider(
         LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = fullCjkFontFamily),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(MediumHomeMetrics.PagePadding),
-            verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.SectionGap),
-        ) {
-            MediumHomeHeader(
-                locale = locale,
-                searchDraft = searchDraft,
-                searchPlaceholder = appState.searchPlaceholder,
-                textStyle = fullCjkTextStyle,
-                onSearchDraftChange = onSearchDraftChange,
-                onSearch = onSearch,
-                onOpenMenu = onOpenMenu,
-            )
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val supportColumnWidth = when {
+                maxWidth >= 960.dp -> MediumHomeMetrics.SupportColumnWidthWide
+                maxWidth >= 900.dp -> MediumHomeMetrics.SupportColumnWidthMedium
+                else -> MediumHomeMetrics.SupportColumnWidthCompact
+            }
+            val recentItemLimit = when {
+                maxHeight <= 400.dp -> 2
+                maxHeight <= 460.dp -> 3
+                else -> 4
+            }
+            val recentItems = appState.recentAddedReferences.take(recentItemLimit)
+            val entryTags = tagSummaries.take(if (maxHeight <= 400.dp) 4 else 6)
+            val entryTypes = typeSummaries
+                .filter { it.count > 0 }
+                .take(if (maxHeight <= 400.dp) 3 else 4)
+            val supportScrollState = rememberScrollState()
 
-            Row(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(MediumHomeMetrics.ColumnGap),
-                verticalAlignment = Alignment.Top,
+                    .fillMaxSize()
+                    .padding(MediumHomeMetrics.PagePadding),
+                verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.SectionGap),
             ) {
-                MediumSmartRecommendationCard(
-                    recommendations = scoredRecommendedReferences,
+                MediumHomeHeader(
                     locale = locale,
-                    fullCjkFontReady = fullCjkFontReady,
-                    fullCjkFontFamily = fullCjkFontFamily,
-                    onOpenFile = onOpenFile,
-                    onOpenReference = onOpenReference,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
+                    searchDraft = searchDraft,
+                    searchPlaceholder = appState.searchPlaceholder,
+                    textStyle = fullCjkTextStyle,
+                    onSearchDraftChange = onSearchDraftChange,
+                    onSearch = onSearch,
+                    onOpenMenu = onOpenMenu,
                 )
 
-                Column(
+                Row(
                     modifier = Modifier
-                        .width(MediumHomeMetrics.SupportColumnWidth)
-                        .fillMaxHeight()
-                        .verticalScroll(supportScrollState),
-                    verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.SupportCardGap),
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(MediumHomeMetrics.ColumnGap),
+                    verticalAlignment = Alignment.Top,
                 ) {
-                    TaggoSectionCard(
-                        title = appState.recentlyAdded,
-                        compact = true,
-                        compactPadding = MediumHomeMetrics.CardPadding,
-                        compactContentGap = MediumHomeMetrics.CardContentGap,
-                        compactTitleFontSize = 15.sp,
-                        trailing = {
-                            TaggoMoreButton(
-                                label = if (locale == AppLocale.ZhCn) "\u67e5\u770b\u5168\u90e8" else "View all",
-                                onClick = onOpenAllFiles,
-                                compact = true,
-                            )
-                        },
-                    ) {
-                        if (recentItems.isEmpty()) {
-                            TaggoEmptyState(
-                                title = if (locale == AppLocale.ZhCn) "\u8fd8\u6ca1\u6709\u65b0\u6587\u4ef6" else "No recent files yet",
-                                description = if (locale == AppLocale.ZhCn) "\u5bfc\u5165\u540e\u4f1a\u5728\u8fd9\u91cc\u663e\u793a\u3002" else "Imported files will appear here.",
-                                compact = true,
-                            )
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                recentItems.forEach { reference ->
-                                    MediumRecentFileRow(
-                                        reference = reference,
-                                        locale = locale,
-                                        fullCjkFontReady = fullCjkFontReady,
-                                        fullCjkFontFamily = fullCjkFontFamily,
-                                        onOpenFile = { onOpenFile(reference) },
-                                        onViewDetails = { onOpenReference(reference) },
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    MediumSmartRecommendationCard(
+                        recommendations = scoredRecommendedReferences,
+                        locale = locale,
+                        fullCjkFontReady = fullCjkFontReady,
+                        fullCjkFontFamily = fullCjkFontFamily,
+                        onOpenFile = onOpenFile,
+                        onOpenReference = onOpenReference,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    )
 
-                    TaggoSectionCard(
-                        title = if (locale == AppLocale.ZhCn) "\u5e38\u7528\u6807\u7b7e" else "Tags",
-                        compact = true,
-                        compactPadding = MediumHomeMetrics.CardPadding,
-                        compactContentGap = MediumHomeMetrics.CardContentGap,
-                        compactTitleFontSize = 15.sp,
-                        trailing = {
-                            TaggoMoreButton(
-                                label = if (locale == AppLocale.ZhCn) "\u67e5\u770b\u5168\u90e8" else "View all",
-                                onClick = onOpenTags,
-                                compact = true,
-                            )
-                        },
+                    Column(
+                        modifier = Modifier
+                            .width(supportColumnWidth)
+                            .fillMaxHeight()
+                            .verticalScroll(supportScrollState),
+                        verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.SupportCardGap),
                     ) {
-                        if (entryTags.isEmpty()) {
-                            TaggoEmptyState(
-                                title = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u6807\u7b7e" else "No tags yet",
-                                description = if (locale == AppLocale.ZhCn) "\u6dfb\u52a0\u6807\u7b7e\u540e\u4f1a\u5728\u8fd9\u91cc\u663e\u793a\u3002" else "Tagged files will appear here.",
-                                compact = true,
-                            )
-                        } else {
-                            MediumTagGrid(
-                                tags = entryTags,
-                                fullCjkFontReady = fullCjkFontReady,
-                                fullCjkFontFamily = fullCjkFontFamily,
-                                onTagClick = onTagClick,
-                            )
-                        }
-                    }
+                        MediumRecentCard(
+                            title = appState.recentlyAdded,
+                            items = recentItems,
+                            locale = locale,
+                            fullCjkFontReady = fullCjkFontReady,
+                            fullCjkFontFamily = fullCjkFontFamily,
+                            onOpenAllFiles = onOpenAllFiles,
+                            onOpenFile = onOpenFile,
+                            onOpenReference = onOpenReference,
+                        )
 
-                    TaggoSectionCard(
-                        title = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u7c7b\u578b" else "File types",
-                        compact = true,
-                        compactPadding = MediumHomeMetrics.CardPadding,
-                        compactContentGap = MediumHomeMetrics.CardContentGap,
-                        compactTitleFontSize = 15.sp,
-                        trailing = {
-                            TaggoMoreButton(
-                                label = if (locale == AppLocale.ZhCn) "\u67e5\u770b\u5168\u90e8" else "View all",
-                                onClick = onOpenAllFiles,
-                                compact = true,
-                            )
-                        },
-                    ) {
-                        if (entryTypes.isEmpty()) {
-                            TaggoEmptyState(
-                                title = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u6587\u4ef6\u7c7b\u578b" else "No file types yet",
-                                description = if (locale == AppLocale.ZhCn) "\u5bfc\u5165\u6587\u4ef6\u540e\u4f1a\u663e\u793a\u7edf\u8ba1\u3002" else "Type statistics appear after import.",
-                                compact = true,
-                            )
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                entryTypes.forEach { summary ->
-                                    MediumFileTypeRow(
-                                        summary = summary,
-                                        locale = locale,
-                                        onClick = { onOpenTypeFilter(summary.filter) },
-                                    )
-                                }
-                            }
-                        }
+                        MediumTagsCard(
+                            tags = entryTags,
+                            locale = locale,
+                            fullCjkFontReady = fullCjkFontReady,
+                            fullCjkFontFamily = fullCjkFontFamily,
+                            onOpenTags = onOpenTags,
+                            onTagClick = onTagClick,
+                        )
+
+                        MediumFileTypesCard(
+                            types = entryTypes,
+                            locale = locale,
+                            onOpenAllFiles = onOpenAllFiles,
+                            onOpenTypeFilter = onOpenTypeFilter,
+                        )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MediumCardFooter(
+    label: String,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(MediumHomeMetrics.FooterHeight),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier
+                .clickable(onClick = onClick)
+                .padding(horizontal = TaggoGlobalSpacing.Xs),
+            color = TaggoGlobalColors.PrimaryAccent,
+            fontSize = TaggoGlobalTypography.BodySmall,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun MediumRecentCard(
+    title: String,
+    items: List<FileReference>,
+    locale: AppLocale,
+    fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
+    onOpenAllFiles: () -> Unit,
+    onOpenFile: (FileReference) -> Unit,
+    onOpenReference: (FileReference) -> Unit,
+) {
+    TaggoSectionCard(
+        title = title,
+        compact = true,
+        compactPadding = MediumHomeMetrics.CardPadding,
+        compactContentGap = MediumHomeMetrics.CardContentGap,
+        compactTitleFontSize = MediumHomeMetrics.SectionTitleFontSize,
+        footer = {
+            MediumCardFooter(
+                label = if (locale == AppLocale.ZhCn) "\u67e5\u770b\u5168\u90e8 >" else "View all >",
+                onClick = onOpenAllFiles,
+            )
+        },
+    ) {
+        if (items.isEmpty()) {
+            TaggoEmptyState(
+                title = if (locale == AppLocale.ZhCn) "\u8fd8\u6ca1\u6709\u65b0\u6587\u4ef6" else "No recent files yet",
+                description = if (locale == AppLocale.ZhCn) "\u5bfc\u5165\u540e\u4f1a\u5728\u8fd9\u91cc\u663e\u793a\u3002" else "Imported files will appear here.",
+                compact = true,
+            )
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.RecentRowGap)) {
+                items.forEach { reference ->
+                    MediumRecentFileRow(
+                        reference = reference,
+                        locale = locale,
+                        fullCjkFontReady = fullCjkFontReady,
+                        fullCjkFontFamily = fullCjkFontFamily,
+                        onOpenFile = { onOpenFile(reference) },
+                        onViewDetails = { onOpenReference(reference) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MediumTagsCard(
+    tags: List<DashboardTagSummary>,
+    locale: AppLocale,
+    fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
+    onOpenTags: () -> Unit,
+    onTagClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    TaggoSectionCard(
+        title = if (locale == AppLocale.ZhCn) "\u5e38\u7528\u6807\u7b7e" else "Tags",
+        modifier = modifier,
+        compact = true,
+        compactPadding = MediumHomeMetrics.CardPadding,
+        compactContentGap = MediumHomeMetrics.CardContentGap,
+        compactTitleFontSize = MediumHomeMetrics.SectionTitleFontSize,
+        footer = {
+            MediumCardFooter(
+                label = if (locale == AppLocale.ZhCn) "\u67e5\u770b\u5168\u90e8 >" else "View all >",
+                onClick = onOpenTags,
+            )
+        },
+    ) {
+        if (tags.isEmpty()) {
+            TaggoEmptyState(
+                title = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u6807\u7b7e" else "No tags yet",
+                description = if (locale == AppLocale.ZhCn) "\u6dfb\u52a0\u6807\u7b7e\u540e\u4f1a\u5728\u8fd9\u91cc\u663e\u793a\u3002" else "Tagged files will appear here.",
+                compact = true,
+            )
+        } else {
+            MediumTagGrid(
+                tags = tags,
+                fullCjkFontReady = fullCjkFontReady,
+                fullCjkFontFamily = fullCjkFontFamily,
+                onTagClick = onTagClick,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MediumFileTypesCard(
+    types: List<DashboardTypeSummary>,
+    locale: AppLocale,
+    onOpenAllFiles: () -> Unit,
+    onOpenTypeFilter: (AllFilesTypeFilter) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    TaggoSectionCard(
+        title = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u7c7b\u578b" else "File types",
+        modifier = modifier,
+        compact = true,
+        compactPadding = MediumHomeMetrics.CardPadding,
+        compactContentGap = MediumHomeMetrics.CardContentGap,
+        compactTitleFontSize = MediumHomeMetrics.SectionTitleFontSize,
+        footer = {
+            MediumCardFooter(
+                label = if (locale == AppLocale.ZhCn) "\u67e5\u770b\u5168\u90e8 >" else "View all >",
+                onClick = onOpenAllFiles,
+            )
+        },
+    ) {
+        if (types.isEmpty()) {
+            TaggoEmptyState(
+                title = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u6587\u4ef6\u7c7b\u578b" else "No file types yet",
+                description = if (locale == AppLocale.ZhCn) "\u5bfc\u5165\u6587\u4ef6\u540e\u4f1a\u663e\u793a\u7edf\u8ba1\u3002" else "Type statistics appear after import.",
+                compact = true,
+            )
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.TypeRowGap)) {
+                types.forEach { summary ->
+                    MediumFileTypeRow(
+                        summary = summary,
+                        locale = locale,
+                        onClick = { onOpenTypeFilter(summary.filter) },
+                    )
                 }
             }
         }
@@ -1432,7 +1667,7 @@ private fun MediumSmartRecommendationCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(TaggoGlobalSpacing.Md),
+                .padding(MediumHomeMetrics.RecommendationCardPadding),
             verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.CardContentGap),
         ) {
             Row(
@@ -1443,7 +1678,7 @@ private fun MediumSmartRecommendationCard(
                     text = if (locale == AppLocale.ZhCn) "\u667a\u80fd\u63a8\u8350" else "Recommended files",
                     modifier = Modifier.weight(1f),
                     color = TaggoGlobalColors.TextPrimary,
-                    fontSize = TaggoGlobalTypography.TitleMedium,
+                    fontSize = MediumHomeMetrics.SectionTitleFontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1475,6 +1710,10 @@ private fun MediumSmartRecommendationCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
+                    contentPadding = PaddingValues(
+                        top = 0.dp,
+                        bottom = MediumHomeMetrics.RecommendationListBottomPadding,
+                    ),
                     verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.RecommendationRowGap),
                 ) {
                     items(recommendations) { recommendation ->
@@ -1489,8 +1728,8 @@ private fun MediumSmartRecommendationCard(
                     }
                 }
             }
-        }
     }
+}
 }
 
 @Composable
@@ -1512,12 +1751,12 @@ private fun MediumHomeHeader(
     ) {
         Column(
             modifier = Modifier.width(MediumHomeMetrics.HeaderTitleWidth),
-            verticalArrangement = Arrangement.spacedBy(TaggoGlobalSpacing.Xs),
+            verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.HeaderTitleGap),
         ) {
             Text(
                 text = if (locale == AppLocale.ZhCn) "\u63a8\u8350" else "Recommended",
                 color = TaggoGlobalColors.TextPrimary,
-                fontSize = 20.sp,
+                fontSize = MediumHomeMetrics.PageTitleFontSize,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1529,7 +1768,7 @@ private fun MediumHomeHeader(
                     "Quick access and recently used files"
                 },
                 color = TaggoGlobalColors.TextMuted,
-                fontSize = TaggoGlobalTypography.Caption,
+                fontSize = MediumHomeMetrics.PageSubtitleFontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1542,13 +1781,10 @@ private fun MediumHomeHeader(
             onSearch = onSearch,
             modifier = Modifier
                 .weight(1f)
-                .widthIn(max = MediumHomeMetrics.SearchMaxWidth),
-        )
-        TaggoOpenButton(
-            label = if (locale == AppLocale.ZhCn) "\u641c\u7d22" else "Search",
-            onClick = onSearch,
-            modifier = Modifier.width(MediumHomeMetrics.SearchButtonWidth),
-            compact = true,
+                .widthIn(
+                    min = MediumHomeMetrics.SearchMinWidth,
+                    max = MediumHomeMetrics.SearchMaxWidth,
+                ),
         )
         Spacer(modifier = Modifier.weight(0.2f))
         MediumAccountButton(
@@ -1595,8 +1831,8 @@ private fun MediumHomeSearchField(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(horizontal = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -1604,7 +1840,7 @@ private fun MediumHomeSearchField(
                     contentDescription = if (query.isBlank()) placeholder else query,
                     tint = TaggoGlobalColors.TextSecondary,
                     modifier = Modifier
-                        .size(18.dp)
+                        .size(16.dp)
                         .clickable(onClick = onSearch),
                 )
                 Box(
@@ -1615,7 +1851,7 @@ private fun MediumHomeSearchField(
                         Text(
                             text = placeholder,
                             color = TaggoGlobalColors.TextMuted,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -1655,7 +1891,7 @@ private fun MediumAccountButton(
                 imageVector = Icons.Outlined.AccountCircle,
                 contentDescription = if (locale == AppLocale.ZhCn) "\u8d26\u53f7" else "Account",
                 tint = TaggoGlobalColors.TextPrimary,
-                modifier = Modifier.size(27.dp),
+                modifier = Modifier.size(23.dp),
             )
         }
     }
@@ -1671,13 +1907,20 @@ private fun MediumRecommendedFileRow(
     onViewDetails: () -> Unit,
 ) {
     val reference = recommendation.file
+    val visibleTags = remember(reference.tags) {
+        resolveVisibleCardTags(reference.tags, TaggoWindowSizeClass.Medium)
+    }
+    val remainingTagCount = reference.tags.size - visibleTags.size
     TaggoListItemSurface(
         shape = RoundedCornerShape(TaggoGlobalRadius.Item),
         backgroundColor = TaggoGlobalColors.ItemBackground.copy(alpha = 0.34f),
         borderColor = TaggoGlobalColors.Border.copy(alpha = 0.42f),
         height = MediumHomeMetrics.RecommendationRowHeight,
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        contentPadding = PaddingValues(
+            horizontal = TaggoGlobalSpacing.Sm,
+            vertical = 4.dp,
+        ),
+        horizontalArrangement = Arrangement.spacedBy(TaggoGlobalSpacing.Sm),
         onClick = onViewDetails,
     ) {
         MediumOpenableCover(
@@ -1685,13 +1928,13 @@ private fun MediumRecommendedFileRow(
             fullCjkFontReady = fullCjkFontReady,
             fullCjkFontFamily = fullCjkFontFamily,
             modifier = Modifier.size(MediumHomeMetrics.RecommendationIconSize),
-            cornerRadius = 9.dp,
+            cornerRadius = 10.dp,
             iconSize = 25.dp,
             onOpenFile = onOpenFile,
         )
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -1701,8 +1944,8 @@ private fun MediumRecommendedFileRow(
                     text = displayTextForUi(reference.title, fullCjkFontReady),
                     modifier = Modifier.weight(1f),
                     color = TaggoGlobalColors.TextPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = MediumHomeMetrics.RecommendationTitleFontSize,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     fontFamily = fullCjkFontFamily,
@@ -1722,19 +1965,78 @@ private fun MediumRecommendedFileRow(
                 Text(
                     text = compactRecommendationReason(recommendation, locale),
                     color = TaggoGlobalColors.TextSecondary,
-                    fontSize = 11.sp,
+                    fontSize = MediumHomeMetrics.AuxiliaryFontSize,
                     lineHeight = 14.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            if (reference.tags.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(22.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    visibleTags.forEach { tag ->
+                        Surface(
+                            modifier = Modifier
+                                .height(22.dp)
+                                .widthIn(max = 76.dp),
+                            shape = RoundedCornerShape(TaggoGlobalRadius.Badge),
+                            color = TaggoGlobalColors.PrimaryAccentSoft.copy(alpha = 0.72f),
+                            contentColor = TaggoGlobalColors.TextSecondary,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(horizontal = 6.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = displayTextForUi(tag, fullCjkFontReady),
+                                    fontSize = TaggoGlobalTypography.Caption,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontFamily = fullCjkFontFamily,
+                                )
+                            }
+                        }
+                    }
+                    if (remainingTagCount > 0) {
+                        Text(
+                            text = "+$remainingTagCount",
+                            color = TaggoGlobalColors.TextMuted,
+                            fontSize = TaggoGlobalTypography.Caption,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            } else {
+                Surface(
+                    modifier = Modifier.height(22.dp),
+                    shape = RoundedCornerShape(TaggoGlobalRadius.Badge),
+                    color = TaggoGlobalColors.SurfaceVariant.copy(alpha = 0.46f),
+                    contentColor = TaggoGlobalColors.TextMuted,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
+                ) {
+                    Box(
+                        modifier = Modifier.padding(horizontal = 6.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = if (locale == AppLocale.ZhCn) "\u65e0\u6807\u7b7e" else "No tags",
+                            fontSize = TaggoGlobalTypography.Caption,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
         }
-        TaggoOpenButton(
-            label = if (locale == AppLocale.ZhCn) "\u6253\u5f00" else "Open",
-            onClick = onOpenFile,
-            modifier = Modifier.width(MediumHomeMetrics.RecommendationOpenWidth),
-            compact = true,
-        )
     }
 }
 
@@ -1756,8 +2058,11 @@ private fun MediumRecentFileRow(
         borderColor = Color.Transparent,
         height = MediumHomeMetrics.RecentRowHeight,
         borderWidth = 0.dp,
-        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        contentPadding = PaddingValues(
+            horizontal = TaggoGlobalSpacing.Sm,
+            vertical = 4.dp,
+        ),
+        horizontalArrangement = Arrangement.spacedBy(TaggoGlobalSpacing.Sm),
         onClick = onViewDetails,
     ) {
         MediumOpenableCover(
@@ -1765,44 +2070,32 @@ private fun MediumRecentFileRow(
             fullCjkFontReady = fullCjkFontReady,
             fullCjkFontFamily = fullCjkFontFamily,
             modifier = Modifier.size(MediumHomeMetrics.RecentIconSize),
-            cornerRadius = 7.dp,
-            iconSize = 19.dp,
+            cornerRadius = 8.dp,
+            iconSize = 18.dp,
             onOpenFile = onOpenFile,
         )
-        Column(
+        Row(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(TaggoGlobalSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(TaggoGlobalSpacing.Xs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = displayTextForUi(reference.title, fullCjkFontReady),
-                    modifier = Modifier.weight(1f),
-                    color = TaggoGlobalColors.TextPrimary,
-                    fontSize = TaggoGlobalTypography.BodySmall,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontFamily = fullCjkFontFamily,
-                )
-                CompactFileTypeBadge(label = compactFileTypeLabel(reference))
-            }
             Text(
-                text = displayTextForUi(reference.source, fullCjkFontReady),
-                color = TaggoGlobalColors.TextMuted.copy(alpha = TaggoGlobalAlpha.Strong),
-                fontSize = TaggoGlobalTypography.Caption,
+                text = displayTextForUi(reference.title, fullCjkFontReady),
+                modifier = Modifier.weight(1f),
+                color = TaggoGlobalColors.TextPrimary,
+                fontSize = MediumHomeMetrics.RecentTitleFontSize,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 fontFamily = fullCjkFontFamily,
             )
+            CompactFileTypeBadge(label = compactFileTypeLabel(reference))
         }
         Text(
             text = addedTime,
             modifier = Modifier.width(MediumHomeMetrics.RecentTimeWidth),
             color = TaggoGlobalColors.TextMuted,
-            fontSize = 10.sp,
+            fontSize = MediumHomeMetrics.AuxiliaryFontSize,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.End,
@@ -1822,7 +2115,12 @@ private fun MediumOpenableCover(
 ) {
     val iconStyle = fileTypeIconStyle(reference)
     val shape = RoundedCornerShape(cornerRadius)
-    val isVideo = FileTypeClassifier.classify(reference) == FileTypeCategory.Video
+    val fileType = FileTypeClassifier.classify(reference)
+    val overlayIcon = when (fileType) {
+        FileTypeCategory.Video -> Icons.Outlined.PlayArrow
+        FileTypeCategory.Audio -> Icons.Outlined.MusicNote
+        else -> Icons.AutoMirrored.Outlined.OpenInNew
+    }
     Box(
         modifier = modifier
             .clip(shape)
@@ -1838,18 +2136,26 @@ private fun MediumOpenableCover(
             cornerShape = shape,
             iconSize = iconSize,
         )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = TaggoGlobalAlpha.Hover)),
-            contentAlignment = Alignment.Center,
-        ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(TaggoGlobalColors.PanelBackgroundSoft.copy(alpha = 0.82f))
+                    .border(
+                        width = 1.dp,
+                        color = TaggoGlobalColors.BorderStrong.copy(alpha = 0.72f),
+                        shape = RoundedCornerShape(10.dp),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
             Icon(
-                imageVector = if (isVideo) Icons.Outlined.PlayArrow else Icons.AutoMirrored.Outlined.OpenInNew,
+                imageVector = overlayIcon,
                 contentDescription = null,
-                tint = TaggoGlobalColors.TextPrimary.copy(alpha = TaggoGlobalAlpha.Strong),
-                modifier = Modifier.size(if (isVideo) 22.dp else 16.dp),
-            )
+                    tint = TaggoGlobalColors.TextPrimary.copy(alpha = 0.9f),
+                    modifier = Modifier.size(13.dp),
+                )
+            }
         }
     }
 }
@@ -1858,19 +2164,21 @@ private fun MediumOpenableCover(
 private fun MediumCountBadge(label: String) {
     Surface(
         shape = RoundedCornerShape(TaggoGlobalRadius.Badge),
-        color = TaggoGlobalColors.PrimaryAccentSoft,
-        contentColor = TaggoGlobalColors.TextPrimary,
+        color = TaggoGlobalColors.PrimaryAccentSoft.copy(
+            alpha = MediumHomeMetrics.RecommendationBadgeBackgroundAlpha,
+        ),
+        contentColor = TaggoGlobalColors.TextSecondary,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {
         Text(
             text = label,
             modifier = Modifier.padding(
-                horizontal = TaggoGlobalSpacing.Sm,
-                vertical = TaggoGlobalSpacing.Xs,
+                horizontal = MediumHomeMetrics.RecommendationBadgeHorizontalPadding,
+                vertical = MediumHomeMetrics.RecommendationBadgeVerticalPadding,
             ),
-            fontSize = TaggoGlobalTypography.Caption,
-            fontWeight = FontWeight.Medium,
+            fontSize = MediumHomeMetrics.CountFontSize,
+            fontWeight = FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -1885,29 +2193,63 @@ private fun MediumTagGrid(
     fullCjkFontFamily: FontFamily,
     onTagClick: (String) -> Unit,
 ) {
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val chipWidth = (maxWidth - MediumHomeMetrics.TagGridGap) / 2
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            maxItemsInEachRow = 2,
-            horizontalArrangement = Arrangement.spacedBy(MediumHomeMetrics.TagGridGap),
-            verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.TagGridGap),
-        ) {
-            tags.forEach { summary ->
-                TaggoTagChip(
-                    tag = summary.tag,
-                    summaryCount = summary.count,
-                    fullCjkFontReady = fullCjkFontReady,
-                    fullCjkFontFamily = fullCjkFontFamily,
-                    compact = true,
-                    largeCompact = true,
-                    modifier = Modifier
-                        .width(chipWidth)
-                        .height(MediumHomeMetrics.TagChipHeight)
-                        .clickable { onTagClick(summary.tag) },
-                )
-            }
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        maxItemsInEachRow = 2,
+        horizontalArrangement = Arrangement.spacedBy(MediumHomeMetrics.TagGridGap),
+        verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.TagGridGap),
+    ) {
+        tags.forEach { summary ->
+            MediumTagItem(
+                summary = summary,
+                fullCjkFontReady = fullCjkFontReady,
+                fullCjkFontFamily = fullCjkFontFamily,
+                onClick = { onTagClick(summary.tag) },
+            )
         }
+    }
+}
+
+@Composable
+private fun MediumTagItem(
+    summary: DashboardTagSummary,
+    fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    TaggoListItemSurface(
+        modifier = Modifier
+            .width(MediumHomeMetrics.TagItemWidth)
+            .then(modifier),
+        shape = RoundedCornerShape(TaggoGlobalRadius.Item),
+        backgroundColor = TaggoGlobalColors.ItemBackground.copy(alpha = TaggoGlobalAlpha.Strong),
+        borderColor = TaggoGlobalColors.Border,
+        height = MediumHomeMetrics.TagItemHeight,
+        contentPadding = PaddingValues(horizontal = MediumHomeMetrics.TagItemHorizontalPadding),
+        onClick = onClick,
+    ) {
+        Text(
+            text = displayTextForUi(summary.tag, fullCjkFontReady),
+            modifier = Modifier.widthIn(max = MediumHomeMetrics.TagNameWidth),
+            color = TaggoGlobalColors.TextPrimary,
+            fontSize = TaggoGlobalTypography.BodySmall,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontFamily = fullCjkFontFamily,
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        Text(
+            text = summary.count.toString(),
+            modifier = Modifier.width(MediumHomeMetrics.TagCountWidth),
+            color = TaggoGlobalColors.TextSecondary,
+            fontSize = MediumHomeMetrics.CountFontSize,
+            fontWeight = FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.End,
+        )
     }
 }
 
@@ -1916,9 +2258,11 @@ private fun MediumFileTypeRow(
     summary: DashboardTypeSummary,
     locale: AppLocale,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val accent = accentForTypeFilter(summary.filter)
     TaggoListItemSurface(
+        modifier = modifier,
         shape = RoundedCornerShape(TaggoGlobalRadius.Item),
         backgroundColor = Color.Transparent,
         borderColor = Color.Transparent,
@@ -1938,7 +2282,7 @@ private fun MediumFileTypeRow(
             text = typeFilterLabel(summary.filter, locale),
             modifier = Modifier.width(MediumHomeMetrics.TypeNameWidth),
             color = TaggoGlobalColors.TextPrimary,
-            fontSize = 11.sp,
+            fontSize = MediumHomeMetrics.TypeNameFontSize,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -1961,7 +2305,7 @@ private fun MediumFileTypeRow(
             text = summary.count.toString(),
             modifier = Modifier.width(MediumHomeMetrics.TypeCountWidth),
             color = TaggoGlobalColors.TextSecondary,
-            fontSize = 11.sp,
+            fontSize = MediumHomeMetrics.CountFontSize,
             maxLines = 1,
             textAlign = TextAlign.End,
         )
