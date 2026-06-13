@@ -3,10 +3,14 @@
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -67,6 +71,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -92,6 +97,7 @@ import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Archive
@@ -178,6 +184,7 @@ private enum class AllFilesTypeFilter {
     All,
     Image,
     Video,
+    Audio,
     Document,
     Spreadsheet,
     Presentation,
@@ -285,7 +292,6 @@ private fun MediumNavigationSidebar(
                     horizontal = MediumHomeMetrics.SidebarHorizontalPadding,
                     vertical = MediumHomeMetrics.SidebarVerticalPadding,
                 ),
-            verticalArrangement = Arrangement.spacedBy(TaggoGlobalSpacing.Xs),
         ) {
             Row(
                 modifier = Modifier
@@ -311,77 +317,112 @@ private fun MediumNavigationSidebar(
                     fontFamily = brandFontFamily,
                 )
             }
-            items.forEach { item ->
-                val selected = item.page == selectedPage
-                Surface(
-                    onClick = { onPageSelected(item.page) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(MediumHomeMetrics.SidebarNavigationItemHeight),
-                    shape = RoundedCornerShape(TaggoGlobalRadius.Item),
-                    color = if (selected) {
-                        TaggoGlobalColors.PrimaryAccentSoft
-                    } else {
-                        Color.Transparent
-                    },
-                    contentColor = if (selected) {
-                        TaggoGlobalColors.TextPrimary
-                    } else {
-                        TaggoGlobalColors.TextMuted
-                    },
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
-                ) {
-                    Row(
+            Spacer(modifier = Modifier.height(MediumHomeMetrics.SidebarBrandNavigationGap))
+            Column(
+                verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.SidebarNavigationItemGap),
+            ) {
+                items.forEach { item ->
+                    val selected = item.page == selectedPage
+                    Surface(
+                        onClick = { onPageSelected(item.page) },
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            .fillMaxWidth()
+                            .height(MediumHomeMetrics.SidebarNavigationItemHeight),
+                        shape = RoundedCornerShape(TaggoGlobalRadius.Item),
+                        color = if (selected) {
+                            TaggoGlobalColors.PrimaryAccentSoft.copy(
+                                alpha = MediumHomeMetrics.SidebarSelectedBackgroundAlpha,
+                            )
+                        } else {
+                            Color.Transparent
+                        },
+                        contentColor = if (selected) {
+                            TaggoGlobalColors.TextPrimary.copy(
+                                alpha = MediumHomeMetrics.SidebarSelectedContentAlpha,
+                            )
+                        } else {
+                            TaggoGlobalColors.TextMuted.copy(
+                                alpha = MediumHomeMetrics.SidebarUnselectedTextAlpha,
+                            )
+                        },
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
                     ) {
-                        item.icon?.let { icon ->
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                tint = if (selected) {
-                                    TaggoGlobalColors.PrimaryAccent
-                                } else {
-                                    TaggoGlobalColors.TextMuted
-                                },
-                                modifier = Modifier.size(20.dp),
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = MediumHomeMetrics.SidebarNavigationHorizontalPadding),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            item.icon?.let { icon ->
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = if (selected) {
+                                        TaggoGlobalColors.PrimaryAccent.copy(
+                                            alpha = MediumHomeMetrics.SidebarSelectedIconAlpha,
+                                        )
+                                    } else {
+                                        TaggoGlobalColors.TextMuted.copy(
+                                            alpha = MediumHomeMetrics.SidebarUnselectedIconAlpha,
+                                        )
+                                    },
+                                    modifier = Modifier.size(MediumHomeMetrics.SidebarNavigationIconSize),
+                                )
+                            }
+                            Text(
+                                text = item.label,
+                                fontSize = MediumHomeMetrics.SidebarNavigationFontSize,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
-                        Text(
-                            text = item.label,
-                            fontSize = 13.sp,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
                     }
                 }
             }
             Spacer(modifier = Modifier.weight(1f))
+            val uploadShape = RoundedCornerShape(MediumHomeMetrics.SidebarUploadCornerRadius)
             Button(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .align(Alignment.CenterHorizontally)
+                    .width(MediumHomeMetrics.SidebarUploadWidth)
                     .height(MediumHomeMetrics.SidebarUploadHeight),
-                shape = RoundedCornerShape(13.dp),
+                shape = uploadShape,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = TaggoGlobalColors.PrimaryAccent.copy(
+                        alpha = MediumHomeMetrics.SidebarUploadBorderAlpha,
+                    ),
+                ),
                 contentPadding = PaddingValues(horizontal = 10.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF8B68FF).copy(alpha = 0.64f),
-                    contentColor = TaggoTheme.colors.textPrimary,
+                    containerColor = Color(0xFF8B68FF).copy(
+                        alpha = MediumHomeMetrics.SidebarUploadBackgroundAlpha,
+                    ),
+                    contentColor = TaggoGlobalColors.TextPrimary.copy(
+                        alpha = MediumHomeMetrics.SidebarUploadContentAlpha,
+                    ),
+                ),
+                elevation = ButtonDefaults.buttonElevation(
+                    defaultElevation = 0.dp,
+                    pressedElevation = 0.dp,
+                    focusedElevation = 0.dp,
+                    hoveredElevation = 0.dp,
+                    disabledElevation = 0.dp,
                 ),
                 onClick = onUpload,
             ) {
                 Text(
                     text = uploadLabel,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -1379,28 +1420,47 @@ private fun HomeExpandedDashboard(
 
 private object MediumHomeMetrics {
     val MaxDashboardHeight = 560.dp
-    val SidebarWidth = 172.dp
-    val SidebarHorizontalPadding = 8.dp
+    val SidebarWidth = 128.dp
+    val SidebarHorizontalPadding = 12.dp
     val SidebarVerticalPadding = 12.dp
     val SidebarBrandHeight = 40.dp
+    val SidebarBrandNavigationGap = 32.dp
     val SidebarLogoSize = 24.dp
     val SidebarBrandFontSize = 18.sp
-    val SidebarNavigationItemHeight = 38.dp
-    val SidebarUploadHeight = 40.dp
-    val PageHorizontalPadding = 20.dp
+    val SidebarNavigationItemHeight = 40.dp
+    val SidebarNavigationItemGap = 10.dp
+    val SidebarNavigationHorizontalPadding = 12.dp
+    val SidebarNavigationIconSize = 20.dp
+    val SidebarNavigationFontSize = 13.sp
+    val SidebarUploadWidth = 84.dp
+    val SidebarUploadHeight = 34.dp
+    val SidebarUploadCornerRadius = 10.dp
+    const val SidebarUploadBackgroundAlpha = 0.08f
+    const val SidebarUploadBorderAlpha = 0.14f
+    const val SidebarUploadContentAlpha = 0.78f
+    const val SidebarSelectedBackgroundAlpha = 0.78f
+    const val SidebarSelectedContentAlpha = 0.88f
+    const val SidebarSelectedIconAlpha = 0.82f
+    const val SidebarUnselectedTextAlpha = 0.72f
+    const val SidebarUnselectedIconAlpha = 0.68f
+    val PageHorizontalPadding = 12.dp
     val PageVerticalPadding = 22.dp
     val SectionGap = 14.dp
-    val ColumnGap = 18.dp
-    val HeaderHeight = 52.dp
+    val ColumnGap = 14.dp
+    val HeaderHeight = 34.dp
     val HeaderTitleGap = 2.dp
     val HeaderTitleWidth = 166.dp
     val HeaderSearchGap = 28.dp
     val AccountSize = 32.dp
     val AccountIconSize = 18.dp
-    val SearchHeight = 36.dp
-    val SearchWidth = 360.dp
+    val SearchHeight = 32.dp
+    val SearchWidthCompact = 250.dp
+    val SearchWidthRegular = 290.dp
+    val SearchWidthLarge = 310.dp
     val SupportCardGap = 10.dp
-    val SupportColumnWidth = 350.dp
+    val SupportColumnWidthCompact = 260.dp
+    val SupportColumnWidthRegular = 280.dp
+    val SupportColumnWidthLarge = 300.dp
     val FooterHeight = 32.dp
     val FooterTopSpacing = 6.dp
     val RecommendationHorizontalPadding = 18.dp
@@ -1408,10 +1468,12 @@ private object MediumHomeMetrics {
     val RecommendationBottomPadding = 14.dp
     val RecommendationHeaderHeight = 30.dp
     val RecommendationListTopSpacing = 10.dp
-    val RecommendationRowHeight = 70.dp
-    val RecommendationRowGap = 8.dp
-    val RecommendationIconSize = 42.dp
-    val RecommendationRowPadding = 12.dp
+    val RecommendationRowHeight = 56.dp
+    val RecommendationRowGap = 7.dp
+    val RecommendationIconSize = 36.dp
+    val RecommendationRowPadding = 10.dp
+    val RecommendationRowVerticalPadding = 6.dp
+    val RecommendationBadgeIconSize = 12.dp
     val CoverOverlaySize = 20.dp
     val CoverOverlayIconSize = 12.dp
     val CoverOverlayEdgePadding = 4.dp
@@ -1419,12 +1481,11 @@ private object MediumHomeMetrics {
     val RecentIconSize = 24.dp
     val RecentTimeWidth = 48.dp
     val RecentRowGap = 6.dp
-    val TagItemWidth = 124.dp
     val TagCountWidth = 20.dp
-    val TagItemHeight = 26.dp
+    val TagItemHeight = 30.dp
     val TagItemHorizontalPadding = 10.dp
     val TagGridStartPadding = 8.dp
-    val TagGridHorizontalGap = 10.dp
+    val TagGridHorizontalGap = 8.dp
     val TagGridVerticalGap = 8.dp
     val TagVisibleItemCount = 6
     val TypeVisibleItemCount = 4
@@ -1433,14 +1494,14 @@ private object MediumHomeMetrics {
     val TypeCountWidth = 24.dp
     val TypeBarHeight = 4.dp
     val TypeRowGap = 4.dp
-    val PageTitleFontSize = 24.sp
-    val PageTitleLineHeight = 28.sp
+    val PageTitleFontSize = 16.sp
+    val PageTitleLineHeight = 20.sp
     val PageSubtitleFontSize = 11.sp
-    val SectionTitleFontSize = 16.sp
-    val SectionTitleLineHeight = 20.sp
-    val SectionTitleHeight = 20.dp
-    val RecommendationSectionTitleFontSize = 18.sp
-    val RecommendationTitleFontSize = 14.sp
+    val SectionTitleFontSize = 14.sp
+    val SectionTitleLineHeight = 18.sp
+    val SectionTitleHeight = 28.dp
+    val RecommendationSectionTitleFontSize = 14.sp
+    val RecommendationTitleFontSize = 13.sp
     val RecentTitleFontSize = 12.sp
     val AuxiliaryFontSize = 10.sp
     val RecommendationTagChipHeight = 20.dp
@@ -1453,7 +1514,18 @@ private object MediumHomeMetrics {
     val CountFontSize = 10.sp
     val RecommendationBadgeHorizontalPadding = 6.dp
     val RecommendationBadgeVerticalPadding = 2.dp
-    const val RecommendationBadgeBackgroundAlpha = 0.58f
+    const val RecommendationBadgeBackgroundAlpha = 0.4f
+    const val RecommendationBadgeIconAlpha = 0.50f
+    const val RecommendationCardBackgroundAlpha = 0.82f
+    const val RecommendationCardBorderAlpha = 0.58f
+    const val RecommendationItemBackgroundAlpha = 0.42f
+    const val RecommendationItemBorderAlpha = 0.38f
+    const val SupportCardBackgroundAlpha = 0.70f
+    const val SupportCardBorderAlpha = 0.46f
+    const val SupportTitleAlpha = 0.90f
+    const val SupportFileNameAlpha = 0.88f
+    const val SupportLabelAlpha = 0.82f
+    const val ViewAllAlpha = 0.80f
     const val CoverOverlayBackgroundAlpha = 0.58f
     const val CoverOverlayBorderAlpha = 0.46f
     const val RecommendationTagChipBackgroundAlpha = 0.46f
@@ -1495,6 +1567,11 @@ private fun HomeMediumDashboard(
                 maxHeight <= 390.dp -> 2
                 maxHeight <= 430.dp -> 3
                 else -> 4
+            }
+            val supportColumnWidth = when {
+                maxWidth <= 720.dp -> MediumHomeMetrics.SupportColumnWidthCompact
+                maxWidth <= 800.dp -> MediumHomeMetrics.SupportColumnWidthRegular
+                else -> MediumHomeMetrics.SupportColumnWidthLarge
             }
             val mediumRecommendedForUi = if (scoredRecommendedReferences.isNotEmpty()) {
                 scoredRecommendedReferences
@@ -1550,7 +1627,7 @@ private fun HomeMediumDashboard(
                     )
 
                     Column(
-                        modifier = Modifier.width(MediumHomeMetrics.SupportColumnWidth),
+                        modifier = Modifier.width(supportColumnWidth),
                         verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.SupportCardGap),
                     ) {
                         MediumRecentCard(
@@ -1617,18 +1694,26 @@ private fun MediumCardFooter(
 @Composable
 private fun MediumSupportCard(
     title: String,
-    footerLabel: String,
-    onFooterClick: () -> Unit,
+    actionLabel: String,
+    onActionClick: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     val shape = RoundedCornerShape(18.dp)
     Card(
-        colors = CardDefaults.cardColors(containerColor = TaggoGlobalColors.PanelBackgroundSoft),
+        colors = CardDefaults.cardColors(
+            containerColor = TaggoGlobalColors.PanelBackgroundSoft.copy(
+                alpha = MediumHomeMetrics.SupportCardBackgroundAlpha,
+            ),
+        ),
         shape = shape,
         modifier = modifier
             .fillMaxWidth()
-            .border(1.dp, TaggoGlobalColors.Border, shape),
+            .border(
+                1.dp,
+                TaggoGlobalColors.Border.copy(alpha = MediumHomeMetrics.SupportCardBorderAlpha),
+                shape,
+            ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(
@@ -1641,18 +1726,31 @@ private fun MediumSupportCard(
                     bottom = 10.dp,
                 ),
         ) {
-            Text(
-                text = title,
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(MediumHomeMetrics.SectionTitleHeight),
-                color = TaggoGlobalColors.TextPrimary,
-                fontSize = MediumHomeMetrics.SectionTitleFontSize,
-                lineHeight = MediumHomeMetrics.SectionTitleLineHeight,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = title,
+                    modifier = Modifier.weight(1f),
+                    color = TaggoGlobalColors.TextPrimary.copy(
+                        alpha = MediumHomeMetrics.SupportTitleAlpha,
+                    ),
+                    fontSize = MediumHomeMetrics.SectionTitleFontSize,
+                    lineHeight = MediumHomeMetrics.SectionTitleLineHeight,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                TaggoMoreButton(
+                    label = actionLabel,
+                    onClick = onActionClick,
+                    modifier = Modifier.alpha(MediumHomeMetrics.ViewAllAlpha),
+                    compact = true,
+                )
+            }
             Spacer(modifier = Modifier.height(8.dp))
             Box(
                 modifier = Modifier.fillMaxWidth(),
@@ -1660,10 +1758,6 @@ private fun MediumSupportCard(
             ) {
                 content()
             }
-            MediumCardFooter(
-                label = footerLabel,
-                onClick = onFooterClick,
-            )
         }
     }
 }
@@ -1685,8 +1779,8 @@ private fun MediumRecentCard(
     MediumSupportCard(
         title = title,
         modifier = modifier,
-        footerLabel = if (locale == AppLocale.ZhCn) "\u67e5\u770b\u5168\u90e8 >" else "View all >",
-        onFooterClick = onOpenAllFiles,
+        actionLabel = if (locale == AppLocale.ZhCn) "\u67e5\u770b\u5168\u90e8" else "View all",
+        onActionClick = onOpenAllFiles,
     ) {
         if (visibleItems.isEmpty()) {
             TaggoEmptyState(
@@ -1725,8 +1819,8 @@ private fun MediumTagsCard(
     MediumSupportCard(
         title = if (locale == AppLocale.ZhCn) "\u5e38\u7528\u6807\u7b7e" else "Tags",
         modifier = modifier,
-        footerLabel = if (locale == AppLocale.ZhCn) "\u67e5\u770b\u5168\u90e8 >" else "View all >",
-        onFooterClick = onOpenTags,
+        actionLabel = if (locale == AppLocale.ZhCn) "\u67e5\u770b\u5168\u90e8" else "View all",
+        onActionClick = onOpenTags,
     ) {
         if (visibleTags.isEmpty()) {
             TaggoEmptyState(
@@ -1759,8 +1853,8 @@ private fun MediumFileTypesCard(
     MediumSupportCard(
         title = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u7c7b\u578b" else "File types",
         modifier = modifier,
-        footerLabel = if (locale == AppLocale.ZhCn) "\u67e5\u770b\u5168\u90e8 >" else "View all >",
-        onFooterClick = onOpenAllFiles,
+        actionLabel = if (locale == AppLocale.ZhCn) "\u67e5\u770b\u5168\u90e8" else "View all",
+        onActionClick = onOpenAllFiles,
     ) {
         if (visibleTypes.isEmpty()) {
             TaggoEmptyState(
@@ -1794,10 +1888,19 @@ private fun MediumSmartRecommendationCard(
 ) {
     val shape = RoundedCornerShape(18.dp)
     Card(
-        colors = CardDefaults.cardColors(containerColor = TaggoGlobalColors.PanelBackgroundSoft),
+        colors = CardDefaults.cardColors(
+            containerColor = TaggoGlobalColors.PanelBackgroundSoft.copy(
+                alpha = MediumHomeMetrics.RecommendationCardBackgroundAlpha,
+            ),
+        ),
         shape = shape,
         modifier = modifier
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .border(
+                1.dp,
+                TaggoGlobalColors.Border.copy(alpha = MediumHomeMetrics.RecommendationCardBorderAlpha),
+                shape,
+            ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(
@@ -1878,51 +1981,43 @@ private fun MediumHomeHeader(
     onSearch: () -> Unit,
     onOpenMenu: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(MediumHomeMetrics.HeaderHeight),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(
-            modifier = Modifier.width(MediumHomeMetrics.HeaderTitleWidth),
-            verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.HeaderTitleGap),
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val searchWidth = when {
+            maxWidth <= 720.dp -> MediumHomeMetrics.SearchWidthCompact
+            maxWidth <= 800.dp -> MediumHomeMetrics.SearchWidthRegular
+            else -> MediumHomeMetrics.SearchWidthLarge
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(MediumHomeMetrics.HeaderHeight),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = if (locale == AppLocale.ZhCn) "\u63a8\u8350" else "Recommended",
+                modifier = Modifier.width(MediumHomeMetrics.HeaderTitleWidth),
                 color = TaggoGlobalColors.TextPrimary,
                 fontSize = MediumHomeMetrics.PageTitleFontSize,
                 lineHeight = MediumHomeMetrics.PageTitleLineHeight,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = if (locale == AppLocale.ZhCn) {
-                    "\u5feb\u901f\u8bbf\u95ee\u548c\u6700\u8fd1\u4f7f\u7528\u7684\u6587\u4ef6"
-                } else {
-                    "Quick access and recently used files"
-                },
-                color = TaggoGlobalColors.TextMuted,
-                fontSize = MediumHomeMetrics.PageSubtitleFontSize,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            Spacer(modifier = Modifier.width(MediumHomeMetrics.HeaderSearchGap))
+            MediumHomeSearchField(
+                query = searchDraft,
+                placeholder = searchPlaceholder,
+                textStyle = textStyle,
+                onQueryChange = onSearchDraftChange,
+                onSearch = onSearch,
+                modifier = Modifier.width(searchWidth),
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            MediumAccountButton(
+                locale = locale,
+                onClick = onOpenMenu,
             )
         }
-        Spacer(modifier = Modifier.width(MediumHomeMetrics.HeaderSearchGap))
-        MediumHomeSearchField(
-            query = searchDraft,
-            placeholder = searchPlaceholder,
-            textStyle = textStyle,
-            onQueryChange = onSearchDraftChange,
-            onSearch = onSearch,
-            modifier = Modifier.width(MediumHomeMetrics.SearchWidth),
-        )
-        Spacer(modifier = Modifier.weight(1f))
-        MediumAccountButton(
-            locale = locale,
-            onClick = onOpenMenu,
-        )
     }
 }
 
@@ -1946,7 +2041,11 @@ private fun MediumHomeSearchField(
             .background(TaggoGlobalColors.PanelBackgroundSoft)
             .border(
                 width = 1.dp,
-                color = if (focused) TaggoGlobalColors.PrimaryAccent else TaggoGlobalColors.BorderStrong,
+                color = if (focused) {
+                    TaggoGlobalColors.PrimaryAccent
+                } else {
+                    TaggoGlobalColors.BorderStrong.copy(alpha = 0.66f)
+                },
                 shape = searchShape,
             )
             .onFocusChanged { focused = it.isFocused },
@@ -1955,8 +2054,8 @@ private fun MediumHomeSearchField(
         keyboardActions = KeyboardActions(onSearch = { onSearch() }),
         textStyle = textStyle.copy(
             color = TaggoGlobalColors.TextPrimary,
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
+            fontSize = 11.sp,
+            lineHeight = 16.sp,
         ),
         cursorBrush = SolidColor(TaggoGlobalColors.PrimaryAccent),
         decorationBox = { innerTextField ->
@@ -1982,8 +2081,8 @@ private fun MediumHomeSearchField(
                     if (query.isBlank()) {
                         Text(
                             text = placeholder,
-                            color = TaggoGlobalColors.TextMuted,
-                            fontSize = 12.sp,
+                            color = TaggoGlobalColors.TextMuted.copy(alpha = 0.88f),
+                            fontSize = 11.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -2040,17 +2139,45 @@ private fun MediumRecommendedFileRow(
 ) {
     val reference = recommendation.file
     val visibleTags = remember(reference.tags) {
-        resolveVisibleCardTags(reference.tags, TaggoWindowSizeClass.Medium)
+        reference.tags.take(3)
     }
     val remainingTagCount = reference.tags.size - visibleTags.size
-    TaggoListItemSurface(
-        shape = RoundedCornerShape(14.dp),
-        backgroundColor = TaggoGlobalColors.ItemBackground.copy(alpha = 0.34f),
-        borderColor = TaggoGlobalColors.Border.copy(alpha = 0.42f),
-        height = MediumHomeMetrics.RecommendationRowHeight,
-        contentPadding = PaddingValues(horizontal = MediumHomeMetrics.RecommendationRowPadding),
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(MediumHomeMetrics.RecommendationRowHeight)
+            .clip(shape)
+            .background(
+                TaggoGlobalColors.ItemBackground.copy(
+                    alpha = if (hovered) {
+                        MediumHomeMetrics.RecommendationItemBackgroundAlpha * 1.08f
+                    } else {
+                        MediumHomeMetrics.RecommendationItemBackgroundAlpha
+                    },
+                ),
+            )
+            .border(
+                1.dp,
+                TaggoGlobalColors.Border.copy(
+                    alpha = MediumHomeMetrics.RecommendationItemBorderAlpha,
+                ),
+                shape,
+            )
+            .hoverable(interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onViewDetails,
+            )
+            .padding(
+                horizontal = MediumHomeMetrics.RecommendationRowPadding,
+                vertical = MediumHomeMetrics.RecommendationRowVerticalPadding,
+            ),
         horizontalArrangement = Arrangement.spacedBy(TaggoGlobalSpacing.Sm),
-        onClick = onViewDetails,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         MediumOpenableCover(
             reference = reference,
@@ -2062,119 +2189,62 @@ private fun MediumRecommendedFileRow(
             onOpenFile = onOpenFile,
         )
         Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = displayTextForUi(reference.title, fullCjkFontReady),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f, fill = false),
                     color = TaggoGlobalColors.TextPrimary,
                     fontSize = MediumHomeMetrics.RecommendationTitleFontSize,
+                    lineHeight = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     fontFamily = fullCjkFontFamily,
                 )
-                MediumFileTypeBadge(label = compactFileTypeLabel(reference))
-            }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+                Spacer(modifier = Modifier.width(5.dp))
                 Icon(
-                    imageVector = Icons.Outlined.Star,
+                    imageVector = Icons.Outlined.AutoAwesome,
                     contentDescription = null,
-                    tint = TaggoGlobalColors.PrimaryAccent,
-                    modifier = Modifier.size(13.dp),
-                )
-                Text(
-                    text = compactRecommendationReason(recommendation, locale),
-                    color = TaggoGlobalColors.TextSecondary,
-                    fontSize = MediumHomeMetrics.AuxiliaryFontSize,
-                    lineHeight = 14.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    tint = TaggoGlobalColors.PrimaryAccent.copy(
+                        alpha = MediumHomeMetrics.RecommendationBadgeIconAlpha,
+                    ),
+                    modifier = Modifier.size(MediumHomeMetrics.RecommendationBadgeIconSize),
                 )
             }
-            if (reference.tags.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(MediumHomeMetrics.RecommendationTagChipHeight),
-                    horizontalArrangement = Arrangement.spacedBy(
-                        MediumHomeMetrics.RecommendationTagChipGap,
-                    ),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    visibleTags.forEach { tag ->
-                        Surface(
-                            modifier = Modifier
-                                .height(MediumHomeMetrics.RecommendationTagChipHeight)
-                                .widthIn(max = MediumHomeMetrics.RecommendationTagChipMaxWidth),
-                            shape = RoundedCornerShape(TaggoGlobalRadius.Badge),
-                            color = TaggoGlobalColors.PrimaryAccentSoft.copy(
-                                alpha = MediumHomeMetrics.RecommendationTagChipBackgroundAlpha,
-                            ),
-                            contentColor = TaggoGlobalColors.TextSecondary,
-                            tonalElevation = 0.dp,
-                            shadowElevation = 0.dp,
-                        ) {
-                            Box(
-                                modifier = Modifier.padding(
-                                    horizontal = MediumHomeMetrics.RecommendationTagChipHorizontalPadding,
-                                ),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = displayTextForUi(tag, fullCjkFontReady),
-                                    fontSize = MediumHomeMetrics.RecommendationTagChipFontSize,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    fontFamily = fullCjkFontFamily,
-                                )
-                            }
-                        }
-                    }
-                    if (remainingTagCount > 0) {
-                        Text(
-                            text = "+$remainingTagCount",
-                            color = TaggoGlobalColors.TextMuted,
-                            fontSize = MediumHomeMetrics.RecommendationTagChipFontSize,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                        )
-                    }
-                }
+            val tagSummary = if (reference.tags.isEmpty()) {
+                if (locale == AppLocale.ZhCn) "\u65e0\u6807\u7b7e" else "No tags"
             } else {
-                Surface(
-                    modifier = Modifier.height(MediumHomeMetrics.RecommendationTagChipHeight),
-                    shape = RoundedCornerShape(TaggoGlobalRadius.Badge),
-                    color = TaggoGlobalColors.SurfaceVariant.copy(
-                        alpha = MediumHomeMetrics.RecommendationTagChipBackgroundAlpha,
-                    ),
-                    contentColor = TaggoGlobalColors.TextMuted,
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
-                ) {
-                    Box(
-                        modifier = Modifier.padding(
-                            horizontal = MediumHomeMetrics.RecommendationTagChipHorizontalPadding,
-                        ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = if (locale == AppLocale.ZhCn) "\u65e0\u6807\u7b7e" else "No tags",
-                            fontSize = MediumHomeMetrics.RecommendationTagChipFontSize,
-                            maxLines = 1,
-                        )
+                buildString {
+                    append(
+                        visibleTags.joinToString("  ") { tag ->
+                            "#${displayTextForUi(tag, fullCjkFontReady)}"
+                        },
+                    )
+                    if (remainingTagCount > 0) {
+                        append("  +")
+                        append(remainingTagCount)
                     }
                 }
             }
+            Text(
+                text = tagSummary,
+                modifier = Modifier.fillMaxWidth(),
+                color = TaggoGlobalColors.TextSecondary.copy(alpha = 0.90f),
+                fontSize = 10.sp,
+                lineHeight = 11.sp,
+                fontWeight = FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontFamily = fullCjkFontFamily,
+            )
         }
     }
 }
@@ -2218,9 +2288,11 @@ private fun MediumRecentFileRow(
             Text(
                 text = displayTextForUi(reference.title, fullCjkFontReady),
                 modifier = Modifier.weight(1f),
-                color = TaggoGlobalColors.TextPrimary,
+                color = TaggoGlobalColors.TextPrimary.copy(
+                    alpha = MediumHomeMetrics.SupportFileNameAlpha,
+                ),
                 fontSize = MediumHomeMetrics.RecentTitleFontSize,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 fontFamily = fullCjkFontFamily,
@@ -2233,8 +2305,9 @@ private fun MediumRecentFileRow(
         Text(
             text = addedTime,
             modifier = Modifier.width(MediumHomeMetrics.RecentTimeWidth),
-            color = TaggoGlobalColors.TextMuted,
-            fontSize = MediumHomeMetrics.AuxiliaryFontSize,
+            color = TaggoGlobalColors.TextMuted.copy(alpha = 0.72f),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.End,
@@ -2365,7 +2438,6 @@ private fun MediumFileTypeBadge(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MediumTagGrid(
     tags: List<DashboardTagSummary>,
@@ -2373,19 +2445,28 @@ private fun MediumTagGrid(
     fullCjkFontFamily: FontFamily,
     onTagClick: (String) -> Unit,
 ) {
-    FlowRow(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        maxItemsInEachRow = 2,
-        horizontalArrangement = Arrangement.spacedBy(MediumHomeMetrics.TagGridHorizontalGap),
         verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.TagGridVerticalGap),
     ) {
-        tags.forEach { summary ->
-            MediumTagItem(
-                summary = summary,
-                fullCjkFontReady = fullCjkFontReady,
-                fullCjkFontFamily = fullCjkFontFamily,
-                onClick = { onTagClick(summary.tag) },
-            )
+        tags.chunked(2).forEach { rowTags ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(MediumHomeMetrics.TagGridHorizontalGap),
+            ) {
+                rowTags.forEach { summary ->
+                    MediumTagItem(
+                        summary = summary,
+                        fullCjkFontReady = fullCjkFontReady,
+                        fullCjkFontFamily = fullCjkFontFamily,
+                        onClick = { onTagClick(summary.tag) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (rowTags.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
         }
     }
 }
@@ -2399,9 +2480,7 @@ private fun MediumTagItem(
     modifier: Modifier = Modifier,
 ) {
     TaggoListItemSurface(
-        modifier = Modifier
-            .width(MediumHomeMetrics.TagItemWidth)
-            .then(modifier),
+        modifier = modifier,
         shape = RoundedCornerShape(TaggoGlobalRadius.Item),
         backgroundColor = TaggoGlobalColors.ItemBackground.copy(
             alpha = MediumHomeMetrics.TagItemBackgroundAlpha,
@@ -2414,9 +2493,11 @@ private fun MediumTagItem(
         Text(
             text = displayTextForUi(summary.tag, fullCjkFontReady),
             modifier = Modifier.weight(1f),
-            color = TaggoGlobalColors.TextPrimary,
+            color = TaggoGlobalColors.TextPrimary.copy(
+                alpha = MediumHomeMetrics.SupportLabelAlpha,
+            ),
             fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
+            fontWeight = FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             fontFamily = fullCjkFontFamily,
@@ -2462,9 +2543,11 @@ private fun MediumFileTypeRow(
         Text(
             text = typeFilterLabel(summary.filter, locale),
             modifier = Modifier.width(MediumHomeMetrics.TypeNameWidth),
-            color = TaggoGlobalColors.TextPrimary,
+            color = TaggoGlobalColors.TextPrimary.copy(
+                alpha = MediumHomeMetrics.SupportLabelAlpha,
+            ),
             fontSize = MediumHomeMetrics.TypeNameFontSize,
-            fontWeight = FontWeight.Medium,
+            fontWeight = FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -2485,8 +2568,9 @@ private fun MediumFileTypeRow(
         Text(
             text = summary.count.toString(),
             modifier = Modifier.width(MediumHomeMetrics.TypeCountWidth),
-            color = TaggoGlobalColors.TextSecondary,
+            color = TaggoGlobalColors.TextMuted,
             fontSize = MediumHomeMetrics.CountFontSize,
+            fontWeight = FontWeight.Normal,
             maxLines = 1,
             textAlign = TextAlign.End,
         )
@@ -3715,6 +3799,7 @@ private fun iconForTypeFilter(filter: AllFilesTypeFilter): ImageVector =
     when (filter) {
         AllFilesTypeFilter.Image -> Icons.Outlined.Image
         AllFilesTypeFilter.Video -> Icons.Outlined.Movie
+        AllFilesTypeFilter.Audio -> Icons.Outlined.MusicNote
         AllFilesTypeFilter.Document -> Icons.Outlined.Description
         AllFilesTypeFilter.Spreadsheet -> Icons.Outlined.TableChart
         AllFilesTypeFilter.Presentation -> Icons.Outlined.Slideshow
@@ -3728,6 +3813,7 @@ private fun accentForTypeFilter(filter: AllFilesTypeFilter): Color =
     when (filter) {
         AllFilesTypeFilter.Image -> TaggoTheme.colors.dashboardProgressFillImage
         AllFilesTypeFilter.Video -> TaggoTheme.colors.dashboardProgressFillVideo
+        AllFilesTypeFilter.Audio -> TaggoTheme.colors.dashboardProgressFillAudio
         AllFilesTypeFilter.Document -> TaggoTheme.colors.dashboardProgressFill
         AllFilesTypeFilter.Spreadsheet -> TaggoTheme.colors.dashboardProgressFill
         AllFilesTypeFilter.Presentation -> TaggoTheme.colors.dashboardProgressFillVideo
@@ -6076,6 +6162,7 @@ private fun typeFilterLabel(filter: AllFilesTypeFilter, locale: AppLocale): Stri
         AllFilesTypeFilter.All -> if (locale == AppLocale.ZhCn) "\u5168\u90e8" else "All"
         AllFilesTypeFilter.Image -> if (locale == AppLocale.ZhCn) "\u56fe\u7247" else "Images"
         AllFilesTypeFilter.Video -> if (locale == AppLocale.ZhCn) "\u89c6\u9891" else "Videos"
+        AllFilesTypeFilter.Audio -> if (locale == AppLocale.ZhCn) "\u97f3\u9891" else "Audio"
         AllFilesTypeFilter.Document -> if (locale == AppLocale.ZhCn) "\u6587\u6863" else "Documents"
         AllFilesTypeFilter.Spreadsheet -> if (locale == AppLocale.ZhCn) "\u8868\u683c" else "Spreadsheets"
         AllFilesTypeFilter.Presentation -> if (locale == AppLocale.ZhCn) "\u6f14\u793a" else "Presentations"
@@ -6102,6 +6189,7 @@ private fun resolveTypeFilter(reference: FileReference): AllFilesTypeFilter =
     when (FileTypeClassifier.classify(reference)) {
         FileTypeCategory.Image -> AllFilesTypeFilter.Image
         FileTypeCategory.Video -> AllFilesTypeFilter.Video
+        FileTypeCategory.Audio -> AllFilesTypeFilter.Audio
         FileTypeCategory.TextDocument,
         FileTypeCategory.PdfDocument -> AllFilesTypeFilter.Document
         FileTypeCategory.Spreadsheet -> AllFilesTypeFilter.Spreadsheet
