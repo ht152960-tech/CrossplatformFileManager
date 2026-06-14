@@ -66,6 +66,50 @@ object TaggoGlobalAlpha {
     val Strong = 0.82f
 }
 
+object TaggoCompactTokens {
+    val PageHorizontalInsetExtra = TaggoGlobalSpacing.Xs
+    val PageSectionGap = 14.dp
+    val BottomNavigationClearance = 96.dp
+
+    val CardRadius = 20.dp
+    val SoftCardRadius = TaggoGlobalRadius.Card
+    val ItemRadius = 16.dp
+    val HeroCoverRadius = 24.dp
+    val BorderWidth = 1.dp
+
+    val SearchCardPadding = 13.dp
+    val SearchFieldHeight = 56.dp
+    val SearchButtonHeight = 40.dp
+    val SearchButtonMinWidth = 68.dp
+    val SearchInlineThreshold = 300.dp
+
+    val FileItemHeight = 78.dp
+    val FileItemGap = TaggoGlobalSpacing.Sm
+    val FileItemHorizontalPadding = 10.dp
+    val FileItemVerticalPadding = TaggoGlobalSpacing.Sm
+    val FileCoverSize = 50.dp
+    val FileIconSize = 30.dp
+
+    val DetailHeroPadding = TaggoGlobalSpacing.Md
+    val DetailCoverAspectRatio = 16f / 9f
+    val DetailCoverMaxHeight = 220.dp
+    val DetailIconSize = 72.dp
+
+    val ButtonRadius = 13.dp
+    val SearchButtonHorizontalPadding = TaggoGlobalSpacing.Md
+
+    val CaptionSmall = TaggoGlobalTypography.Caption
+    val Caption = TaggoGlobalTypography.BodySmall
+    val Placeholder = TaggoGlobalTypography.Body
+    val Body = 14.sp
+    val DetailTitle = TaggoGlobalTypography.TitleMedium
+    val SearchLineHeight = 20.sp
+
+    val ScrimAlpha = TaggoGlobalAlpha.Pressed
+    val PrimaryButtonAlpha = 0.84f
+    val DisabledSurfaceAlpha = 0.55f
+}
+
 object TaggoThemeTokens {
     object HomeWide {
         object Colors {
