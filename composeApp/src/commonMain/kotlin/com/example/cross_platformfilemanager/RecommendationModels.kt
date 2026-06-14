@@ -1,5 +1,7 @@
 package com.example.cross_platformfilemanager
 
+import kotlinx.serialization.Serializable
+
 /**
  * 单个候选文件的推荐打分结果。
  *
@@ -20,6 +22,7 @@ data class ScoredRecommendation(
  * 这里显式保留各个子模块的状态边界，
  * 让存储层只负责保存快照，而不需要理解推荐算法内部的更新细节。
  */
+@Serializable
 data class RecommendationEngineSnapshot(
     val filePatterns: Map<String, FilePattern>,
     val transitionSnapshot: TransitionSnapshot,

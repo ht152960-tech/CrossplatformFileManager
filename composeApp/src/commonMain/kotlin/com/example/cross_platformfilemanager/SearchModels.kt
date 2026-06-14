@@ -1,13 +1,19 @@
 package com.example.cross_platformfilemanager
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
 /**
  * 搜索标签的来源。
  *
  * 区分“用户输入”与“标签库点击”，
  * 便于后续在排序、展示或埋点层保留来源信息。
  */
+@Serializable
 enum class SearchTagSource {
+    @SerialName("Input")
     Input,
+    @SerialName("LibraryTag")
     LibraryTag,
 }
 
@@ -17,6 +23,7 @@ enum class SearchTagSource {
  * 搜索流程不会直接依赖原始查询串，而是把查询拆成若干标签 token，
  * 供仓储层统一匹配文件名、标签、类型和路径。
  */
+@Serializable
 data class SearchTag(
     val value: String,
     val source: SearchTagSource,

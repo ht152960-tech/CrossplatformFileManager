@@ -1,5 +1,7 @@
 package com.example.cross_platformfilemanager
 
+import kotlinx.serialization.Serializable
+
 /**
  * 应用工作区快照。
  *
@@ -7,8 +9,9 @@ package com.example.cross_platformfilemanager
  * 这里还把推荐日志与推荐引擎状态一起纳入快照，
  * 这样恢复工作区时，推荐算法可以延续之前的学习结果。
  */
+@Serializable
 data class AppSnapshot(
-    val schemaVersion: Int = 9,
+    val schemaVersion: Int = 10,
     val locale: AppLocale,
     val query: String,
     val searchTags: List<SearchTag> = emptyList(),

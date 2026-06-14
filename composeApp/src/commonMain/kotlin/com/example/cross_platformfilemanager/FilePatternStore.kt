@@ -1,5 +1,6 @@
 package com.example.cross_platformfilemanager
 
+import kotlinx.serialization.Serializable
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.roundToLong
@@ -10,6 +11,7 @@ import kotlin.math.roundToLong
  * 它描述的是某个文件最近一次打开时间、估计周期和样本数量，
  * 供推荐引擎计算“当前是否到了它常被再次打开的时候”。
  */
+@Serializable
 data class FilePattern(
     val fileId: String,
     val lastOpenTimeMillis: Long,

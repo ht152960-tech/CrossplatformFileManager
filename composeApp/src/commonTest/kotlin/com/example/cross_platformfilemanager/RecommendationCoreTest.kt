@@ -1,5 +1,8 @@
 package com.example.cross_platformfilemanager
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -139,6 +142,14 @@ class RecommendationCoreTest {
         val decoded = SnapshotCodec.decode(encoded)
 
         require(decoded != null)
+        val encodedJson = Json.parseToJsonElement(encoded).jsonObject
+        assertEquals(10, encodedJson.getValue("schemaVersion").jsonPrimitive.content.toInt())
+
+        val withUnknownField = encoded.dropLast(1) + ",\"futureField\":true}"
+        assertEquals(snapshot, SnapshotCodec.decode(withUnknownField))
+        assertEquals(null, SnapshotCodec.decode("not-json"))
+        assertEquals(null, SnapshotCodec.decode("1:9"))
+
         val restoredEngine = RecommendationEngine()
         restoredEngine.restoreSnapshot(decoded.recommendationState)
 
@@ -163,6 +174,102 @@ class RecommendationCoreTest {
         ).first().file.id
 
         assertEquals(originalRecommendation, restoredRecommendation)
+    }
+
+    @Test
+    fun snapshotCodecRejectsBlankPayloads() {
+        assertEquals(null, SnapshotCodec.decode(""))
+        assertEquals(null, SnapshotCodec.decode("   "))
+    }
+
+    @Test
+    fun completeBusinessSnapshotSurvivesJsonRoundTrip() {
+        val reference = FileReference(
+            id = "reference-1",
+            title = "Kotlin Notes.md",
+            source = "/documents/Kotlin Notes.md",
+            sourceKind = FileSourceKind.ManualPath,
+            fileType = "MD",
+            fileSizeBytes = 4_096L,
+            coverArtSource = "cover://kotlin-notes",
+            thumbnailPath = "data:image/webp;base64,thumbnail",
+            thumbnailStatus = ThumbnailStatus.READY,
+            tags = listOf("学习", "Kotlin"),
+            notes = "Serialization notes",
+            createdAtMillis = 1_000L,
+            modifiedAtMillis = 2_000L,
+            lastOpenedAtMillis = 3_000L,
+            isFavorite = true,
+        )
+        val recommendationState = RecommendationEngineSnapshot(
+            filePatterns = mapOf(
+                reference.id to FilePattern(
+                    fileId = reference.id,
+                    lastOpenTimeMillis = 3_000L,
+                    estimatedPeriodMillis = 86_400_000L,
+                    openCount = 4,
+                ),
+            ),
+            transitionSnapshot = TransitionSnapshot(
+                counts = mapOf(reference.id to mapOf("reference-2" to 3)),
+                totals = mapOf(reference.id to 3),
+            ),
+            weightSnapshot = WeightSnapshot(
+                baseIntervalWeight = 1.2,
+                baseTransitionWeight = 1.5,
+                baseRecencyWeight = 0.4,
+                learnedIntervalWeight = 0.1,
+                learnedTransitionWeight = 0.2,
+                learnedRecencyWeight = 0.3,
+            ),
+            lastOpenedFileId = reference.id,
+        )
+        val snapshot = AppSnapshot(
+            locale = AppLocale.ZhCn,
+            query = "Kotlin 学习",
+            searchTags = listOf(
+                SearchTag(value = "Kotlin", source = SearchTagSource.Input),
+                SearchTag(value = "学习", source = SearchTagSource.LibraryTag),
+            ),
+            selectedTag = "学习",
+            selectedFileType = "MD",
+            favoritesOnly = true,
+            activeReferenceId = reference.id,
+            references = listOf(reference),
+            recentSearches = listOf("Kotlin", "学习"),
+            recommendationLogs = listOf(
+                RecommendationLog(
+                    id = "recommendation-log-1",
+                    query = "Kotlin 学习",
+                    selectedTag = "学习",
+                    generatedAtMillis = 4_000L,
+                    topSuggestions = listOf(reference.id, "reference-2"),
+                ),
+            ),
+            recommendationState = recommendationState,
+        )
+
+        val encoded = SnapshotCodec.encode(snapshot)
+        Json.parseToJsonElement(encoded)
+        val decoded = SnapshotCodec.decode(encoded)
+
+        require(decoded != null)
+        assertEquals(10, decoded.schemaVersion)
+        assertEquals(snapshot.references.size, decoded.references.size)
+        assertEquals(reference.id, decoded.references.single().id)
+        assertEquals(reference.title, decoded.references.single().title)
+        assertEquals(reference.source, decoded.references.single().source)
+        assertEquals(reference.sourceKind, decoded.references.single().sourceKind)
+        assertEquals(reference.tags, decoded.references.single().tags)
+        assertEquals(reference.thumbnailStatus, decoded.references.single().thumbnailStatus)
+        assertEquals(snapshot.searchTags, decoded.searchTags)
+        assertEquals(snapshot.recommendationLogs, decoded.recommendationLogs)
+        assertEquals(recommendationState.filePatterns, decoded.recommendationState?.filePatterns)
+        assertEquals(recommendationState.transitionSnapshot, decoded.recommendationState?.transitionSnapshot)
+        assertEquals(recommendationState.weightSnapshot, decoded.recommendationState?.weightSnapshot)
+        assertEquals(recommendationState.lastOpenedFileId, decoded.recommendationState?.lastOpenedFileId)
+        assertEquals(snapshot.recentSearches, decoded.recentSearches)
+        assertEquals(snapshot.activeReferenceId, decoded.activeReferenceId)
     }
 
     @Test

@@ -1,10 +1,16 @@
 package com.example.cross_platformfilemanager
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
 /**
  * 应用支持的语言环境。
  */
+@Serializable
 enum class AppLocale {
+    @SerialName("ZhCn")
     ZhCn,
+    @SerialName("EnUs")
     EnUs,
 }
 

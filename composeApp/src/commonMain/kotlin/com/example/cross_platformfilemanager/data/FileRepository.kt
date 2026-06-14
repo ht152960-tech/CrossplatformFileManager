@@ -1,11 +1,15 @@
 package com.example.cross_platformfilemanager
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
 /**
  * 文件条目。
  *
  * 这是文件管理和推荐链路共同依赖的基础模型。
  * 推荐算法会读取其中的标识、标题、类型、标签和最近打开时间作为候选文件输入。
  */
+@Serializable
 data class FileReference(
     val id: String,
     val title: String,
@@ -24,10 +28,15 @@ data class FileReference(
     val isFavorite: Boolean = false,
 )
 
+@Serializable
 enum class FileSourceKind {
+    @SerialName("ManualPath")
     ManualPath,
+    @SerialName("BrowserHandle")
     BrowserHandle,
+    @SerialName("Url")
     Url,
+    @SerialName("RemoteReference")
     RemoteReference,
 }
 
@@ -59,6 +68,7 @@ enum class SuggestionKind {
  * 它记录的是某次查询条件下给用户展示了哪些建议，
  * 主要用于快照恢复和推荐展示历史保留，不等同于推荐点击反馈。
  */
+@Serializable
 data class RecommendationLog(
     val id: String,
     val query: String,

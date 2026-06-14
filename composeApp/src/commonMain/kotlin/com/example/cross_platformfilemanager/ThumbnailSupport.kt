@@ -2,6 +2,8 @@ package com.example.cross_platformfilemanager
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 /**
  * 缩略图生成状态。
@@ -9,11 +11,17 @@ import androidx.compose.ui.graphics.painter.Painter
  * 这个状态既服务文件条目展示，也服务生成流程控制，
  * 避免同一个文件在不支持或正在生成时被重复触发。
  */
+@Serializable
 enum class ThumbnailStatus {
+    @SerialName("NONE")
     NONE,
+    @SerialName("GENERATING")
     GENERATING,
+    @SerialName("READY")
     READY,
+    @SerialName("FAILED")
     FAILED,
+    @SerialName("UNSUPPORTED")
     UNSUPPORTED,
 }
 

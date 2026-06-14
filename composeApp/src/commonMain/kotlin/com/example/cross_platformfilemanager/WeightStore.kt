@@ -1,11 +1,14 @@
 package com.example.cross_platformfilemanager
 
+import kotlinx.serialization.Serializable
+
 /**
  * 推荐权重的可持久化快照。
  *
  * 基础权重负责冷启动阶段的稳定性，
  * 学习权重负责根据推荐反馈逐步修正三类信号的重要性。
  */
+@Serializable
 data class WeightSnapshot(
     val baseIntervalWeight: Double,
     val baseTransitionWeight: Double,

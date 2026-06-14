@@ -1,11 +1,14 @@
 package com.example.cross_platformfilemanager
 
+import kotlinx.serialization.Serializable
+
 /**
  * 后继关系的可持久化快照。
  *
  * `counts` 保存“某文件之后打开另一个文件”的次数，
  * `totals` 保存某个起点文件累计产生过多少次后继跳转。
  */
+@Serializable
 data class TransitionSnapshot(
     val counts: Map<String, Map<String, Int>>,
     val totals: Map<String, Int>,
