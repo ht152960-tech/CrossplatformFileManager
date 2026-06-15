@@ -13,7 +13,12 @@ import taggo.composeapp.generated.resources.NotoSansSc
 import taggo.composeapp.generated.resources.NotoSansScUi
 
 @Composable
-fun rememberAppFontFamily(): FontFamily = FontFamily(Font(NotoSansScUi))
+fun rememberAppFontFamily(): FontFamily =
+    if (supportsBundledUiFont()) {
+        FontFamily(Font(NotoSansScUi))
+    } else {
+        FontFamily.Default
+    }
 
 @Composable
 fun rememberFullCjkFontFamily(): FontFamily = FontFamily(Font(NotoSansSc))
