@@ -1,6 +1,7 @@
 package com.example.cross_platformfilemanager
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -24,7 +25,14 @@ class MainActivity : ComponentActivity() {
         val documentLauncher = registerForActivityResult(
             ActivityResultContracts.OpenDocument(),
         ) { uri ->
-            browserReferencePicker.onDocumentPicked(uri)
+            val consumed = browserReferencePicker.onDocumentPicked(uri)
+            if (uri != null && !consumed) {
+                Toast.makeText(
+                    applicationContext,
+                    "文件选择状态已失效，请重新选择",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
         }
         browserReferencePicker = AndroidBrowserReferencePicker(
             contentResolver = contentResolver,

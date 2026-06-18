@@ -3,23 +3,17 @@ package com.example.cross_platformfilemanager.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,9 +23,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
 import com.example.cross_platformfilemanager.SearchTag
 import com.example.cross_platformfilemanager.SearchTagSource
 import com.example.cross_platformfilemanager.displayTextForUi
@@ -49,40 +46,16 @@ internal fun TagFilterChip(
 ) {
     val windowSizeClass = LocalTaggoWindowSizeClass.current
     val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 190.dp else 220.dp
-    FilterChip(
-        selected = selected,
+    TaggoOperableTagChip(
+        label = tag,
+        formalTag = true,
+        fullCjkFontReady = fullCjkFontReady,
+        fullCjkFontFamily = fullCjkFontFamily,
+        maxChipWidth = maxChipWidth,
+        actionSymbol = "+",
+        emphasized = selected,
         onClick = onClick,
-        modifier = Modifier.widthIn(max = maxChipWidth),
-        label = {
-            Text(
-                text = displayTextForUi(tag, fullCjkFontReady),
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontFamily = fullCjkFontFamily,
-            )
-        },
-        leadingIcon = if (selected) {
-            {
-                Icon(
-                    imageVector = Icons.Outlined.Check,
-                    contentDescription = null,
-                    modifier = Modifier.size(FilterChipDefaults.IconSize),
-                )
-            }
-        } else {
-            null
-        },
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = TaggoTheme.colors.primaryAccentSoft,
-            selectedLabelColor = TaggoTheme.colors.textPrimary,
-            selectedLeadingIconColor = TaggoTheme.colors.primaryAccent,
-            containerColor = TaggoTheme.colors.panelBackgroundSoft,
-            labelColor = MaterialTheme.colorScheme.onSurface,
-            iconColor = TaggoTheme.colors.textSecondary,
-            disabledContainerColor = TaggoTheme.colors.surfaceVariant,
-        ),
+        onActionClick = onClick,
     )
 }
 
@@ -95,37 +68,15 @@ internal fun SearchTagChip(
 ) {
     val windowSizeClass = LocalTaggoWindowSizeClass.current
     val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 190.dp else 220.dp
-    Surface(
-        color = if (tag.source == SearchTagSource.LibraryTag) TaggoTheme.colors.primaryAccentSoft else TaggoTheme.colors.panelBackgroundSoft,
-        contentColor = if (tag.source == SearchTagSource.LibraryTag) TaggoTheme.colors.textPrimary else TaggoTheme.colors.textSecondary,
-        shape = RoundedCornerShape(999.dp),
-        modifier = Modifier.widthIn(max = maxChipWidth),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.padding(start = 10.dp, end = 3.dp, top = 3.dp, bottom = 3.dp),
-        ) {
-            Text(
-                text = displayTextForUi(tag.value, fullCjkFontReady),
-                fontWeight = FontWeight.Medium,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontFamily = fullCjkFontFamily,
-            )
-            IconButton(
-                onClick = onRemove,
-                modifier = Modifier.size(20.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Close,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                )
-            }
-        }
-    }
+    TaggoOperableTagChip(
+        label = tag.value,
+        formalTag = tag.source == SearchTagSource.LibraryTag,
+        fullCjkFontReady = fullCjkFontReady,
+        fullCjkFontFamily = fullCjkFontFamily,
+        maxChipWidth = maxChipWidth,
+        actionSymbol = "−",
+        onActionClick = onRemove,
+    )
 }
 
 @Composable
@@ -144,10 +95,10 @@ internal fun TagPill(
         modifier = modifier.widthIn(max = maxChipWidth),
     ) {
         Text(
-            text = displayTextForUi(tag, fullCjkFontReady),
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            text = displayFormalTagForUi(tag, fullCjkFontReady),
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
             fontWeight = FontWeight.Medium,
-            fontSize = 11.sp,
+            fontSize = if (windowSizeClass == TaggoWindowSizeClass.Compact) 12.sp else 11.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             fontFamily = fullCjkFontFamily,
@@ -166,46 +117,37 @@ internal fun RemovableTagChip(
 ) {
     val windowSizeClass = LocalTaggoWindowSizeClass.current
     val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 190.dp else 212.dp
-    Box(
-        modifier = Modifier
-            .widthIn(max = maxChipWidth)
-            .padding(top = 6.dp, end = 6.dp),
-    ) {
-        Surface(
-            color = TaggoTheme.colors.panelBackgroundSoft,
-            contentColor = TaggoTheme.colors.textSecondary,
-            shape = RoundedCornerShape(999.dp),
-            modifier = Modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-        ) {
-            Text(
-                text = displayTextForUi(tag, fullCjkFontReady),
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                fontWeight = FontWeight.Medium,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontFamily = fullCjkFontFamily,
-            )
-        }
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = 6.dp, y = (-6).dp)
-                .size(17.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(TaggoTheme.colors.panelBackground)
-                .border(1.dp, TaggoTheme.colors.panelBorder, RoundedCornerShape(999.dp))
-                .clickable(onClick = onRemove),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = actionIcon,
-                contentDescription = null,
-                tint = TaggoTheme.colors.textSecondary,
-                modifier = Modifier.size(11.dp),
-            )
-        }
-    }
+    TaggoOperableTagChip(
+        label = tag,
+        formalTag = true,
+        fullCjkFontReady = fullCjkFontReady,
+        fullCjkFontFamily = fullCjkFontFamily,
+        maxChipWidth = maxChipWidth,
+        actionSymbol = if (actionIcon == Icons.Outlined.Close) "×" else "−",
+        onClick = onClick,
+        onActionClick = onRemove,
+    )
+}
+
+@Composable
+internal fun AddableTagChip(
+    tag: String,
+    fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
+    onAdd: () -> Unit,
+) {
+    val windowSizeClass = LocalTaggoWindowSizeClass.current
+    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 190.dp else 220.dp
+    TaggoOperableTagChip(
+        label = tag,
+        formalTag = true,
+        fullCjkFontReady = fullCjkFontReady,
+        fullCjkFontFamily = fullCjkFontFamily,
+        maxChipWidth = maxChipWidth,
+        actionSymbol = "+",
+        onClick = onAdd,
+        onActionClick = onAdd,
+    )
 }
 
 @Composable
@@ -229,4 +171,150 @@ internal fun SortChip(
             )
         },
     )
+}
+
+private fun displayFormalTagForUi(
+    tag: String,
+    fullCjkFontReady: Boolean,
+): String {
+    val displayText = displayTextForUi(tag, fullCjkFontReady)
+    return if (displayText.startsWith("#")) displayText else "#$displayText"
+}
+
+private data class OperableTagChipMetrics(
+    val height: Dp,
+    val horizontalPadding: Dp,
+    val verticalPadding: Dp,
+    val textSize: TextUnit,
+    val lineHeight: TextUnit,
+    val cornerRadius: Dp,
+    val actionTouchSize: Dp,
+    val actionVisualSize: Dp,
+    val actionSymbolSize: TextUnit,
+)
+
+private fun operableTagChipMetrics(windowSizeClass: TaggoWindowSizeClass): OperableTagChipMetrics =
+    when (windowSizeClass) {
+        TaggoWindowSizeClass.Compact -> OperableTagChipMetrics(
+            height = 36.dp,
+            horizontalPadding = 14.dp,
+            verticalPadding = 7.dp,
+            textSize = 13.sp,
+            lineHeight = 17.sp,
+            cornerRadius = 18.dp,
+            actionTouchSize = 32.dp,
+            actionVisualSize = 22.dp,
+            actionSymbolSize = 13.sp,
+        )
+        TaggoWindowSizeClass.Medium -> OperableTagChipMetrics(
+            height = 34.dp,
+            horizontalPadding = 14.dp,
+            verticalPadding = 6.dp,
+            textSize = 12.5.sp,
+            lineHeight = 16.sp,
+            cornerRadius = 17.dp,
+            actionTouchSize = 30.dp,
+            actionVisualSize = 21.dp,
+            actionSymbolSize = 12.5.sp,
+        )
+        TaggoWindowSizeClass.Expanded -> OperableTagChipMetrics(
+            height = 32.dp,
+            horizontalPadding = 14.dp,
+            verticalPadding = 6.dp,
+            textSize = 12.sp,
+            lineHeight = 15.sp,
+            cornerRadius = 16.dp,
+            actionTouchSize = 30.dp,
+            actionVisualSize = 20.dp,
+            actionSymbolSize = 12.sp,
+        )
+    }
+
+@Composable
+private fun TaggoOperableTagChip(
+    label: String,
+    formalTag: Boolean,
+    fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
+    maxChipWidth: Dp,
+    actionSymbol: String,
+    emphasized: Boolean = false,
+    onClick: (() -> Unit)? = null,
+    onActionClick: () -> Unit,
+) {
+    val windowSizeClass = LocalTaggoWindowSizeClass.current
+    val metrics = operableTagChipMetrics(windowSizeClass)
+    val chipShape = RoundedCornerShape(metrics.cornerRadius)
+    val visualActionShape = RoundedCornerShape(999.dp)
+    val actionOuterPadding = metrics.actionVisualSize / 2
+    val actionTouchOffset = (metrics.actionTouchSize - metrics.actionVisualSize) / 2
+    val displayText = if (formalTag) {
+        displayFormalTagForUi(label, fullCjkFontReady)
+    } else {
+        displayTextForUi(label, fullCjkFontReady)
+    }
+    Box(
+        modifier = Modifier.widthIn(max = maxChipWidth + actionOuterPadding),
+    ) {
+        Surface(
+            color = if (emphasized) {
+                TaggoTheme.colors.primaryAccentSoft
+            } else {
+                TaggoTheme.colors.surfaceElevated
+            },
+            contentColor = TaggoTheme.colors.textPrimary,
+            shape = chipShape,
+            modifier = Modifier
+                .padding(top = actionOuterPadding, end = actionOuterPadding)
+                .height(metrics.height)
+                .widthIn(max = maxChipWidth)
+                .border(1.dp, TaggoTheme.colors.panelBorder.copy(alpha = 0.95f), chipShape)
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        ) {
+            Box(contentAlignment = Alignment.CenterStart) {
+                Text(
+                    text = displayText,
+                    modifier = Modifier.padding(
+                        start = metrics.horizontalPadding,
+                        end = metrics.horizontalPadding,
+                        top = metrics.verticalPadding,
+                        bottom = metrics.verticalPadding,
+                    ),
+                    fontWeight = FontWeight.Medium,
+                    fontSize = metrics.textSize,
+                    lineHeight = metrics.lineHeight,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontFamily = fullCjkFontFamily,
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = actionTouchOffset, y = -actionTouchOffset)
+                .size(metrics.actionTouchSize)
+                .clickable(onClick = onActionClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(metrics.actionVisualSize)
+                    .clip(visualActionShape)
+                    .background(TaggoTheme.colors.surfaceVariant)
+                    .border(1.dp, TaggoTheme.colors.panelBorder.copy(alpha = 0.95f), visualActionShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = actionSymbol,
+                    color = TaggoTheme.colors.textSecondary,
+                    fontSize = metrics.actionSymbolSize,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = metrics.actionSymbolSize,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
 }

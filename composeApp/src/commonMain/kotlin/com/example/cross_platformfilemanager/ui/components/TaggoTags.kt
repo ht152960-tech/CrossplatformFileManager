@@ -59,7 +59,7 @@ internal fun TaggoTagChip(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = displayTextForUi(tag, fullCjkFontReady),
+                    text = displayFormalTagForUi(tag, fullCjkFontReady),
                     color = TaggoGlobalColors.TextPrimary,
                     fontWeight = FontWeight.Medium,
                     fontSize = 12.sp,
@@ -82,7 +82,7 @@ internal fun TaggoTagChip(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = displayTextForUi(tag, fullCjkFontReady),
+                    text = displayFormalTagForUi(tag, fullCjkFontReady),
                     modifier = Modifier.padding(horizontal = TaggoGlobalSpacing.Md),
                     fontWeight = FontWeight.Medium,
                     fontSize = TaggoGlobalTypography.Body,
@@ -93,7 +93,7 @@ internal fun TaggoTagChip(
             }
         } else {
             Text(
-                text = displayTextForUi(tag, fullCjkFontReady),
+                text = displayFormalTagForUi(tag, fullCjkFontReady),
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                 fontWeight = FontWeight.Medium,
                 fontSize = if (compact) TaggoGlobalTypography.Caption else 11.sp,
@@ -168,4 +168,12 @@ private fun resolveVisibleCardTags(
         usedCharacters += nextCost
     }
     return if (visible.isEmpty()) listOf(tags.first()) else visible
+}
+
+private fun displayFormalTagForUi(
+    tag: String,
+    fullCjkFontReady: Boolean,
+): String {
+    val displayText = displayTextForUi(tag, fullCjkFontReady)
+    return if (displayText.startsWith("#")) displayText else "#$displayText"
 }

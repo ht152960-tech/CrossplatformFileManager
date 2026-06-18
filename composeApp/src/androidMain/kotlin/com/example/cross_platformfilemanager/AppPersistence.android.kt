@@ -7,6 +7,10 @@ import java.io.File
 
 private const val SNAPSHOT_FILE_NAME = "app_snapshot.json"
 
+private class AndroidSnapshotSaveException(
+    cause: Throwable,
+) : Exception("Failed to save Android app snapshot.", cause)
+
 actual fun createAppSnapshotStore(): AppSnapshotStore? {
     val context = AndroidContextHolder.applicationContext ?: return null
     return AndroidAppSnapshotStore(
@@ -35,25 +39,26 @@ private class AndroidAppSnapshotStore(
         withContext(Dispatchers.IO) {
             val encoded = try {
                 SnapshotCodec.encode(snapshot)
-            } catch (_: Exception) {
-                return@withContext
+            } catch (error: Exception) {
+                throw AndroidSnapshotSaveException(error)
             }
 
             val output = try {
                 atomicFile.startWrite()
-            } catch (_: Exception) {
-                return@withContext
+            } catch (error: Exception) {
+                throw AndroidSnapshotSaveException(error)
             }
 
             try {
                 output.write(encoded.encodeToByteArray())
                 atomicFile.finishWrite(output)
-            } catch (_: Exception) {
+            } catch (error: Exception) {
                 try {
                     atomicFile.failWrite(output)
                 } catch (_: Exception) {
                     // Saving is best-effort; leave the previous atomic snapshot intact.
                 }
+                throw AndroidSnapshotSaveException(error)
             }
         }
     }

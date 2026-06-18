@@ -62,10 +62,10 @@ internal class AndroidBrowserReferencePicker(
             }
         }
 
-    fun onDocumentPicked(uri: Uri?) {
-        val continuation = pendingContinuation ?: return
+    fun onDocumentPicked(uri: Uri?): Boolean {
+        val continuation = pendingContinuation ?: return false
         pendingContinuation = null
-        if (!continuation.isActive) return
+        if (!continuation.isActive) return false
 
         CoroutineScope(continuation.context).launch {
             val draft = uri?.let {
@@ -77,6 +77,7 @@ internal class AndroidBrowserReferencePicker(
                 continuation.resume(draft)
             }
         }
+        return true
     }
 
     fun cancelPendingPick() {

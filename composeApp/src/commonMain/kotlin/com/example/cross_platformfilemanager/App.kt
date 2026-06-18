@@ -47,13 +47,14 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -127,6 +128,7 @@ import com.example.cross_platformfilemanager.ui.adaptive.TaggoBottomNavigation
 import com.example.cross_platformfilemanager.ui.adaptive.TaggoNavigationRail
 import com.example.cross_platformfilemanager.ui.adaptive.TaggoSidebarNavigation
 import com.example.cross_platformfilemanager.ui.adaptive.TaggoWindowSizeClass
+import com.example.cross_platformfilemanager.ui.components.AddableTagChip
 import com.example.cross_platformfilemanager.ui.theme.TaggoTheme
 import com.example.cross_platformfilemanager.ui.theme.TaggoThemeTokens.HomeWide
 import com.example.cross_platformfilemanager.ui.theme.ProvideTaggoTheme
@@ -449,6 +451,7 @@ fun App() {
         )
     }
     val coroutineScope = rememberCoroutineScope()
+    val snapshotSnackbarHostState = remember { SnackbarHostState() }
     val pageScrollState = rememberScrollState()
     val fontLoadState = rememberAppFontLoadState()
     val fullCjkFontLoadState = rememberFullCjkFontLoadState()
@@ -468,9 +471,11 @@ fun App() {
     var referenceEditorMode by remember { mutableStateOf(ReferenceEditorMode.Add) }
     var referenceEditorTargetId by remember { mutableStateOf<String?>(null) }
     var draftFileSizeText by remember { mutableStateOf("") }
+    var manualAddErrorMessage by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showSideMenu by remember { mutableStateOf(false) }
     var snapshotReady by remember { mutableStateOf(false) }
+    var snapshotSaveFailurePending by remember { mutableStateOf(false) }
     var searchFeedbackMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
@@ -497,7 +502,22 @@ fun App() {
 
     LaunchedEffect(appState.snapshotVersion, snapshotStore, snapshotReady) {
         if (snapshotReady) {
-            snapshotStore?.save(appState.exportSnapshot())
+            try {
+                snapshotStore?.save(appState.exportSnapshot())
+            } catch (_: Exception) {
+                snapshotSaveFailurePending = true
+            }
+        }
+    }
+
+    LaunchedEffect(snapshotSaveFailurePending) {
+        if (snapshotSaveFailurePending) {
+            snapshotSnackbarHostState.showSnackbar(
+                message = "\u4fdd\u5b58\u5931\u8d25\uff0c\u4fee\u6539\u53ef\u80fd\u4e0d\u4f1a\u4fdd\u7559",
+                actionLabel = "\u77e5\u9053\u4e86",
+                duration = SnackbarDuration.Indefinite,
+            )
+            snapshotSaveFailurePending = false
         }
     }
 
@@ -586,6 +606,12 @@ fun App() {
     }
 
     fun addPickedReference(draft: BrowserReferenceDraft) {
+        val tagValidationMessage = formalTagsLengthValidationMessage(appState.draftTags)
+        if (tagValidationMessage != null) {
+            manualAddErrorMessage = tagValidationMessage
+            showManualAddDialog = true
+            return
+        }
         appState.applyBrowserDraft(draft)
         val saved = appState.addDraftReference()
         coroutineScope.launch {
@@ -606,6 +632,7 @@ fun App() {
     fun showAddReferenceDialog(notice: String? = null) {
         clearDraftFields(appState)
         draftFileSizeText = ""
+        manualAddErrorMessage = null
         referenceEditorMode = ReferenceEditorMode.Add
         referenceEditorTargetId = null
         manualAddNotice = notice
@@ -944,21 +971,34 @@ fun App() {
                                         draftFileSizeText = text
                                         appState.draftFileSizeBytes = text.trim().toLongOrNull()
                                     },
+                                    errorMessage = manualAddErrorMessage,
+                                    onDraftTagsChange = { text ->
+                                        appState.draftTags = text
+                                        manualAddErrorMessage = null
+                                    },
                                     onDismiss = {
                                         manualAddNotice = null
+                                        manualAddErrorMessage = null
                                         showManualAddDialog = false
                                         referenceEditorMode = ReferenceEditorMode.Add
                                         referenceEditorTargetId = null
                                         draftFileSizeText = ""
                                     },
                                     onConfirm = {
+                                        var shouldCloseDialog = true
                                         when (referenceEditorMode) {
                                             ReferenceEditorMode.Add -> {
-                                                val saved = appState.addDraftReference()
-                                                coroutineScope.launch {
-                                                    appState.generateThumbnailForReference(saved.id)
+                                                val tagValidationMessage = formalTagsLengthValidationMessage(appState.draftTags)
+                                                if (tagValidationMessage != null) {
+                                                    manualAddErrorMessage = tagValidationMessage
+                                                    shouldCloseDialog = false
+                                                } else {
+                                                    val saved = appState.addDraftReference()
+                                                    coroutineScope.launch {
+                                                        appState.generateThumbnailForReference(saved.id)
+                                                    }
+                                                    currentPage = AppPage.Home
                                                 }
-                                                currentPage = AppPage.Home
                                             }
 
                                             ReferenceEditorMode.Replace -> {
@@ -974,12 +1014,15 @@ fun App() {
                                                 currentPage = AppPage.Detail
                                             }
                                         }
-                                        clearDraftFields(appState)
-                                        draftFileSizeText = ""
-                                        manualAddNotice = null
-                                        showManualAddDialog = false
-                                        referenceEditorMode = ReferenceEditorMode.Add
-                                        referenceEditorTargetId = null
+                                        if (shouldCloseDialog) {
+                                            clearDraftFields(appState)
+                                            draftFileSizeText = ""
+                                            manualAddNotice = null
+                                            manualAddErrorMessage = null
+                                            showManualAddDialog = false
+                                            referenceEditorMode = ReferenceEditorMode.Add
+                                            referenceEditorTargetId = null
+                                        }
                                     },
                                 )
                             }
@@ -1023,6 +1066,21 @@ fun App() {
                                     },
                                 )
                             }
+
+                            SnackbarHost(
+                                hostState = snapshotSnackbarHostState,
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(
+                                        start = TaggoGlobalSpacing.Md,
+                                        end = TaggoGlobalSpacing.Md,
+                                        bottom = if (actualWindowSizeClass == TaggoWindowSizeClass.Compact) {
+                                            TaggoCompactTokens.BottomNavigationClearance
+                                        } else {
+                                            TaggoGlobalSpacing.Md
+                                        },
+                                    ),
+                            )
                         }
                         }
                     }
@@ -2226,7 +2284,7 @@ private fun MediumRecommendedFileRow(
                 buildString {
                     append(
                         visibleTags.joinToString("  ") { tag ->
-                            "#${displayTextForUi(tag, fullCjkFontReady)}"
+                            displayFormalTagForUi(tag, fullCjkFontReady)
                         },
                     )
                     if (remainingTagCount > 0) {
@@ -2492,7 +2550,7 @@ private fun MediumTagItem(
         onClick = onClick,
     ) {
         Text(
-            text = displayTextForUi(summary.tag, fullCjkFontReady),
+            text = displayFormalTagForUi(summary.tag, fullCjkFontReady),
             modifier = Modifier.weight(1f),
             color = TaggoGlobalColors.TextPrimary.copy(
                 alpha = MediumHomeMetrics.SupportLabelAlpha,
@@ -3070,7 +3128,7 @@ private fun CompactTagGrid(
                             onClick = { onTagClick(summary.tag) },
                         ) {
                             Text(
-                                text = displayTextForUi(summary.tag, fullCjkFontReady),
+                                text = displayFormalTagForUi(summary.tag, fullCjkFontReady),
                                 modifier = Modifier.weight(1f),
                                 color = TaggoGlobalColors.TextPrimary.copy(
                                     alpha = CompactHomeMetrics.TagLabelAlpha,
@@ -3544,6 +3602,14 @@ private fun compactRelativeTimeLabel(
     }
 }
 
+private fun displayFormalTagForUi(
+    tag: String,
+    fullCjkFontReady: Boolean,
+): String {
+    val displayText = displayTextForUi(tag, fullCjkFontReady)
+    return if (displayText.startsWith("#")) displayText else "#$displayText"
+}
+
 @Composable
 private fun DashboardTagGrid(
     tags: List<DashboardTagSummary>,
@@ -3610,7 +3676,7 @@ private fun DashboardTagButton(
         onClick = onClick,
     ) {
         Text(
-            text = displayTextForUi(label, fullCjkFontReady),
+            text = displayFormalTagForUi(label, fullCjkFontReady),
             modifier = Modifier.weight(1f),
             color = HomeWide.Colors.TextPrimary,
             fontSize = HomeWide.Typography.TagButton,
@@ -3721,7 +3787,7 @@ private fun DashboardCompactRecommendedFileRow(
         buildString {
             append(
                 visibleTags.joinToString("  ") { tag ->
-                    "#${displayTextForUi(tag, fullCjkFontReady)}"
+                    displayFormalTagForUi(tag, fullCjkFontReady)
                 },
             )
             if (remainingTagCount > 0) {
@@ -4149,67 +4215,105 @@ private fun AllFilesPage(
                     }
                 } else {
                     if (compactLayout) {
-                        TaggoSectionCard(
-                            title = if (locale == AppLocale.ZhCn) "\u6392\u5e8f" else "Sort",
-                            meta = if (locale == AppLocale.ZhCn) {
-                                "\u9009\u62e9\u6392\u5e8f\u65b9\u5f0f"
-                            } else {
-                                "Choose sort mode."
-                            },
-                            compact = true,
-                            compactPadding = TaggoCompactTokens.FileItemHorizontalPadding,
-                            compactContentGap = 5.dp,
-                            trailing = {},
+                        var typeMenuExpanded by remember { mutableStateOf(false) }
+                        var sortMenuExpanded by remember { mutableStateOf(false) }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(TaggoCompactTokens.FileItemGap),
                         ) {
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                                verticalArrangement = Arrangement.spacedBy(5.dp),
-                            ) {
-                                SortChip(
-                                    label = sortChipLabel(FileSortMode.RecentOpened, sortMode, sortDirection, locale),
-                                    selected = sortMode == FileSortMode.RecentOpened,
-                                    onClick = { onSortModeChange(FileSortMode.RecentOpened) },
-                                )
-                                SortChip(
-                                    label = sortChipLabel(FileSortMode.Name, sortMode, sortDirection, locale),
-                                    selected = sortMode == FileSortMode.Name,
-                                    onClick = { onSortModeChange(FileSortMode.Name) },
-                                )
-                                SortChip(
-                                    label = sortChipLabel(FileSortMode.RecentAdded, sortMode, sortDirection, locale),
-                                    selected = sortMode == FileSortMode.RecentAdded,
-                                    onClick = { onSortModeChange(FileSortMode.RecentAdded) },
-                                )
-                                SortChip(
-                                    label = sortChipLabel(FileSortMode.FileSize, sortMode, sortDirection, locale),
-                                    selected = sortMode == FileSortMode.FileSize,
-                                    onClick = { onSortModeChange(FileSortMode.FileSize) },
-                                )
-                            }
-                        }
-
-                        TaggoSectionCard(
-                            title = if (locale == AppLocale.ZhCn) "\u7c7b\u578b" else "Type",
-                            meta = if (locale == AppLocale.ZhCn) {
-                                "\u53ea\u663e\u793a\u5df2\u6709\u6587\u4ef6\u7c7b\u578b"
-                            } else {
-                                "Only types present in the library are shown."
-                            },
-                            compact = true,
-                            compactPadding = TaggoCompactTokens.FileItemHorizontalPadding,
-                            compactContentGap = 5.dp,
-                            trailing = {},
-                        ) {
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                                verticalArrangement = Arrangement.spacedBy(5.dp),
-                            ) {
-                                availableTypeFilters.forEach { filter ->
-                                    SortChip(
-                                        label = typeFilterLabel(filter, locale),
-                                        selected = typeFilter == filter,
-                                        onClick = { onTypeFilterChange(filter) },
+                            Box(modifier = Modifier.weight(1f)) {
+                                OutlinedButton(
+                                    onClick = { typeMenuExpanded = true },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(TaggoCompactTokens.SearchButtonHeight),
+                                    shape = RoundedCornerShape(TaggoCompactTokens.ButtonRadius),
+                                    contentPadding = PaddingValues(horizontal = TaggoCompactTokens.FileItemHorizontalPadding),
+                                    border = BorderStroke(TaggoCompactTokens.BorderWidth, TaggoTheme.colors.panelBorder),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = TaggoTheme.colors.panelBackgroundSoft,
+                                        contentColor = TaggoTheme.colors.textPrimary,
+                                    ),
+                                ) {
+                                    Text(
+                                        text = if (locale == AppLocale.ZhCn) {
+                                            "\u7c7b\u578b\uff1a${typeFilterLabel(typeFilter, locale)}"
+                                        } else {
+                                            "Type: ${typeFilterLabel(typeFilter, locale)}"
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        fontSize = TaggoCompactTokens.Caption,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
+                                    Icon(
+                                        imageVector = Icons.Outlined.ArrowDropDown,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = typeMenuExpanded,
+                                    onDismissRequest = { typeMenuExpanded = false },
+                                ) {
+                                    availableTypeFilters.forEach { filter ->
+                                        DropdownMenuItem(
+                                            text = { Text(typeFilterLabel(filter, locale)) },
+                                            onClick = {
+                                                onTypeFilterChange(filter)
+                                                typeMenuExpanded = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+
+                            Box(modifier = Modifier.weight(1f)) {
+                                OutlinedButton(
+                                    onClick = { sortMenuExpanded = true },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(TaggoCompactTokens.SearchButtonHeight),
+                                    shape = RoundedCornerShape(TaggoCompactTokens.ButtonRadius),
+                                    contentPadding = PaddingValues(horizontal = TaggoCompactTokens.FileItemHorizontalPadding),
+                                    border = BorderStroke(TaggoCompactTokens.BorderWidth, TaggoTheme.colors.panelBorder),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = TaggoTheme.colors.panelBackgroundSoft,
+                                        contentColor = TaggoTheme.colors.textPrimary,
+                                    ),
+                                ) {
+                                    Text(
+                                        text = if (locale == AppLocale.ZhCn) {
+                                            "\u6392\u5e8f\uff1a${sortChipLabel(sortMode, sortMode, sortDirection, locale)}"
+                                        } else {
+                                            "Sort: ${sortChipLabel(sortMode, sortMode, sortDirection, locale)}"
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        fontSize = TaggoCompactTokens.Caption,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Outlined.ArrowDropDown,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = sortMenuExpanded,
+                                    onDismissRequest = { sortMenuExpanded = false },
+                                ) {
+                                    FileSortMode.entries.forEach { mode ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(sortChipLabel(mode, sortMode, sortDirection, locale))
+                                            },
+                                            onClick = {
+                                                onSortModeChange(mode)
+                                                sortMenuExpanded = false
+                                            },
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -4514,7 +4618,7 @@ private fun AllTagsEntrySection(
 ) {
     SectionCard(
         title = if (locale == AppLocale.ZhCn) "\u5168\u90e8\u6807\u7b7e" else "All tags",
-        subtitle = if (locale == AppLocale.ZhCn) "\u70b9\u51fb\u8fdb\u5165\u641c\u7d22\uff0c\u53f3\u4e0a\u89d2\u53ef\u79fb\u9664\u6807\u7b7e" else "Click to search. Use the corner action to remove a tag.",
+        subtitle = if (locale == AppLocale.ZhCn) "\u70b9\u51fb\u8fdb\u5165\u641c\u7d22\uff0c\u53f3\u4e0a\u89d2 \u00d7 \u53ef\u5220\u9664\u6807\u7b7e" else "Click to search. Use the corner \u00d7 to delete a tag.",
     ) {
         if (allTags.isEmpty()) {
             EmptyPanel(
@@ -4770,7 +4874,11 @@ private fun DetailPage(
     val canUseWebReopenFlow = browserReferencePicker != null &&
         browserReferenceResolver != null &&
         isBrowserSelectedReference
-    val canOpenFile = canOpenReferenceExternally(reference) || canUseWebReopenFlow
+    val isCompactContentReference = compactLayout &&
+        reference.source.trim().startsWith("content://", ignoreCase = true)
+    val canOpenFile = canOpenReferenceExternally(reference) ||
+        canUseWebReopenFlow ||
+        isCompactContentReference
     val openButtonLabel = if (locale == AppLocale.ZhCn) "\u2197 \u6253\u5f00\u6b64\u6587\u4ef6" else "\u2197 Open this file"
 
     fun clearDuplicateTagWarning() {
@@ -4787,9 +4895,15 @@ private fun DetailPage(
             tagFeedbackIsWarning = false
             return false
         }
+        val existingTag = resolveExistingTagExact(tagCandidates, cleaned)
+        if (existingTag == null && !isFormalTagLengthValid(cleaned)) {
+            tagFeedbackMessage = FORMAL_TAG_LENGTH_LIMIT_MESSAGE
+            tagFeedbackIsWarning = true
+            return false
+        }
 
-        val existingTag = resolveExistingTagExact(tagCandidates, cleaned) ?: cleaned
-        if (reference.tags.any { it.trim() == existingTag }) {
+        val tagToAdd = existingTag ?: cleaned
+        if (reference.tags.any { it.trim() == tagToAdd }) {
             tagFeedbackMessage = if (locale == AppLocale.ZhCn) {
                 "\u8be5\u6587\u4ef6\u5df2\u5305\u542b\u6b64\u6807\u7b7e"
             } else {
@@ -4801,7 +4915,7 @@ private fun DetailPage(
 
         appState.updateReferenceTags(
             reference.id,
-            reference.tags.plus(existingTag).joinToString(", "),
+            reference.tags.plus(tagToAdd).joinToString(", "),
         )
         tagFeedbackMessage = null
         tagFeedbackIsWarning = false
@@ -5212,19 +5326,15 @@ private fun DetailPage(
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 tagCandidates.forEach { tag ->
-                                    FilterChip(
-                                        selected = false,
-                                        onClick = {
+                                    AddableTagChip(
+                                        tag = tag,
+                                        fullCjkFontReady = fullCjkFontReady,
+                                        fullCjkFontFamily = fullCjkFontFamily,
+                                        onAdd = {
                                             if (addTagToCurrentReference(tag)) {
                                                 newTagDraft = ""
                                                 showTagDialog = false
                                             }
-                                        },
-                                        label = {
-                                            Text(
-                                                text = displayTextForUi(tag, fullCjkFontReady),
-                                                fontFamily = fullCjkFontFamily,
-                                            )
                                         },
                                     )
                                 }
@@ -6264,21 +6374,50 @@ private fun DetailHeroCard(
                     .padding(TaggoCompactTokens.DetailHeroPadding),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(
-                    TaggoCompactTokens.FileItemHorizontalPadding,
+                    TaggoCompactTokens.DetailHeroPadding,
                 ),
             ) {
-                FileCoverArtFrame(
-                    reference = reference,
-                    iconStyle = iconStyle,
-                    fullCjkFontReady = fullCjkFontReady,
-                    fullCjkFontFamily = fullCjkFontFamily,
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = TaggoCompactTokens.DetailCoverMaxHeight)
-                        .aspectRatio(TaggoCompactTokens.DetailCoverAspectRatio),
-                    cornerShape = RoundedCornerShape(TaggoCompactTokens.HeroCoverRadius),
-                    iconSize = TaggoCompactTokens.DetailIconSize,
-                )
+                        .aspectRatio(TaggoCompactTokens.DetailCoverAspectRatio)
+                        .then(
+                            if (canOpenFile) {
+                                Modifier.clickable(onClick = onOpenFile)
+                            } else {
+                                Modifier
+                            },
+                        ),
+                ) {
+                    FileCoverArtFrame(
+                        reference = reference,
+                        iconStyle = iconStyle,
+                        fullCjkFontReady = fullCjkFontReady,
+                        fullCjkFontFamily = fullCjkFontFamily,
+                        modifier = Modifier.fillMaxSize(),
+                        cornerShape = RoundedCornerShape(TaggoCompactTokens.HeroCoverRadius),
+                        iconSize = TaggoCompactTokens.DetailIconSize,
+                    )
+
+                    if (canOpenFile) {
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(TaggoCompactTokens.FileItemHorizontalPadding),
+                            shape = RoundedCornerShape(TaggoCompactTokens.ButtonRadius),
+                            color = TaggoTheme.colors.panelBackground.copy(alpha = 0.82f),
+                            contentColor = TaggoTheme.colors.textSecondary,
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
+                                contentDescription = openButtonLabel,
+                                modifier = Modifier
+                                    .padding(7.dp)
+                                    .size(18.dp),
+                            )
+                        }
+                    }
+                }
 
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -6287,10 +6426,10 @@ private fun DetailHeroCard(
                 ) {
                     Text(
                         text = displayTextForUi(reference.title, fullCjkFontReady),
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
                         color = TaggoTheme.colors.textPrimary,
-                        fontWeight = FontWeight.Normal,
-                        fontSize = TaggoCompactTokens.DetailTitle,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 20.sp,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
@@ -6304,13 +6443,6 @@ private fun DetailHeroCard(
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                    )
-
-                    TaggoOpenButton(
-                        label = openButtonLabel,
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = onOpenFile,
-                        enabled = canOpenFile,
                     )
                 }
             }
@@ -6409,6 +6541,8 @@ private fun ManualAddDialog(
     editorMode: ReferenceEditorMode,
     draftFileSizeText: String,
     onDraftFileSizeTextChange: (String) -> Unit,
+    errorMessage: String?,
+    onDraftTagsChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -6433,6 +6567,14 @@ private fun ManualAddDialog(
                         text = notice,
                         style = MaterialTheme.typography.bodyMedium,
                         color = TaggoTheme.colors.textSecondary,
+                    )
+                }
+                if (!errorMessage.isNullOrBlank()) {
+                    Text(
+                        text = errorMessage,
+                        color = TaggoTheme.colors.warning,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
                 OutlinedTextField(
@@ -6485,7 +6627,7 @@ private fun ManualAddDialog(
                     OutlinedTextField(
                         modifier = Modifier.fillMaxWidth(),
                         value = appState.draftTags,
-                        onValueChange = { appState.draftTags = it },
+                        onValueChange = onDraftTagsChange,
                         label = { Text(appState.tagsCommaSeparated) },
                         singleLine = true,
                         textStyle = fullCjkTextStyle,
