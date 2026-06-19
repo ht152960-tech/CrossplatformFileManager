@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 
@@ -15,28 +16,29 @@ import androidx.compose.ui.tooling.preview.Preview
  * 这里只负责把共享层 Compose 应用挂载到 Android 窗口。
  */
 class MainActivity : ComponentActivity() {
+    private val filePickerState: AndroidFilePickerViewModel by viewModels()
     private lateinit var browserReferencePicker: AndroidBrowserReferencePicker
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         registerAndroidApplicationContext(applicationContext)
+        if (filePickerState.clearStalePendingAfterProcessRestore()) {
+            showFilePickerStateExpiredToast()
+        }
 
         val documentLauncher = registerForActivityResult(
             ActivityResultContracts.OpenDocument(),
         ) { uri ->
             val consumed = browserReferencePicker.onDocumentPicked(uri)
             if (uri != null && !consumed) {
-                Toast.makeText(
-                    applicationContext,
-                    "文件选择状态已失效，请重新选择",
-                    Toast.LENGTH_LONG,
-                ).show()
+                showFilePickerStateExpiredToast()
             }
         }
         browserReferencePicker = AndroidBrowserReferencePicker(
             contentResolver = contentResolver,
             launcher = documentLauncher,
+            pickerState = filePickerState,
         )
         AndroidBrowserReferencePickerHolder.register(browserReferencePicker)
 
@@ -46,9 +48,19 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        browserReferencePicker.cancelPendingPick()
+        if (!isChangingConfigurations) {
+            browserReferencePicker.cancelPendingPick()
+        }
         AndroidBrowserReferencePickerHolder.unregister(browserReferencePicker)
         super.onDestroy()
+    }
+
+    private fun showFilePickerStateExpiredToast() {
+        Toast.makeText(
+            applicationContext,
+            "文件选择状态已失效，请重新选择",
+            Toast.LENGTH_LONG,
+        ).show()
     }
 }
 

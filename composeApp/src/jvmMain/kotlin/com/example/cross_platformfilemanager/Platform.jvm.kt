@@ -15,6 +15,17 @@ class JVMPlatform : Platform {
 
 actual fun getPlatform(): Platform = JVMPlatform()
 
+actual fun isReferenceExternallyOpenable(reference: FileReference): Boolean {
+    if (reference.source.trim().isBlank()) return false
+    return when (reference.sourceKind) {
+        FileSourceKind.ManualPath,
+        FileSourceKind.Url,
+        FileSourceKind.BrowserHandle,
+        -> true
+        else -> false
+    }
+}
+
 actual suspend fun openReferenceExternally(reference: FileReference): Boolean {
     return openReferenceExternallyWithResult(reference).opened
 }

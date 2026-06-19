@@ -79,13 +79,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -149,7 +152,6 @@ import com.example.cross_platformfilemanager.ui.components.TaggoOpenButton
 import com.example.cross_platformfilemanager.ui.components.TagPill
 import com.example.cross_platformfilemanager.ui.components.TaggoTagChip
 import com.example.cross_platformfilemanager.ui.components.TaggoTagRow
-import com.example.cross_platformfilemanager.ui.components.TagFilterChip
 import com.example.cross_platformfilemanager.ui.components.fileTypeIconStyle
 import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalAlpha
 import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalColors
@@ -157,6 +159,7 @@ import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalRadius
 import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalSpacing
 import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalTypography
 import com.example.cross_platformfilemanager.ui.theme.TaggoCompactTokens
+import com.example.cross_platformfilemanager.ui.theme.TaggoFileCoverTokens
 
 private enum class AppPage {
     Home,
@@ -462,9 +465,6 @@ fun App() {
     var detailBackTarget by remember { mutableStateOf<AppPage?>(AppPage.Home) }
     var searchDraft by remember { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(FileSortMode.RecentOpened) }
-    var sortDirection by remember {
-        mutableStateOf<SortDirection>(defaultSortDirection(FileSortMode.RecentOpened))
-    }
     var allFilesTypeFilter by remember { mutableStateOf(AllFilesTypeFilter.All) }
     var showManualAddDialog by remember { mutableStateOf(false) }
     var manualAddNotice by remember { mutableStateOf<String?>(null) }
@@ -601,6 +601,17 @@ fun App() {
         if (appState.submitSearch(searchDraft)) {
             searchDraft = ""
             searchFeedbackMessage = null
+        }
+        currentPage = AppPage.Search
+    }
+
+    fun startRecentSearch(query: String) {
+        appState.resetSearchSession()
+        if (appState.submitSearch(query)) {
+            searchDraft = ""
+            searchFeedbackMessage = null
+        } else {
+            searchDraft = query
         }
         currentPage = AppPage.Search
     }
@@ -773,6 +784,7 @@ fun App() {
                                         items = navigationItems,
                                         selectedPage = selectedNavigationPage,
                                         onPageSelected = { currentPage = it },
+                                        floating = actualWindowSizeClass == TaggoWindowSizeClass.Compact,
                                     )
                                 }
                             },
@@ -852,16 +864,8 @@ fun App() {
                                         fullCjkFontReady = fullCjkFontReady,
                                         fullCjkFontFamily = fullCjkFontFamily,
                                         sortMode = sortMode,
-                                        sortDirection = sortDirection,
                                         typeFilter = allFilesTypeFilter,
-                                        onSortModeChange = { nextMode ->
-                                            if (sortMode == nextMode) {
-                                                sortDirection = sortDirection.toggled()
-                                            } else {
-                                                sortMode = nextMode
-                                                sortDirection = defaultSortDirection(nextMode)
-                                            }
-                                        },
+                                        onSortModeChange = { sortMode = it },
                                         onTypeFilterChange = { allFilesTypeFilter = it },
                                         onOpenReference = ::openReference,
                                     )
@@ -913,7 +917,7 @@ fun App() {
                                         onSearch = ::startSearchFromSearchPage,
                                         onBackHome = { currentPage = selectedNavigationPage },
                                         onOpenReference = ::openReference,
-                                        onTagClick = ::openTagSearch,
+                                        onRecentSearchClick = ::startRecentSearch,
                                     )
                                 }
                             }
@@ -1529,7 +1533,7 @@ private object MediumHomeMetrics {
     val RecommendationListTopSpacing = 10.dp
     val RecommendationRowHeight = 56.dp
     val RecommendationRowGap = 7.dp
-    val RecommendationIconSize = 36.dp
+    val RecommendationIconSize = TaggoFileCoverTokens.MediumRecommendationCoverSize
     val RecommendationRowPadding = 10.dp
     val RecommendationRowVerticalPadding = 6.dp
     val RecommendationBadgeIconSize = 12.dp
@@ -2197,10 +2201,6 @@ private fun MediumRecommendedFileRow(
     onViewDetails: () -> Unit,
 ) {
     val reference = recommendation.file
-    val visibleTags = remember(reference.tags) {
-        reference.tags.take(3)
-    }
-    val remainingTagCount = reference.tags.size - visibleTags.size
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
     val shape = RoundedCornerShape(14.dp)
@@ -2244,13 +2244,13 @@ private fun MediumRecommendedFileRow(
             fullCjkFontFamily = fullCjkFontFamily,
             modifier = Modifier.size(MediumHomeMetrics.RecommendationIconSize),
             cornerRadius = 10.dp,
-            iconSize = 24.dp,
+            iconSize = TaggoFileCoverTokens.MediumRecommendationIconSize,
             onOpenFile = onOpenFile,
         )
         Column(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxHeight(),
+                .height(MediumHomeMetrics.RecommendationIconSize),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(
@@ -2278,30 +2278,15 @@ private fun MediumRecommendedFileRow(
                     modifier = Modifier.size(MediumHomeMetrics.RecommendationBadgeIconSize),
                 )
             }
-            val tagSummary = if (reference.tags.isEmpty()) {
-                if (locale == AppLocale.ZhCn) "\u65e0\u6807\u7b7e" else "No tags"
-            } else {
-                buildString {
-                    append(
-                        visibleTags.joinToString("  ") { tag ->
-                            displayFormalTagForUi(tag, fullCjkFontReady)
-                        },
-                    )
-                    if (remainingTagCount > 0) {
-                        append("  +")
-                        append(remainingTagCount)
-                    }
-                }
-            }
-            Text(
-                text = tagSummary,
+            RecommendationTagSummaryText(
+                tags = reference.tags,
+                locale = locale,
+                fullCjkFontReady = fullCjkFontReady,
                 modifier = Modifier.fillMaxWidth(),
                 color = TaggoGlobalColors.TextSecondary.copy(alpha = 0.90f),
                 fontSize = 10.sp,
                 lineHeight = 11.sp,
                 fontWeight = FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
                 fontFamily = fullCjkFontFamily,
             )
         }
@@ -2677,7 +2662,7 @@ private object CompactHomeMetrics {
     val TypeCountWidth = 22.dp
     val RecommendationEmptyCardHeight = 160.dp
     val RecommendationRowHeight = 68.dp
-    val RecommendationCoverSize = 48.dp
+    val RecommendationCoverSize = TaggoFileCoverTokens.CompactRecommendationCoverSize
     val RecommendationRowVerticalPadding = 6.dp
     val RecommendationBadgeIconSize = 12.dp
     val RecommendationTitleBadgeGap = 5.dp
@@ -3611,6 +3596,85 @@ private fun displayFormalTagForUi(
 }
 
 @Composable
+private fun RecommendationTagSummaryText(
+    tags: List<String>,
+    locale: AppLocale,
+    fullCjkFontReady: Boolean,
+    modifier: Modifier = Modifier,
+    color: Color,
+    fontSize: TextUnit,
+    lineHeight: TextUnit,
+    fontWeight: FontWeight,
+    fontFamily: FontFamily,
+) {
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val style = androidx.compose.ui.text.TextStyle(
+        color = color,
+        fontSize = fontSize,
+        lineHeight = lineHeight,
+        fontWeight = fontWeight,
+        fontFamily = fontFamily,
+    )
+    BoxWithConstraints(modifier = modifier) {
+        val availableWidthPx = with(density) { maxWidth.toPx() }
+        val summary = remember(tags, locale, fullCjkFontReady, availableWidthPx, style) {
+            measuredRecommendationTagSummary(
+                tags = tags,
+                locale = locale,
+                fullCjkFontReady = fullCjkFontReady,
+                availableWidthPx = availableWidthPx,
+                measure = { text -> textMeasurer.measure(text = text, style = style).size.width },
+            )
+        }
+        Text(
+            text = summary,
+            color = color,
+            fontSize = fontSize,
+            lineHeight = lineHeight,
+            fontWeight = fontWeight,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontFamily = fontFamily,
+        )
+    }
+}
+
+private fun measuredRecommendationTagSummary(
+    tags: List<String>,
+    locale: AppLocale,
+    fullCjkFontReady: Boolean,
+    availableWidthPx: Float,
+    measure: (String) -> Int,
+): String {
+    if (tags.isEmpty()) {
+        return if (locale == AppLocale.ZhCn) "\u65e0\u6807\u7b7e" else "No tags"
+    }
+
+    val displayedTags = tags.map { displayFormalTagForUi(it, fullCjkFontReady) }
+    for (visibleCount in displayedTags.size downTo 1) {
+        val remainingCount = displayedTags.size - visibleCount
+        val text = buildString {
+            append(displayedTags.take(visibleCount).joinToString("  "))
+            if (remainingCount > 0) {
+                append("  +")
+                append(remainingCount)
+            }
+        }
+        if (measure(text) <= availableWidthPx) return text
+    }
+
+    return buildString {
+        append(displayedTags.first())
+        val remainingCount = displayedTags.size - 1
+        if (remainingCount > 0) {
+            append("  +")
+            append(remainingCount)
+        }
+    }
+}
+
+@Composable
 private fun DashboardTagGrid(
     tags: List<DashboardTagSummary>,
     fullCjkFontReady: Boolean,
@@ -3776,26 +3840,6 @@ private fun DashboardCompactRecommendedFileRow(
     modifier: Modifier = Modifier,
 ) {
     val iconStyle = fileTypeIconStyle(reference)
-    compactRecommendationReason(scoredRecommendation, locale)
-    val visibleTags = remember(reference.tags) {
-        reference.tags.take(2)
-    }
-    val remainingTagCount = reference.tags.size - visibleTags.size
-    val tagSummary = if (reference.tags.isEmpty()) {
-        if (locale == AppLocale.ZhCn) "\u65e0\u6807\u7b7e" else "No tags"
-    } else {
-        buildString {
-            append(
-                visibleTags.joinToString("  ") { tag ->
-                    displayFormalTagForUi(tag, fullCjkFontReady)
-                },
-            )
-            if (remainingTagCount > 0) {
-                append("  +")
-                append(remainingTagCount)
-            }
-        }
-    }
     TaggoListItemSurface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(TaggoGlobalRadius.Item),
@@ -3811,6 +3855,7 @@ private fun DashboardCompactRecommendedFileRow(
             vertical = CompactHomeMetrics.RecommendationRowVerticalPadding,
         ),
         horizontalArrangement = Arrangement.spacedBy(TaggoGlobalSpacing.Sm),
+        verticalAlignment = Alignment.CenterVertically,
         onClick = onViewDetails,
     ) {
         FileCoverArtFrame(
@@ -3822,12 +3867,12 @@ private fun DashboardCompactRecommendedFileRow(
                 .size(CompactHomeMetrics.RecommendationCoverSize)
                 .clickable(onClick = onOpenFile),
             cornerShape = RoundedCornerShape(10.dp),
-            iconSize = 25.dp,
+            iconSize = TaggoFileCoverTokens.CompactRecommendationIconSize,
         )
         Column(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxHeight(),
+                .height(CompactHomeMetrics.RecommendationCoverSize),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(
@@ -3854,8 +3899,10 @@ private fun DashboardCompactRecommendedFileRow(
                     modifier = Modifier.size(CompactHomeMetrics.RecommendationBadgeIconSize),
                 )
             }
-            Text(
-                text = tagSummary,
+            RecommendationTagSummaryText(
+                tags = reference.tags,
+                locale = locale,
+                fullCjkFontReady = fullCjkFontReady,
                 modifier = Modifier.fillMaxWidth(),
                 color = TaggoGlobalColors.TextSecondary.copy(
                     alpha = CompactHomeMetrics.RecommendationTagSummaryAlpha,
@@ -3863,8 +3910,6 @@ private fun DashboardCompactRecommendedFileRow(
                 fontSize = CompactHomeMetrics.RecommendationTagSummaryFontSize,
                 lineHeight = CompactHomeMetrics.RecommendationTagSummaryLineHeight,
                 fontWeight = FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
                 fontFamily = fullCjkFontFamily,
             )
         }
@@ -4095,7 +4140,6 @@ private fun AllFilesPage(
     fullCjkFontReady: Boolean,
     fullCjkFontFamily: FontFamily,
     sortMode: FileSortMode,
-    sortDirection: SortDirection,
     typeFilter: AllFilesTypeFilter,
     onSortModeChange: (FileSortMode) -> Unit,
     onTypeFilterChange: (AllFilesTypeFilter) -> Unit,
@@ -4103,7 +4147,6 @@ private fun AllFilesPage(
 ) {
     val windowSizeClass = LocalTaggoWindowSizeClass.current
     val compactLayout = windowSizeClass == TaggoWindowSizeClass.Compact
-    val expandedLayout = windowSizeClass == TaggoWindowSizeClass.Expanded
     val compactBottomPadding = if (compactLayout) TaggoCompactTokens.BottomNavigationClearance else 0.dp
     val availableTypeFilters = remember(appState.allReferences) {
         resolveAvailableTypeFilters(appState.allReferences)
@@ -4111,8 +4154,8 @@ private fun AllFilesPage(
     val filteredFiles = remember(appState.allReferences, typeFilter) {
         filterReferencesByType(appState.allReferences, typeFilter)
     }
-    val sortedFiles = remember(filteredFiles, sortMode, sortDirection) {
-        sortReferences(filteredFiles, sortMode, sortDirection)
+    val sortedFiles = remember(filteredFiles, sortMode) {
+        sortReferences(filteredFiles, sortMode, defaultSortDirection(sortMode))
     }
 
     Box(
@@ -4144,250 +4187,15 @@ private fun AllFilesPage(
                     },
                 )
             } else {
-                if (expandedLayout) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            SectionCard(
-                                title = if (locale == AppLocale.ZhCn) "\u6392\u5e8f" else "Sort",
-                                subtitle = if (locale == AppLocale.ZhCn) {
-                                    "\u518d\u70b9\u5f53\u524d\u6309\u94ae\u53ef\u5207\u6362\u5347\u964d\u5e8f\uff0c\u5207\u5230\u5176\u4ed6\u6392\u5e8f\u65f6\u4f1a\u6062\u590d\u8be5\u6392\u5e8f\u7684\u9ed8\u8ba4\u65b9\u5411\u3002"
-                                } else {
-                                    "Tap the current option again to flip the direction. Switching to another sort resets it to that mode's default direction."
-                                },
-                                responsiveHeader = true,
-                            ) {
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    SortChip(
-                                        label = sortChipLabel(FileSortMode.RecentOpened, sortMode, sortDirection, locale),
-                                        selected = sortMode == FileSortMode.RecentOpened,
-                                        onClick = { onSortModeChange(FileSortMode.RecentOpened) },
-                                    )
-                                    SortChip(
-                                        label = sortChipLabel(FileSortMode.Name, sortMode, sortDirection, locale),
-                                        selected = sortMode == FileSortMode.Name,
-                                        onClick = { onSortModeChange(FileSortMode.Name) },
-                                    )
-                                    SortChip(
-                                        label = sortChipLabel(FileSortMode.RecentAdded, sortMode, sortDirection, locale),
-                                        selected = sortMode == FileSortMode.RecentAdded,
-                                        onClick = { onSortModeChange(FileSortMode.RecentAdded) },
-                                    )
-                                    SortChip(
-                                        label = sortChipLabel(FileSortMode.FileSize, sortMode, sortDirection, locale),
-                                        selected = sortMode == FileSortMode.FileSize,
-                                        onClick = { onSortModeChange(FileSortMode.FileSize) },
-                                    )
-                                }
-                            }
-                        }
-
-                        Box(modifier = Modifier.weight(1f)) {
-                            SectionCard(
-                                title = if (locale == AppLocale.ZhCn) "\u7c7b\u578b" else "Type",
-                                subtitle = if (locale == AppLocale.ZhCn) {
-                                    "\u53ea\u663e\u793a\u5f53\u524d\u6587\u4ef6\u5e93\u91cc\u771f\u6b63\u5b58\u5728\u7684\u5927\u7c7b\uff0c\u4e0d\u91cd\u7f6e\u5f53\u524d\u6392\u5e8f\u3002"
-                                } else {
-                                    "Only categories that exist in the current library are shown, and switching type keeps the current sort."
-                                },
-                                responsiveHeader = true,
-                            ) {
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    availableTypeFilters.forEach { filter ->
-                                        SortChip(
-                                            label = typeFilterLabel(filter, locale),
-                                            selected = typeFilter == filter,
-                                            onClick = { onTypeFilterChange(filter) },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    if (compactLayout) {
-                        var typeMenuExpanded by remember { mutableStateOf(false) }
-                        var sortMenuExpanded by remember { mutableStateOf(false) }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(TaggoCompactTokens.FileItemGap),
-                        ) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedButton(
-                                    onClick = { typeMenuExpanded = true },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(TaggoCompactTokens.SearchButtonHeight),
-                                    shape = RoundedCornerShape(TaggoCompactTokens.ButtonRadius),
-                                    contentPadding = PaddingValues(horizontal = TaggoCompactTokens.FileItemHorizontalPadding),
-                                    border = BorderStroke(TaggoCompactTokens.BorderWidth, TaggoTheme.colors.panelBorder),
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        containerColor = TaggoTheme.colors.panelBackgroundSoft,
-                                        contentColor = TaggoTheme.colors.textPrimary,
-                                    ),
-                                ) {
-                                    Text(
-                                        text = if (locale == AppLocale.ZhCn) {
-                                            "\u7c7b\u578b\uff1a${typeFilterLabel(typeFilter, locale)}"
-                                        } else {
-                                            "Type: ${typeFilterLabel(typeFilter, locale)}"
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        fontSize = TaggoCompactTokens.Caption,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Outlined.ArrowDropDown,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                                DropdownMenu(
-                                    expanded = typeMenuExpanded,
-                                    onDismissRequest = { typeMenuExpanded = false },
-                                ) {
-                                    availableTypeFilters.forEach { filter ->
-                                        DropdownMenuItem(
-                                            text = { Text(typeFilterLabel(filter, locale)) },
-                                            onClick = {
-                                                onTypeFilterChange(filter)
-                                                typeMenuExpanded = false
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedButton(
-                                    onClick = { sortMenuExpanded = true },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(TaggoCompactTokens.SearchButtonHeight),
-                                    shape = RoundedCornerShape(TaggoCompactTokens.ButtonRadius),
-                                    contentPadding = PaddingValues(horizontal = TaggoCompactTokens.FileItemHorizontalPadding),
-                                    border = BorderStroke(TaggoCompactTokens.BorderWidth, TaggoTheme.colors.panelBorder),
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        containerColor = TaggoTheme.colors.panelBackgroundSoft,
-                                        contentColor = TaggoTheme.colors.textPrimary,
-                                    ),
-                                ) {
-                                    Text(
-                                        text = if (locale == AppLocale.ZhCn) {
-                                            "\u6392\u5e8f\uff1a${sortChipLabel(sortMode, sortMode, sortDirection, locale)}"
-                                        } else {
-                                            "Sort: ${sortChipLabel(sortMode, sortMode, sortDirection, locale)}"
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        fontSize = TaggoCompactTokens.Caption,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Outlined.ArrowDropDown,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                                DropdownMenu(
-                                    expanded = sortMenuExpanded,
-                                    onDismissRequest = { sortMenuExpanded = false },
-                                ) {
-                                    FileSortMode.entries.forEach { mode ->
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(sortChipLabel(mode, sortMode, sortDirection, locale))
-                                            },
-                                            onClick = {
-                                                onSortModeChange(mode)
-                                                sortMenuExpanded = false
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        SectionCard(
-                            title = if (locale == AppLocale.ZhCn) "\u6392\u5e8f" else "Sort",
-                            subtitle = if (locale == AppLocale.ZhCn) {
-                                "\u9009\u62e9\u6392\u5e8f\u65b9\u5f0f"
-                            } else {
-                                "Choose sort mode."
-                            },
-                            responsiveHeader = true,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 7.dp),
-                            contentSpacing = 5.dp,
-                            headerTextSpacing = 2.dp,
-                            stackedHeaderSpacing = 3.dp,
-                            subtitleFontSize = 10.sp,
-                        ) {
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                                verticalArrangement = Arrangement.spacedBy(5.dp),
-                            ) {
-                                SortChip(
-                                    label = sortChipLabel(FileSortMode.RecentOpened, sortMode, sortDirection, locale),
-                                    selected = sortMode == FileSortMode.RecentOpened,
-                                    onClick = { onSortModeChange(FileSortMode.RecentOpened) },
-                                )
-                                SortChip(
-                                    label = sortChipLabel(FileSortMode.Name, sortMode, sortDirection, locale),
-                                    selected = sortMode == FileSortMode.Name,
-                                    onClick = { onSortModeChange(FileSortMode.Name) },
-                                )
-                                SortChip(
-                                    label = sortChipLabel(FileSortMode.RecentAdded, sortMode, sortDirection, locale),
-                                    selected = sortMode == FileSortMode.RecentAdded,
-                                    onClick = { onSortModeChange(FileSortMode.RecentAdded) },
-                                )
-                                SortChip(
-                                    label = sortChipLabel(FileSortMode.FileSize, sortMode, sortDirection, locale),
-                                    selected = sortMode == FileSortMode.FileSize,
-                                    onClick = { onSortModeChange(FileSortMode.FileSize) },
-                                )
-                            }
-                        }
-
-                        SectionCard(
-                            title = if (locale == AppLocale.ZhCn) "\u7c7b\u578b" else "Type",
-                            subtitle = if (locale == AppLocale.ZhCn) {
-                                "\u53ea\u663e\u793a\u5df2\u6709\u6587\u4ef6\u7c7b\u578b"
-                            } else {
-                                "Only types present in the library are shown."
-                            },
-                            responsiveHeader = true,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 7.dp),
-                            contentSpacing = 5.dp,
-                            headerTextSpacing = 2.dp,
-                            stackedHeaderSpacing = 3.dp,
-                            subtitleFontSize = 10.sp,
-                        ) {
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                                verticalArrangement = Arrangement.spacedBy(5.dp),
-                            ) {
-                                availableTypeFilters.forEach { filter ->
-                                    SortChip(
-                                        label = typeFilterLabel(filter, locale),
-                                        selected = typeFilter == filter,
-                                        onClick = { onTypeFilterChange(filter) },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                AllFilesControlsRow(
+                    sortMode = sortMode,
+                    typeFilter = typeFilter,
+                    availableTypeFilters = availableTypeFilters,
+                    locale = locale,
+                    compactLayout = compactLayout,
+                    onSortModeChange = onSortModeChange,
+                    onTypeFilterChange = onTypeFilterChange,
+                )
 
                 if (sortedFiles.isEmpty()) {
                     EmptyPanel(
@@ -4413,6 +4221,131 @@ private fun AllFilesPage(
 }
 
 @Composable
+private fun AllFilesControlsRow(
+    sortMode: FileSortMode,
+    typeFilter: AllFilesTypeFilter,
+    availableTypeFilters: List<AllFilesTypeFilter>,
+    locale: AppLocale,
+    compactLayout: Boolean,
+    onSortModeChange: (FileSortMode) -> Unit,
+    onTypeFilterChange: (AllFilesTypeFilter) -> Unit,
+) {
+    var sortMenuExpanded by remember { mutableStateOf(false) }
+    var typeMenuExpanded by remember { mutableStateOf(false) }
+    val buttonHeight = if (compactLayout) TaggoCompactTokens.SearchButtonHeight else 42.dp
+    val buttonRadius = if (compactLayout) TaggoCompactTokens.ButtonRadius else 12.dp
+    val buttonHorizontalPadding = if (compactLayout) {
+        TaggoCompactTokens.FileItemHorizontalPadding
+    } else {
+        12.dp
+    }
+    val labelFontSize = if (compactLayout) TaggoCompactTokens.Caption else 12.sp
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(
+            if (compactLayout) TaggoCompactTokens.FileItemGap else 10.dp,
+        ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.weight(1f)) {
+            AllFilesDropdownButton(
+                label = if (locale == AppLocale.ZhCn) {
+                    "\u6392\u5e8f\uff1a${sortModeLabel(sortMode, locale)}"
+                } else {
+                    "Sort: ${sortModeLabel(sortMode, locale)}"
+                },
+                height = buttonHeight,
+                cornerRadius = buttonRadius,
+                horizontalPadding = buttonHorizontalPadding,
+                fontSize = labelFontSize,
+                onClick = { sortMenuExpanded = true },
+            )
+            DropdownMenu(
+                expanded = sortMenuExpanded,
+                onDismissRequest = { sortMenuExpanded = false },
+            ) {
+                FileSortMode.entries.forEach { mode ->
+                    DropdownMenuItem(
+                        text = { Text(sortModeLabel(mode, locale)) },
+                        onClick = {
+                            onSortModeChange(mode)
+                            sortMenuExpanded = false
+                        },
+                    )
+                }
+            }
+        }
+
+        Box(modifier = Modifier.weight(1f)) {
+            AllFilesDropdownButton(
+                label = if (locale == AppLocale.ZhCn) {
+                    "\u7c7b\u578b\uff1a${typeFilterLabel(typeFilter, locale)}"
+                } else {
+                    "Type: ${typeFilterLabel(typeFilter, locale)}"
+                },
+                height = buttonHeight,
+                cornerRadius = buttonRadius,
+                horizontalPadding = buttonHorizontalPadding,
+                fontSize = labelFontSize,
+                onClick = { typeMenuExpanded = true },
+            )
+            DropdownMenu(
+                expanded = typeMenuExpanded,
+                onDismissRequest = { typeMenuExpanded = false },
+            ) {
+                availableTypeFilters.forEach { filter ->
+                    DropdownMenuItem(
+                        text = { Text(typeFilterLabel(filter, locale)) },
+                        onClick = {
+                            onTypeFilterChange(filter)
+                            typeMenuExpanded = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AllFilesDropdownButton(
+    label: String,
+    height: Dp,
+    cornerRadius: Dp,
+    horizontalPadding: Dp,
+    fontSize: androidx.compose.ui.unit.TextUnit,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height),
+        shape = RoundedCornerShape(cornerRadius),
+        contentPadding = PaddingValues(horizontal = horizontalPadding),
+        border = BorderStroke(TaggoCompactTokens.BorderWidth, TaggoTheme.colors.panelBorder),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = TaggoTheme.colors.panelBackgroundSoft,
+            contentColor = TaggoTheme.colors.textPrimary,
+        ),
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            fontSize = fontSize,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Icon(
+            imageVector = Icons.Outlined.ArrowDropDown,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}
+
+@Composable
 /**
  * 搜索结果页。
  *
@@ -4431,7 +4364,7 @@ private fun SearchResultsPage(
     onSearch: () -> Unit,
     onBackHome: () -> Unit,
     onOpenReference: (FileReference) -> Unit,
-    onTagClick: (String) -> Unit,
+    onRecentSearchClick: (String) -> Unit,
 ) {
     val windowSizeClass = LocalTaggoWindowSizeClass.current
     val compactLayout = windowSizeClass == TaggoWindowSizeClass.Compact
@@ -4443,7 +4376,7 @@ private fun SearchResultsPage(
     val showPendingDraftState = draftHasInput
     val showStaleResultsHint = hasSubmittedSearch && draftHasInput
     val searchResults = if (hasSubmittedSearch) appState.searchResults else emptyList()
-    val showTagLibrary = !draftHasInput && !hasSubmittedSearch
+    val recentSearches = appState.recentSearches.take(8)
     val resultStatus = if (showStaleResultsHint) {
         if (locale == AppLocale.ZhCn) {
             "已保留上一次结果，点击搜索可更新"
@@ -4465,9 +4398,9 @@ private fun SearchResultsPage(
         }
     } else {
         if (locale == AppLocale.ZhCn) {
-            "输入关键词，或点击下方高频标签开始搜索"
+            "输入关键词开始搜索"
         } else {
-            "Type keywords or tap a frequent tag to start searching"
+            "Type keywords to start searching"
         }
     }
 
@@ -4511,16 +4444,12 @@ private fun SearchResultsPage(
                 )
             }
 
-            if (showTagLibrary) {
-                SearchFilterSection(
-                    title = if (locale == AppLocale.ZhCn) "高频标签" else "Frequent tags",
-                    subtitle = if (locale == AppLocale.ZhCn) "点击任意标签即可加入当前搜索" else "Tap a tag to add it to the current search",
-                    tags = appState.topTags,
-                    selectedTags = activeSearchTags.map { normalizeSearchTagToken(it.value) }.toSet(),
-                    emptyHint = appState.tagLibraryEmpty,
+            if (showSearchPrompt && recentSearches.isNotEmpty()) {
+                RecentSearchesSection(
+                    searches = recentSearches,
+                    locale = locale,
                     fullCjkFontReady = fullCjkFontReady,
-                    fullCjkFontFamily = fullCjkFontFamily,
-                    onTagClick = onTagClick,
+                    onRecentSearchClick = onRecentSearchClick,
                 )
             }
 
@@ -4543,14 +4472,14 @@ private fun SearchResultsPage(
                         "This is only a draft query so far. Tap search to start looking for files."
                     },
                 )
-            } else if (showSearchPrompt) {
+            } else if (showSearchPrompt && recentSearches.isEmpty()) {
                 SearchPageEmptyState(
                     compact = compactLayout,
                     title = if (locale == AppLocale.ZhCn) "还没有搜索标签" else "No search tags yet",
                     body = if (locale == AppLocale.ZhCn) {
-                        "输入关键词，或点击下方高频标签开始搜索。"
+                        "输入关键词开始搜索。"
                     } else {
-                        "Type keywords, or tap a frequent tag below to start searching."
+                        "Type keywords to start searching."
                     },
                 )
             } else if (showStaleResultsHint && searchResults.isEmpty()) {
@@ -4608,6 +4537,95 @@ private fun SearchPageEmptyState(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
+private fun RecentSearchesSection(
+    searches: List<String>,
+    locale: AppLocale,
+    fullCjkFontReady: Boolean,
+    onRecentSearchClick: (String) -> Unit,
+) {
+    val compactLayout = LocalTaggoWindowSizeClass.current == TaggoWindowSizeClass.Compact
+    if (compactLayout) {
+        TaggoSectionCard(
+            title = if (locale == AppLocale.ZhCn) "最近搜索" else "Recent searches",
+            meta = if (locale == AppLocale.ZhCn) "点击后恢复该搜索" else "Tap to restore a search",
+            compact = true,
+            compactPadding = TaggoCompactTokens.FileItemHorizontalPadding,
+            compactContentGap = TaggoCompactTokens.FileItemGap,
+            trailing = {},
+        ) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(TaggoCompactTokens.FileItemGap),
+                verticalArrangement = Arrangement.spacedBy(TaggoCompactTokens.FileItemGap),
+            ) {
+                searches.forEach { query ->
+                    TaggoSearchHistoryChip(
+                        label = displayTextForUi(query, fullCjkFontReady),
+                        onClick = { onRecentSearchClick(query) },
+                    )
+                }
+            }
+        }
+        return
+    }
+
+    SectionCard(
+        title = if (locale == AppLocale.ZhCn) "最近搜索" else "Recent searches",
+        subtitle = if (locale == AppLocale.ZhCn) "点击后恢复该搜索" else "Tap to restore a search",
+        responsiveHeader = true,
+    ) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            searches.forEach { query ->
+                TaggoSearchHistoryChip(
+                    label = displayTextForUi(query, fullCjkFontReady),
+                    onClick = { onRecentSearchClick(query) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaggoSearchHistoryChip(
+    label: String,
+    onClick: () -> Unit,
+) {
+    val compactLayout = LocalTaggoWindowSizeClass.current == TaggoWindowSizeClass.Compact
+    val shape = RoundedCornerShape(if (compactLayout) 12.dp else 10.dp)
+    Surface(
+        modifier = Modifier
+            .widthIn(min = if (compactLayout) 52.dp else 48.dp, max = if (compactLayout) 180.dp else 220.dp)
+            .clip(shape)
+            .clickable(onClick = onClick)
+            .border(
+                width = 1.dp,
+                color = TaggoTheme.colors.panelBorder.copy(alpha = 0.72f),
+                shape = shape,
+            ),
+        shape = shape,
+        color = TaggoTheme.colors.panelBackgroundSoft.copy(alpha = 0.62f),
+        contentColor = TaggoTheme.colors.textSecondary,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(
+                horizontal = if (compactLayout) 11.dp else 10.dp,
+                vertical = if (compactLayout) 7.dp else 6.dp,
+            ),
+            fontSize = if (compactLayout) TaggoCompactTokens.Caption else 12.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
 private fun AllTagsEntrySection(
     allTags: List<String>,
     locale: AppLocale,
@@ -4639,105 +4657,6 @@ private fun AllTagsEntrySection(
                         onRemove = { onRemoveTag(tag) },
                         actionIcon = Icons.Outlined.Close,
                     )
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun SearchFilterSection(
-    title: String,
-    subtitle: String,
-    tags: List<String>,
-    selectedTags: Set<String>,
-    emptyHint: String,
-    fullCjkFontReady: Boolean,
-    fullCjkFontFamily: FontFamily,
-    onTagClick: (String) -> Unit,
-) {
-    val compactLayout = LocalTaggoWindowSizeClass.current == TaggoWindowSizeClass.Compact
-    if (compactLayout) {
-        TaggoSectionCard(
-            title = title,
-            meta = subtitle,
-            compact = true,
-            compactPadding = TaggoCompactTokens.FileItemHorizontalPadding,
-            compactContentGap = TaggoCompactTokens.FileItemGap,
-            trailing = {},
-        ) {
-            if (tags.isEmpty()) {
-                Text(
-                    text = emptyHint,
-                    color = TaggoTheme.colors.textSecondary,
-                    fontSize = TaggoCompactTokens.CaptionSmall,
-                )
-            } else {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(TaggoCompactTokens.FileItemGap),
-                    verticalArrangement = Arrangement.spacedBy(TaggoCompactTokens.FileItemGap),
-                ) {
-                    tags.forEach { tag ->
-                        TagFilterChip(
-                            tag = tag,
-                            selected = selectedTags.contains(normalizeSearchTagToken(tag)),
-                            fullCjkFontReady = fullCjkFontReady,
-                            fullCjkFontFamily = fullCjkFontFamily,
-                            onClick = { onTagClick(tag) },
-                        )
-                    }
-                }
-            }
-        }
-        return
-    }
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = TaggoTheme.colors.panelBackgroundSoft),
-        shape = RoundedCornerShape(18.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, TaggoTheme.colors.panelBorder, RoundedCornerShape(18.dp)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = title,
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = subtitle,
-                    color = TaggoTheme.colors.textSecondary,
-                    fontSize = 11.sp,
-                )
-            }
-
-            if (tags.isEmpty()) {
-                Text(
-                    text = emptyHint,
-                    color = TaggoTheme.colors.textSecondary,
-                    fontSize = 11.sp,
-                )
-            } else {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    tags.forEach { tag ->
-                        TagFilterChip(
-                            tag = tag,
-                            selected = selectedTags.contains(normalizeSearchTagToken(tag)),
-                            fullCjkFontReady = fullCjkFontReady,
-                            fullCjkFontFamily = fullCjkFontFamily,
-                            onClick = { onTagClick(tag) },
-                        )
-                    }
                 }
             }
         }
@@ -4874,11 +4793,8 @@ private fun DetailPage(
     val canUseWebReopenFlow = browserReferencePicker != null &&
         browserReferenceResolver != null &&
         isBrowserSelectedReference
-    val isCompactContentReference = compactLayout &&
-        reference.source.trim().startsWith("content://", ignoreCase = true)
     val canOpenFile = canOpenReferenceExternally(reference) ||
-        canUseWebReopenFlow ||
-        isCompactContentReference
+        canUseWebReopenFlow
     val openButtonLabel = if (locale == AppLocale.ZhCn) "\u2197 \u6253\u5f00\u6b64\u6587\u4ef6" else "\u2197 Open this file"
 
     fun clearDuplicateTagWarning() {
@@ -6037,7 +5953,7 @@ private fun FileTileCard(
     val windowSizeClass = LocalTaggoWindowSizeClass.current
     val compactLayout = windowSizeClass == TaggoWindowSizeClass.Compact
     val mediumLayout = windowSizeClass == TaggoWindowSizeClass.Medium
-    val desktopThumbnailSize = if (mediumLayout) 68.dp else 72.dp
+    val desktopThumbnailSize = if (mediumLayout) TaggoFileCoverTokens.MediumFileTileCoverSize else 72.dp
     val metaLine = remember(reference, fullCjkFontReady) {
         buildList {
             val fileTypeLabel = displayTextForUi(reference.fileType, fullCjkFontReady).ifBlank { "file" }
@@ -6141,7 +6057,11 @@ private fun FileTileCard(
                     fullCjkFontReady = fullCjkFontReady,
                     fullCjkFontFamily = fullCjkFontFamily,
                     modifier = Modifier.size(desktopThumbnailSize),
-                    iconSize = if (windowSizeClass == TaggoWindowSizeClass.Medium) 38.dp else 42.dp,
+                    iconSize = if (windowSizeClass == TaggoWindowSizeClass.Medium) {
+                        TaggoFileCoverTokens.MediumFileTileIconSize
+                    } else {
+                        42.dp
+                    },
                 )
 
                 Column(
@@ -6708,23 +6628,6 @@ private fun defaultSortDirection(mode: FileSortMode): SortDirection =
         FileSortMode.FileSize -> SortDirection.Descending
     }
 
-private fun SortDirection.toggled(): SortDirection =
-    when (this) {
-        SortDirection.Ascending -> SortDirection.Descending
-        SortDirection.Descending -> SortDirection.Ascending
-    }
-
-private fun sortChipLabel(
-    mode: FileSortMode,
-    activeMode: FileSortMode,
-    activeDirection: SortDirection,
-    locale: AppLocale,
-): String {
-    val direction = if (mode == activeMode) activeDirection else defaultSortDirection(mode)
-    val arrow = if (direction == SortDirection.Descending) "\u2193" else "\u2191"
-    return "${sortModeLabel(mode, locale)} $arrow"
-}
-
 private fun typeFilterLabel(filter: AllFilesTypeFilter, locale: AppLocale): String =
     when (filter) {
         AllFilesTypeFilter.All -> if (locale == AppLocale.ZhCn) "\u5168\u90e8" else "All"
@@ -6867,15 +6770,7 @@ private fun removeTag(existingTags: List<String>, tag: String): String =
         .joinToString(", ")
 
 private fun canOpenReferenceExternally(reference: FileReference): Boolean {
-    val source = reference.source.trim()
-    if (source.isBlank()) return false
-    return when (reference.sourceKind) {
-        FileSourceKind.ManualPath,
-        FileSourceKind.Url,
-        FileSourceKind.BrowserHandle,
-        -> true
-        else -> false
-    }
+    return isReferenceExternallyOpenable(reference)
 }
 
 private fun searchValidationMessage(query: String, locale: AppLocale): String? {

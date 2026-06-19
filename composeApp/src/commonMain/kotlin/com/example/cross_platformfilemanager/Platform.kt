@@ -32,3 +32,10 @@ data class OpenReferenceResult(
 expect suspend fun openReferenceExternally(reference: FileReference): Boolean
 
 expect suspend fun openReferenceExternallyWithResult(reference: FileReference): OpenReferenceResult
+
+/**
+ * 判断当前平台是否应该把该文件条目展示为可直接打开。
+ *
+ * 该判断只服务 UI 可用性，不执行真正打开动作。
+ */
+expect fun isReferenceExternallyOpenable(reference: FileReference): Boolean

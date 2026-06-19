@@ -162,6 +162,9 @@ class FileManagerAppState(
     val allTags: List<String>
         get() = repository.allTags()
 
+    val recentSearches: List<String>
+        get() = repository.recentSearches
+
     val recentReferences: List<FileReference>
         get() = repository.recentReferences()
 

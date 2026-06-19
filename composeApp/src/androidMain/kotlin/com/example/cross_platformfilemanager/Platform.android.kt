@@ -17,6 +17,9 @@ class AndroidPlatform : Platform {
 
 actual fun getPlatform(): Platform = AndroidPlatform()
 
+actual fun isReferenceExternallyOpenable(reference: FileReference): Boolean =
+    reference.source.trim().startsWith("content://", ignoreCase = true)
+
 actual suspend fun openReferenceExternally(reference: FileReference): Boolean =
     openReferenceExternallyWithResult(reference).opened
 

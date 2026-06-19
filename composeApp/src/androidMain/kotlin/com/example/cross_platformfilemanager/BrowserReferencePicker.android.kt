@@ -34,12 +34,13 @@ internal object AndroidBrowserReferencePickerHolder {
 internal class AndroidBrowserReferencePicker(
     private val contentResolver: ContentResolver,
     private val launcher: ActivityResultLauncher<Array<String>>,
+    private val pickerState: AndroidFilePickerViewModel,
 ) : BrowserReferencePicker {
     private var pendingContinuation: CancellableContinuation<BrowserReferenceDraft?>? = null
 
     override suspend fun pickReference(): BrowserReferenceDraft? =
         suspendCancellableCoroutine { continuation ->
-            if (pendingContinuation != null) {
+            if (pickerState.beginSingleFilePick() == null) {
                 continuation.resume(null)
                 return@suspendCancellableCoroutine
             }
@@ -56,6 +57,7 @@ internal class AndroidBrowserReferencePicker(
                 if (pendingContinuation === continuation) {
                     pendingContinuation = null
                 }
+                pickerState.clearPending()
                 if (continuation.isActive) {
                     continuation.resume(null)
                 }
@@ -63,9 +65,10 @@ internal class AndroidBrowserReferencePicker(
         }
 
     fun onDocumentPicked(uri: Uri?): Boolean {
-        val continuation = pendingContinuation ?: return false
+        val hadPendingPick = pickerState.consumePickerResult()
+        val continuation = pendingContinuation
         pendingContinuation = null
-        if (!continuation.isActive) return false
+        if (!hadPendingPick || continuation == null || !continuation.isActive) return false
 
         CoroutineScope(continuation.context).launch {
             val draft = uri?.let {
@@ -81,9 +84,10 @@ internal class AndroidBrowserReferencePicker(
     }
 
     fun cancelPendingPick() {
-        val continuation = pendingContinuation ?: return
+        val continuation = pendingContinuation
         pendingContinuation = null
-        if (continuation.isActive) {
+        pickerState.clearPending()
+        if (continuation?.isActive == true) {
             continuation.resume(null)
         }
     }

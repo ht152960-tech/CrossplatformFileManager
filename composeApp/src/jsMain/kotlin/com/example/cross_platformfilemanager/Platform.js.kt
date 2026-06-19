@@ -16,6 +16,17 @@ class JsPlatform : Platform {
 
 actual fun getPlatform(): Platform = JsPlatform()
 
+actual fun isReferenceExternallyOpenable(reference: FileReference): Boolean {
+    if (reference.source.trim().isBlank()) return false
+    return when (reference.sourceKind) {
+        FileSourceKind.ManualPath,
+        FileSourceKind.Url,
+        FileSourceKind.BrowserHandle,
+        -> true
+        else -> false
+    }
+}
+
 private external interface BrowserOpenInterop {
     fun openReference(source: String): Promise<JsAny?>
 }

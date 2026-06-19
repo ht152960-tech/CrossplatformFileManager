@@ -44,14 +44,12 @@ internal fun TagFilterChip(
     fullCjkFontFamily: FontFamily,
     onClick: () -> Unit,
 ) {
-    val windowSizeClass = LocalTaggoWindowSizeClass.current
-    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 190.dp else 220.dp
     TaggoOperableTagChip(
+        kind = OperableTagChipKind.Filter,
         label = tag,
         formalTag = true,
         fullCjkFontReady = fullCjkFontReady,
         fullCjkFontFamily = fullCjkFontFamily,
-        maxChipWidth = maxChipWidth,
         actionSymbol = "+",
         emphasized = selected,
         onClick = onClick,
@@ -66,14 +64,12 @@ internal fun SearchTagChip(
     fullCjkFontFamily: FontFamily,
     onRemove: () -> Unit,
 ) {
-    val windowSizeClass = LocalTaggoWindowSizeClass.current
-    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 190.dp else 220.dp
     TaggoOperableTagChip(
+        kind = OperableTagChipKind.Search,
         label = tag.value,
         formalTag = tag.source == SearchTagSource.LibraryTag,
         fullCjkFontReady = fullCjkFontReady,
         fullCjkFontFamily = fullCjkFontFamily,
-        maxChipWidth = maxChipWidth,
         actionSymbol = "−",
         onActionClick = onRemove,
     )
@@ -115,14 +111,12 @@ internal fun RemovableTagChip(
     onRemove: () -> Unit,
     actionIcon: ImageVector = Icons.Outlined.Remove,
 ) {
-    val windowSizeClass = LocalTaggoWindowSizeClass.current
-    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 190.dp else 212.dp
     TaggoOperableTagChip(
+        kind = OperableTagChipKind.Removable,
         label = tag,
         formalTag = true,
         fullCjkFontReady = fullCjkFontReady,
         fullCjkFontFamily = fullCjkFontFamily,
-        maxChipWidth = maxChipWidth,
         actionSymbol = if (actionIcon == Icons.Outlined.Close) "×" else "−",
         onClick = onClick,
         onActionClick = onRemove,
@@ -136,14 +130,12 @@ internal fun AddableTagChip(
     fullCjkFontFamily: FontFamily,
     onAdd: () -> Unit,
 ) {
-    val windowSizeClass = LocalTaggoWindowSizeClass.current
-    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 190.dp else 220.dp
     TaggoOperableTagChip(
+        kind = OperableTagChipKind.Addable,
         label = tag,
         formalTag = true,
         fullCjkFontReady = fullCjkFontReady,
         fullCjkFontFamily = fullCjkFontFamily,
-        maxChipWidth = maxChipWidth,
         actionSymbol = "+",
         onClick = onAdd,
         onActionClick = onAdd,
@@ -183,6 +175,8 @@ private fun displayFormalTagForUi(
 
 private data class OperableTagChipMetrics(
     val height: Dp,
+    val minWidth: Dp,
+    val maxWidth: Dp,
     val horizontalPadding: Dp,
     val verticalPadding: Dp,
     val textSize: TextUnit,
@@ -193,57 +187,88 @@ private data class OperableTagChipMetrics(
     val actionSymbolSize: TextUnit,
 )
 
-private fun operableTagChipMetrics(windowSizeClass: TaggoWindowSizeClass): OperableTagChipMetrics =
-    when (windowSizeClass) {
+private enum class OperableTagChipKind {
+    Filter,
+    Search,
+    Removable,
+    Addable,
+}
+
+private fun operableTagChipMetrics(
+    kind: OperableTagChipKind,
+    windowSizeClass: TaggoWindowSizeClass,
+): OperableTagChipMetrics {
+    val maxWidth = when (kind) {
+        OperableTagChipKind.Removable -> if (windowSizeClass == TaggoWindowSizeClass.Compact) {
+            190.dp
+        } else {
+            212.dp
+        }
+        OperableTagChipKind.Filter,
+        OperableTagChipKind.Search,
+        OperableTagChipKind.Addable -> if (windowSizeClass == TaggoWindowSizeClass.Compact) {
+            190.dp
+        } else {
+            220.dp
+        }
+    }
+    return when (windowSizeClass) {
         TaggoWindowSizeClass.Compact -> OperableTagChipMetrics(
             height = 36.dp,
+            minWidth = 58.dp,
+            maxWidth = maxWidth,
             horizontalPadding = 14.dp,
             verticalPadding = 7.dp,
             textSize = 13.sp,
             lineHeight = 17.sp,
-            cornerRadius = 18.dp,
-            actionTouchSize = 32.dp,
+            cornerRadius = 12.dp,
+            actionTouchSize = 40.dp,
             actionVisualSize = 22.dp,
             actionSymbolSize = 13.sp,
         )
         TaggoWindowSizeClass.Medium -> OperableTagChipMetrics(
             height = 34.dp,
+            minWidth = 54.dp,
+            maxWidth = maxWidth,
             horizontalPadding = 14.dp,
             verticalPadding = 6.dp,
             textSize = 12.5.sp,
             lineHeight = 16.sp,
-            cornerRadius = 17.dp,
-            actionTouchSize = 30.dp,
+            cornerRadius = 11.dp,
+            actionTouchSize = 40.dp,
             actionVisualSize = 21.dp,
             actionSymbolSize = 12.5.sp,
         )
         TaggoWindowSizeClass.Expanded -> OperableTagChipMetrics(
             height = 32.dp,
+            minWidth = 50.dp,
+            maxWidth = maxWidth,
             horizontalPadding = 14.dp,
             verticalPadding = 6.dp,
             textSize = 12.sp,
             lineHeight = 15.sp,
-            cornerRadius = 16.dp,
-            actionTouchSize = 30.dp,
+            cornerRadius = 10.dp,
+            actionTouchSize = 40.dp,
             actionVisualSize = 20.dp,
             actionSymbolSize = 12.sp,
         )
     }
+}
 
 @Composable
 private fun TaggoOperableTagChip(
+    kind: OperableTagChipKind,
     label: String,
     formalTag: Boolean,
     fullCjkFontReady: Boolean,
     fullCjkFontFamily: FontFamily,
-    maxChipWidth: Dp,
     actionSymbol: String,
     emphasized: Boolean = false,
     onClick: (() -> Unit)? = null,
     onActionClick: () -> Unit,
 ) {
     val windowSizeClass = LocalTaggoWindowSizeClass.current
-    val metrics = operableTagChipMetrics(windowSizeClass)
+    val metrics = operableTagChipMetrics(kind, windowSizeClass)
     val chipShape = RoundedCornerShape(metrics.cornerRadius)
     val visualActionShape = RoundedCornerShape(999.dp)
     val actionOuterPadding = metrics.actionVisualSize / 2
@@ -254,7 +279,7 @@ private fun TaggoOperableTagChip(
         displayTextForUi(label, fullCjkFontReady)
     }
     Box(
-        modifier = Modifier.widthIn(max = maxChipWidth + actionOuterPadding),
+        modifier = Modifier.widthIn(max = metrics.maxWidth + actionOuterPadding),
     ) {
         Surface(
             color = if (emphasized) {
@@ -267,7 +292,7 @@ private fun TaggoOperableTagChip(
             modifier = Modifier
                 .padding(top = actionOuterPadding, end = actionOuterPadding)
                 .height(metrics.height)
-                .widthIn(max = maxChipWidth)
+                .widthIn(min = metrics.minWidth, max = metrics.maxWidth)
                 .border(1.dp, TaggoTheme.colors.panelBorder.copy(alpha = 0.95f), chipShape)
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         ) {

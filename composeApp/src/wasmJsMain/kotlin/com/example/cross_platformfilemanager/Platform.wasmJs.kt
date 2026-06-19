@@ -15,6 +15,17 @@ class WasmPlatform : Platform {
 
 actual fun getPlatform(): Platform = WasmPlatform()
 
+actual fun isReferenceExternallyOpenable(reference: FileReference): Boolean {
+    if (reference.source.trim().isBlank()) return false
+    return when (reference.sourceKind) {
+        FileSourceKind.ManualPath,
+        FileSourceKind.Url,
+        FileSourceKind.BrowserHandle,
+        -> true
+        else -> false
+    }
+}
+
 private external interface BrowserOpenInteropWasm {
     fun openReference(source: String): Promise<JsAny?>
 }

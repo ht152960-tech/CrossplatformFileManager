@@ -66,6 +66,17 @@ object TaggoGlobalAlpha {
     val Strong = 0.82f
 }
 
+object TaggoFileCoverTokens {
+    val CompactFileTileCoverSize = 50.dp
+    val CompactFileTileIconSize = 30.dp
+    val CompactRecommendationCoverSize = 48.dp
+    val CompactRecommendationIconSize = 25.dp
+    val MediumFileTileCoverSize = 68.dp
+    val MediumFileTileIconSize = 38.dp
+    val MediumRecommendationCoverSize = 36.dp
+    val MediumRecommendationIconSize = 24.dp
+}
+
 object TaggoCompactTokens {
     val PageHorizontalInsetExtra = TaggoGlobalSpacing.Xs
     val PageSectionGap = 14.dp
@@ -87,8 +98,8 @@ object TaggoCompactTokens {
     val FileItemGap = TaggoGlobalSpacing.Sm
     val FileItemHorizontalPadding = 10.dp
     val FileItemVerticalPadding = TaggoGlobalSpacing.Sm
-    val FileCoverSize = 50.dp
-    val FileIconSize = 30.dp
+    val FileCoverSize = TaggoFileCoverTokens.CompactFileTileCoverSize
+    val FileIconSize = TaggoFileCoverTokens.CompactFileTileIconSize
 
     val DetailHeroPadding = TaggoGlobalSpacing.Md
     val DetailCoverAspectRatio = 16f / 9f
