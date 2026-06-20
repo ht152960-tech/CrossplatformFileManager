@@ -907,6 +907,10 @@ fun App() {
                                             (
                                                 currentPage == AppPage.AllFiles &&
                                                     actualWindowSizeClass == TaggoWindowSizeClass.Compact
+                                            ) ||
+                                            (
+                                                currentPage == AppPage.Tags &&
+                                                    actualWindowSizeClass == TaggoWindowSizeClass.Compact
                                             )
                                         ) {
                                             Modifier.compactHomeAmbientBackground()
@@ -4174,6 +4178,7 @@ private fun TagsPage(
             TopBarCard(
                 locale = locale,
                 title = if (locale == AppLocale.ZhCn) "\u6807\u7b7e" else "Tags",
+                compactGlass = compactLayout,
             )
 
             AllTagsEntrySection(
@@ -4181,6 +4186,7 @@ private fun TagsPage(
                 locale = locale,
                 fullCjkFontReady = fullCjkFontReady,
                 fullCjkFontFamily = fullCjkFontFamily,
+                compactLayout = compactLayout,
                 onTagClick = onTagClick,
                 onRemoveTag = { pendingDeleteTag = it },
             )
@@ -5038,33 +5044,70 @@ private fun AllTagsEntrySection(
     locale: AppLocale,
     fullCjkFontReady: Boolean,
     fullCjkFontFamily: FontFamily,
+    compactLayout: Boolean,
     onTagClick: (String) -> Unit,
     onRemoveTag: (String) -> Unit,
 ) {
     val chipSpacing = operableTagChipSpacing(LocalTaggoWindowSizeClass.current)
-    SectionCard(
-        title = if (locale == AppLocale.ZhCn) "\u5168\u90e8\u6807\u7b7e" else "All tags",
-        subtitle = if (locale == AppLocale.ZhCn) "\u70b9\u51fb\u8fdb\u5165\u641c\u7d22\uff0c\u53f3\u4e0a\u89d2 \u00d7 \u53ef\u5220\u9664\u6807\u7b7e" else "Click to search. Use the corner \u00d7 to delete a tag.",
-    ) {
-        if (allTags.isEmpty()) {
-            EmptyPanel(
-                title = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u6807\u7b7e" else "No tags yet",
-                body = if (locale == AppLocale.ZhCn) "\u5148\u4e3a\u6587\u4ef6\u6dfb\u52a0\u6807\u7b7e\u3002" else "Add tags to files first.",
-            )
-        } else {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(chipSpacing.horizontal),
-                verticalArrangement = Arrangement.spacedBy(chipSpacing.vertical),
-            ) {
-                allTags.forEach { tag ->
-                    RemovableTagChip(
-                        tag = tag,
-                        fullCjkFontReady = fullCjkFontReady,
-                        fullCjkFontFamily = fullCjkFontFamily,
-                        onClick = { onTagClick(tag) },
-                        onRemove = { onRemoveTag(tag) },
-                        actionIcon = Icons.Outlined.Close,
-                    )
+    if (compactLayout) {
+        TaggoSectionCard(
+            title = if (locale == AppLocale.ZhCn) "\u5168\u90e8\u6807\u7b7e" else "All tags",
+            meta = if (locale == AppLocale.ZhCn) "\u70b9\u51fb\u8fdb\u5165\u641c\u7d22\uff0c\u53f3\u4e0a\u89d2 \u00d7 \u53ef\u5220\u9664\u6807\u7b7e" else "Click to search. Use the corner \u00d7 to delete a tag.",
+            compact = true,
+            compactPadding = TaggoCompactTokens.FileItemHorizontalPadding,
+            compactContentGap = TaggoCompactTokens.FileItemGap,
+            trailing = {},
+        ) {
+            if (allTags.isEmpty()) {
+                EmptyPanel(
+                    title = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u6807\u7b7e" else "No tags yet",
+                    body = if (locale == AppLocale.ZhCn) "\u5148\u4e3a\u6587\u4ef6\u6dfb\u52a0\u6807\u7b7e\u3002" else "Add tags to files first.",
+                    compactGlass = true,
+                    compactGlassIcon = Icons.Outlined.LocalOffer,
+                )
+            } else {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(chipSpacing.horizontal),
+                    verticalArrangement = Arrangement.spacedBy(chipSpacing.vertical),
+                ) {
+                    allTags.forEach { tag ->
+                        RemovableTagChip(
+                            tag = tag,
+                            fullCjkFontReady = fullCjkFontReady,
+                            fullCjkFontFamily = fullCjkFontFamily,
+                            onClick = { onTagClick(tag) },
+                            onRemove = { onRemoveTag(tag) },
+                            actionIcon = Icons.Outlined.Close,
+                        )
+                    }
+                }
+            }
+        }
+    } else {
+        SectionCard(
+            title = if (locale == AppLocale.ZhCn) "\u5168\u90e8\u6807\u7b7e" else "All tags",
+            subtitle = if (locale == AppLocale.ZhCn) "\u70b9\u51fb\u8fdb\u5165\u641c\u7d22\uff0c\u53f3\u4e0a\u89d2 \u00d7 \u53ef\u5220\u9664\u6807\u7b7e" else "Click to search. Use the corner \u00d7 to delete a tag.",
+        ) {
+            if (allTags.isEmpty()) {
+                EmptyPanel(
+                    title = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u6807\u7b7e" else "No tags yet",
+                    body = if (locale == AppLocale.ZhCn) "\u5148\u4e3a\u6587\u4ef6\u6dfb\u52a0\u6807\u7b7e\u3002" else "Add tags to files first.",
+                )
+            } else {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(chipSpacing.horizontal),
+                    verticalArrangement = Arrangement.spacedBy(chipSpacing.vertical),
+                ) {
+                    allTags.forEach { tag ->
+                        RemovableTagChip(
+                            tag = tag,
+                            fullCjkFontReady = fullCjkFontReady,
+                            fullCjkFontFamily = fullCjkFontFamily,
+                            onClick = { onTagClick(tag) },
+                            onRemove = { onRemoveTag(tag) },
+                            actionIcon = Icons.Outlined.Close,
+                        )
+                    }
                 }
             }
         }

@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -33,6 +34,7 @@ internal fun EmptyPanel(
     title: String,
     body: String,
     compactGlass: Boolean = false,
+    compactGlassIcon: ImageVector = Icons.Outlined.FolderOpen,
 ) {
     if (compactGlass) {
         val shape = RoundedCornerShape(24.dp)
@@ -58,7 +60,7 @@ internal fun EmptyPanel(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.FolderOpen,
+                        imageVector = compactGlassIcon,
                         contentDescription = null,
                         tint = Color(0xA8BFC7D8),
                         modifier = Modifier.size(24.dp),
