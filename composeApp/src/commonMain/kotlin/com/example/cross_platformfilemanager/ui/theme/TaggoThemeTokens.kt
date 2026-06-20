@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.cross_platformfilemanager.FileTypeCategory
 
 object TaggoGlobalColors {
     val PageBackground = Color(0xFF080811)
@@ -94,10 +95,10 @@ object TaggoCompactTokens {
     val SearchButtonMinWidth = 68.dp
     val SearchInlineThreshold = 300.dp
 
-    val FileItemHeight = 78.dp
+    val FileItemHeight = 82.dp
     val FileItemGap = TaggoGlobalSpacing.Sm
-    val FileItemHorizontalPadding = 10.dp
-    val FileItemVerticalPadding = TaggoGlobalSpacing.Sm
+    val FileItemHorizontalPadding = 16.dp
+    val FileItemVerticalPadding = 14.dp
     val FileCoverSize = TaggoFileCoverTokens.CompactFileTileCoverSize
     val FileIconSize = TaggoFileCoverTokens.CompactFileTileIconSize
 
@@ -119,6 +120,158 @@ object TaggoCompactTokens {
     val ScrimAlpha = TaggoGlobalAlpha.Pressed
     val PrimaryButtonAlpha = 0.84f
     val DisabledSurfaceAlpha = 0.55f
+
+    val AmbientBaseBackground = Color(0xFF070A16)
+    val AmbientGlowPurple = Color(0xFF8F63FF).copy(alpha = 0.13f)
+    val AmbientGlowBluePurple = Color(0xFF536DFF).copy(alpha = 0.10f)
+    val AmbientGlowCyanBlue = Color(0xFF35D2FF).copy(alpha = 0.06f)
+    val AmbientGlowBottomPurple = Color(0xFF9C63FF).copy(alpha = 0.08f)
+
+    val GlassCardBorder = Color(0x66A9B8FF)
+    val GlassCardSubtleHighlight = Color(0x1CFFFFFF)
+    val GlassListItemBorder = Color(0x38A9B8FF)
+    val GlassListItemHighlight = Color(0x14FFFFFF)
+
+    fun glassCardBackgroundBrush(): Brush =
+        Brush.linearGradient(
+            listOf(
+                Color(0x9A171B33),
+                Color(0x7A11162A),
+                Color(0x5C0B1022),
+            ),
+        )
+
+    fun glassListItemBackgroundBrush(): Brush =
+        Brush.linearGradient(
+            listOf(
+                Color(0x661E2440),
+                Color(0x4C151A32),
+                Color(0x36101526),
+            ),
+        )
+
+    val DockBorder = Color(0x78B7C4FF)
+    val DockSelectedIcon = Color(0xFFA98BFF)
+    val DockUnselectedContent = Color(0xA0AEB8D0)
+    val DockSelectedIndicator = Color(0xFF9C6BFF)
+    val DockBottomGlow = Color(0xFF8B5CFF).copy(alpha = 0.11f)
+
+    fun dockGlassBackgroundBrush(): Brush =
+        Brush.linearGradient(
+            listOf(
+                Color(0xD51C2138),
+                Color(0xB814192E),
+                Color(0xA40D1122),
+            ),
+        )
+
+    fun fabGradient(): Brush =
+        Brush.linearGradient(
+            listOf(
+                Color(0xFFB58CFF),
+                Color(0xFF8B5CFF),
+                Color(0xFF6F46F5),
+            ),
+        )
+
+    val FabGlow = Color(0xFF9C63FF).copy(alpha = 0.24f)
+    val FabIcon = Color.White
+    val FabBorder = Color(0x80D8C7FF)
+    val FabHighlight = Color(0x36FFFFFF)
+}
+
+data class FileTypeColorTokens(
+    val iconColor: Color,
+    val avatarBackgroundColor: Color,
+    val progressColor: Color,
+    val badgeBackground: Color,
+    val badgeContentColor: Color,
+    val weakGlowColor: Color,
+) {
+    fun avatarBrush(baseColor: Color): Brush =
+        Brush.linearGradient(
+            listOf(
+                baseColor,
+                avatarBackgroundColor,
+                weakGlowColor,
+            ),
+        )
+}
+
+object TaggoFileTypeColorTokens {
+    val Document = FileTypeColorTokens(
+        iconColor = Color(0xFFFFB45F),
+        avatarBackgroundColor = Color(0x33FFB45F),
+        progressColor = Color(0xFFFFA94A),
+        badgeBackground = Color(0x24FFB45F),
+        badgeContentColor = Color(0xFFFFD3A0),
+        weakGlowColor = Color(0x18FFB45F),
+    )
+    val Image = FileTypeColorTokens(
+        iconColor = Color(0xFF6FD3FF),
+        avatarBackgroundColor = Color(0x336FD3FF),
+        progressColor = Color(0xFF5CC9F5),
+        badgeBackground = Color(0x246FD3FF),
+        badgeContentColor = Color(0xFFB9EAFF),
+        weakGlowColor = Color(0x186FD3FF),
+    )
+    val Video = FileTypeColorTokens(
+        iconColor = Color(0xFFFF78C8),
+        avatarBackgroundColor = Color(0x33FF78C8),
+        progressColor = Color(0xFFE95AAE),
+        badgeBackground = Color(0x24FF78C8),
+        badgeContentColor = Color(0xFFFFB9E4),
+        weakGlowColor = Color(0x18FF78C8),
+    )
+    val Audio = FileTypeColorTokens(
+        iconColor = Color(0xFF6CE8B7),
+        avatarBackgroundColor = Color(0x336CE8B7),
+        progressColor = Color(0xFF55D6A5),
+        badgeBackground = Color(0x246CE8B7),
+        badgeContentColor = Color(0xFFB9F6DD),
+        weakGlowColor = Color(0x186CE8B7),
+    )
+    val Archive = FileTypeColorTokens(
+        iconColor = Color(0xFFFFC861),
+        avatarBackgroundColor = Color(0x33FFC861),
+        progressColor = Color(0xFFFFBD4A),
+        badgeBackground = Color(0x24FFC861),
+        badgeContentColor = Color(0xFFFFE2A6),
+        weakGlowColor = Color(0x18FFC861),
+    )
+    val Code = FileTypeColorTokens(
+        iconColor = Color(0xFF78E6A0),
+        avatarBackgroundColor = Color(0x3378E6A0),
+        progressColor = Color(0xFF5ED88B),
+        badgeBackground = Color(0x2478E6A0),
+        badgeContentColor = Color(0xFFBDF4CF),
+        weakGlowColor = Color(0x1878E6A0),
+    )
+    val Other = FileTypeColorTokens(
+        iconColor = Color(0xFFA8B4D0),
+        avatarBackgroundColor = Color(0x2EA8B4D0),
+        progressColor = Color(0xFF8F9BB8),
+        badgeBackground = Color(0x20A8B4D0),
+        badgeContentColor = Color(0xFFD4DBEC),
+        weakGlowColor = Color(0x14A8B4D0),
+    )
+
+    fun forCategory(category: FileTypeCategory): FileTypeColorTokens =
+        when (category) {
+            FileTypeCategory.TextDocument,
+            FileTypeCategory.PdfDocument,
+            FileTypeCategory.Spreadsheet,
+            FileTypeCategory.Presentation,
+            -> Document
+            FileTypeCategory.Image -> Image
+            FileTypeCategory.Video -> Video
+            FileTypeCategory.Audio -> Audio
+            FileTypeCategory.Archive -> Archive
+            FileTypeCategory.Code -> Code
+            FileTypeCategory.Folder,
+            FileTypeCategory.Unknown,
+            -> Other
+        }
 }
 
 object TaggoThemeTokens {

@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Folder
@@ -18,6 +20,7 @@ import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.PictureAsPdf
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Slideshow
 import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material3.Icon
@@ -44,6 +47,7 @@ import com.example.cross_platformfilemanager.ThumbnailStatus
 import com.example.cross_platformfilemanager.displayTextForUi
 import com.example.cross_platformfilemanager.rememberThumbnailPainter
 import com.example.cross_platformfilemanager.ui.theme.TaggoTheme
+import com.example.cross_platformfilemanager.ui.theme.TaggoFileTypeColorTokens
 
 internal data class FileTypeIconStyle(
     val icon: ImageVector,
@@ -60,10 +64,19 @@ internal fun FileCoverArtFrame(
     modifier: Modifier = Modifier,
     cornerShape: RoundedCornerShape = RoundedCornerShape(16.dp),
     iconSize: Dp = 24.dp,
+    showOpenStateOverlay: Boolean = true,
+    canOpen: Boolean = true,
+    overlayContainerSize: Dp = 18.dp,
+    overlayIconSize: Dp = 12.dp,
+    overlayBackgroundAlpha: Float = 0.14f,
+    overlayIconAlpha: Float = 0.46f,
+    disabledOverlayBackgroundAlpha: Float = 0.08f,
+    disabledOverlayIconAlpha: Float = 0.30f,
 ) {
     val thumbnailPainter = rememberThumbnailPainter(reference.thumbnailPath)
     val hasThumbnail = thumbnailPainter != null && reference.thumbnailStatus == ThumbnailStatus.READY
     val hasCoverArt = reference.coverArtSource?.isNotBlank() == true
+    val fileTypeCategory = FileTypeClassifier.classify(reference)
     Box(
         modifier = modifier
             .clip(cornerShape)
@@ -98,25 +111,54 @@ internal fun FileCoverArtFrame(
                 )
             }
         } else {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Icon(
-                    imageVector = iconStyle.icon,
-                    contentDescription = null,
-                    tint = iconStyle.tint,
-                    modifier = Modifier.size(iconSize),
-                )
-                if (FileTypeClassifier.classify(reference) == FileTypeCategory.Video || FileTypeClassifier.classify(reference) == FileTypeCategory.Audio) {
-                    Text(
-                        text = if (reference.thumbnailStatus == ThumbnailStatus.GENERATING) "Loading" else "Reserved",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp,
-                    )
-                }
-            }
+            Icon(
+                imageVector = iconStyle.icon,
+                contentDescription = null,
+                tint = iconStyle.tint,
+                modifier = Modifier.size(iconSize),
+            )
         }
+
+        if (showOpenStateOverlay) {
+            val overlayIcon = when {
+                !canOpen -> Icons.Outlined.Block
+                fileTypeCategory == FileTypeCategory.Audio ||
+                    fileTypeCategory == FileTypeCategory.Video -> Icons.Outlined.PlayArrow
+                else -> Icons.AutoMirrored.Outlined.OpenInNew
+            }
+            FileCoverOpenStateOverlay(
+                icon = overlayIcon,
+                containerSize = overlayContainerSize,
+                iconSize = overlayIconSize,
+                backgroundAlpha = if (canOpen) overlayBackgroundAlpha else disabledOverlayBackgroundAlpha,
+                iconAlpha = if (canOpen) overlayIconAlpha else disabledOverlayIconAlpha,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FileCoverOpenStateOverlay(
+    icon: ImageVector,
+    containerSize: Dp,
+    iconSize: Dp,
+    backgroundAlpha: Float,
+    iconAlpha: Float,
+) {
+    val shape = RoundedCornerShape(999.dp)
+    Box(
+        modifier = Modifier
+            .size(containerSize)
+            .clip(shape)
+            .background(Color.Black.copy(alpha = backgroundAlpha)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = iconAlpha),
+            modifier = Modifier.size(iconSize),
+        )
     }
 }
 
@@ -124,69 +166,30 @@ internal fun FileCoverArtFrame(
 internal fun fileTypeIconStyle(reference: FileReference): FileTypeIconStyle {
     val colors = TaggoTheme.colors
 
-    fun accentBrush(accent: Color): Brush =
-        Brush.linearGradient(
-            listOf(
-                colors.panelBackgroundSoft,
-                accent.copy(alpha = 0.18f),
-            ),
+    fun style(icon: ImageVector, category: FileTypeCategory): FileTypeIconStyle {
+        val tokens = TaggoFileTypeColorTokens.forCategory(category)
+        return FileTypeIconStyle(
+            icon = icon,
+            tint = tokens.iconColor,
+            backgroundBrush = tokens.avatarBrush(colors.panelBackgroundSoft),
         )
+    }
 
     return when (FileTypeClassifier.classify(reference)) {
-        FileTypeCategory.TextDocument -> FileTypeIconStyle(
-            icon = Icons.Outlined.Description,
-            tint = Color(0xFF7AA2FF),
-            backgroundBrush = accentBrush(Color(0xFF7AA2FF)),
-        )
-        FileTypeCategory.PdfDocument -> FileTypeIconStyle(
-            icon = Icons.Outlined.PictureAsPdf,
-            tint = Color(0xFFFF6B7D),
-            backgroundBrush = accentBrush(Color(0xFFFF6B7D)),
-        )
-        FileTypeCategory.Video -> FileTypeIconStyle(
-            icon = Icons.Outlined.Movie,
-            tint = Color(0xFF9A7BFF),
-            backgroundBrush = accentBrush(Color(0xFF9A7BFF)),
-        )
-        FileTypeCategory.Audio -> FileTypeIconStyle(
-            icon = Icons.Outlined.MusicNote,
-            tint = Color(0xFF55D6C2),
-            backgroundBrush = accentBrush(Color(0xFF55D6C2)),
-        )
-        FileTypeCategory.Image -> FileTypeIconStyle(
-            icon = Icons.Outlined.Image,
-            tint = Color(0xFF64C7F5),
-            backgroundBrush = accentBrush(Color(0xFF64C7F5)),
-        )
-        FileTypeCategory.Archive -> FileTypeIconStyle(
-            icon = Icons.Outlined.Archive,
-            tint = Color(0xFFF5B84B),
-            backgroundBrush = accentBrush(Color(0xFFF5B84B)),
-        )
-        FileTypeCategory.Code -> FileTypeIconStyle(
-            icon = Icons.Outlined.Code,
-            tint = Color(0xFF7C5CFF),
-            backgroundBrush = accentBrush(Color(0xFF7C5CFF)),
-        )
-        FileTypeCategory.Spreadsheet -> FileTypeIconStyle(
-            icon = Icons.Outlined.TableChart,
-            tint = Color(0xFF43D17A),
-            backgroundBrush = accentBrush(Color(0xFF43D17A)),
-        )
-        FileTypeCategory.Presentation -> FileTypeIconStyle(
-            icon = Icons.Outlined.Slideshow,
-            tint = Color(0xFFFF7DB2),
-            backgroundBrush = accentBrush(Color(0xFFFF7DB2)),
-        )
-        FileTypeCategory.Folder -> FileTypeIconStyle(
-            icon = Icons.Outlined.Folder,
-            tint = Color(0xFFFFC562),
-            backgroundBrush = accentBrush(Color(0xFFFFC562)),
-        )
+        FileTypeCategory.TextDocument -> style(Icons.Outlined.Description, FileTypeCategory.TextDocument)
+        FileTypeCategory.PdfDocument -> style(Icons.Outlined.PictureAsPdf, FileTypeCategory.PdfDocument)
+        FileTypeCategory.Video -> style(Icons.Outlined.Movie, FileTypeCategory.Video)
+        FileTypeCategory.Audio -> style(Icons.Outlined.MusicNote, FileTypeCategory.Audio)
+        FileTypeCategory.Image -> style(Icons.Outlined.Image, FileTypeCategory.Image)
+        FileTypeCategory.Archive -> style(Icons.Outlined.Archive, FileTypeCategory.Archive)
+        FileTypeCategory.Code -> style(Icons.Outlined.Code, FileTypeCategory.Code)
+        FileTypeCategory.Spreadsheet -> style(Icons.Outlined.TableChart, FileTypeCategory.Spreadsheet)
+        FileTypeCategory.Presentation -> style(Icons.Outlined.Slideshow, FileTypeCategory.Presentation)
+        FileTypeCategory.Folder -> style(Icons.Outlined.Folder, FileTypeCategory.Folder)
         else -> FileTypeIconStyle(
             icon = Icons.Outlined.InsertDriveFile,
-            tint = colors.textSecondary,
-            backgroundBrush = Brush.linearGradient(listOf(colors.surface, colors.surfaceVariant)),
+            tint = TaggoFileTypeColorTokens.Other.iconColor,
+            backgroundBrush = TaggoFileTypeColorTokens.Other.avatarBrush(colors.surface),
         )
     }
 }

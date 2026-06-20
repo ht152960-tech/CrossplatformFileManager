@@ -1,5 +1,6 @@
 package com.example.cross_platformfilemanager
 
+import android.app.Activity
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -28,8 +29,9 @@ class MainActivity : ComponentActivity() {
         }
 
         val documentLauncher = registerForActivityResult(
-            ActivityResultContracts.OpenDocument(),
-        ) { uri ->
+            ActivityResultContracts.StartActivityForResult(),
+        ) { result ->
+            val uri = result.data?.data.takeIf { result.resultCode == Activity.RESULT_OK }
             val consumed = browserReferencePicker.onDocumentPicked(uri)
             if (uri != null && !consumed) {
                 showFilePickerStateExpiredToast()

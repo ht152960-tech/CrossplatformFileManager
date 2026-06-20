@@ -177,7 +177,8 @@ private data class OperableTagChipMetrics(
     val height: Dp,
     val minWidth: Dp,
     val maxWidth: Dp,
-    val horizontalPadding: Dp,
+    val startPadding: Dp,
+    val endPadding: Dp,
     val verticalPadding: Dp,
     val textSize: TextUnit,
     val lineHeight: TextUnit,
@@ -185,6 +186,13 @@ private data class OperableTagChipMetrics(
     val actionTouchSize: Dp,
     val actionVisualSize: Dp,
     val actionSymbolSize: TextUnit,
+    val horizontalSpacing: Dp,
+    val verticalSpacing: Dp,
+)
+
+internal data class OperableTagChipSpacing(
+    val horizontal: Dp,
+    val vertical: Dp,
 )
 
 private enum class OperableTagChipKind {
@@ -214,45 +222,62 @@ private fun operableTagChipMetrics(
     }
     return when (windowSizeClass) {
         TaggoWindowSizeClass.Compact -> OperableTagChipMetrics(
-            height = 36.dp,
+            height = 32.dp,
             minWidth = 58.dp,
             maxWidth = maxWidth,
-            horizontalPadding = 14.dp,
+            startPadding = 14.dp,
+            endPadding = 14.dp,
             verticalPadding = 7.dp,
             textSize = 13.sp,
             lineHeight = 17.sp,
             cornerRadius = 12.dp,
             actionTouchSize = 40.dp,
-            actionVisualSize = 22.dp,
-            actionSymbolSize = 13.sp,
+            actionVisualSize = 18.dp,
+            actionSymbolSize = 10.sp,
+            horizontalSpacing = 14.dp,
+            verticalSpacing = 16.dp,
         )
         TaggoWindowSizeClass.Medium -> OperableTagChipMetrics(
-            height = 34.dp,
-            minWidth = 54.dp,
+            height = 31.dp,
+            minWidth = 56.dp,
             maxWidth = maxWidth,
-            horizontalPadding = 14.dp,
+            startPadding = 13.dp,
+            endPadding = 13.dp,
             verticalPadding = 6.dp,
             textSize = 12.5.sp,
             lineHeight = 16.sp,
             cornerRadius = 11.dp,
             actionTouchSize = 40.dp,
-            actionVisualSize = 21.dp,
-            actionSymbolSize = 12.5.sp,
+            actionVisualSize = 17.dp,
+            actionSymbolSize = 9.5.sp,
+            horizontalSpacing = 13.dp,
+            verticalSpacing = 15.dp,
         )
         TaggoWindowSizeClass.Expanded -> OperableTagChipMetrics(
-            height = 32.dp,
-            minWidth = 50.dp,
+            height = 30.dp,
+            minWidth = 54.dp,
             maxWidth = maxWidth,
-            horizontalPadding = 14.dp,
+            startPadding = 12.dp,
+            endPadding = 12.dp,
             verticalPadding = 6.dp,
             textSize = 12.sp,
             lineHeight = 15.sp,
             cornerRadius = 10.dp,
             actionTouchSize = 40.dp,
-            actionVisualSize = 20.dp,
-            actionSymbolSize = 12.sp,
+            actionVisualSize = 16.dp,
+            actionSymbolSize = 9.sp,
+            horizontalSpacing = 12.dp,
+            verticalSpacing = 14.dp,
         )
     }
+}
+
+internal fun operableTagChipSpacing(windowSizeClass: TaggoWindowSizeClass): OperableTagChipSpacing {
+    val metrics = operableTagChipMetrics(OperableTagChipKind.Removable, windowSizeClass)
+    return OperableTagChipSpacing(
+        horizontal = metrics.horizontalSpacing,
+        vertical = metrics.verticalSpacing,
+    )
 }
 
 @Composable
@@ -271,15 +296,13 @@ private fun TaggoOperableTagChip(
     val metrics = operableTagChipMetrics(kind, windowSizeClass)
     val chipShape = RoundedCornerShape(metrics.cornerRadius)
     val visualActionShape = RoundedCornerShape(999.dp)
-    val actionOuterPadding = metrics.actionVisualSize / 2
-    val actionTouchOffset = (metrics.actionTouchSize - metrics.actionVisualSize) / 2
     val displayText = if (formalTag) {
         displayFormalTagForUi(label, fullCjkFontReady)
     } else {
         displayTextForUi(label, fullCjkFontReady)
     }
     Box(
-        modifier = Modifier.widthIn(max = metrics.maxWidth + actionOuterPadding),
+        modifier = Modifier.widthIn(min = metrics.minWidth, max = metrics.maxWidth),
     ) {
         Surface(
             color = if (emphasized) {
@@ -290,9 +313,9 @@ private fun TaggoOperableTagChip(
             contentColor = TaggoTheme.colors.textPrimary,
             shape = chipShape,
             modifier = Modifier
-                .padding(top = actionOuterPadding, end = actionOuterPadding)
                 .height(metrics.height)
                 .widthIn(min = metrics.minWidth, max = metrics.maxWidth)
+                .clip(chipShape)
                 .border(1.dp, TaggoTheme.colors.panelBorder.copy(alpha = 0.95f), chipShape)
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         ) {
@@ -300,8 +323,8 @@ private fun TaggoOperableTagChip(
                 Text(
                     text = displayText,
                     modifier = Modifier.padding(
-                        start = metrics.horizontalPadding,
-                        end = metrics.horizontalPadding,
+                        start = metrics.startPadding,
+                        end = metrics.endPadding,
                         top = metrics.verticalPadding,
                         bottom = metrics.verticalPadding,
                     ),
@@ -317,29 +340,37 @@ private fun TaggoOperableTagChip(
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .offset(x = actionTouchOffset, y = -actionTouchOffset)
+                .offset(
+                    x = metrics.actionTouchSize / 2,
+                    y = -metrics.actionTouchSize / 2,
+                )
                 .size(metrics.actionTouchSize)
                 .clickable(onClick = onActionClick),
             contentAlignment = Alignment.Center,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(metrics.actionVisualSize)
-                    .clip(visualActionShape)
-                    .background(TaggoTheme.colors.surfaceVariant)
-                    .border(1.dp, TaggoTheme.colors.panelBorder.copy(alpha = 0.95f), visualActionShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = actionSymbol,
-                    color = TaggoTheme.colors.textSecondary,
-                    fontSize = metrics.actionSymbolSize,
-                    fontWeight = FontWeight.SemiBold,
-                    lineHeight = metrics.actionSymbolSize,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(
+                    x = metrics.actionVisualSize / 2,
+                    y = -metrics.actionVisualSize / 2,
                 )
-            }
+                .size(metrics.actionVisualSize)
+                .clip(visualActionShape)
+                .background(TaggoTheme.colors.surfaceVariant)
+                .border(1.dp, TaggoTheme.colors.panelBorder.copy(alpha = 0.95f), visualActionShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = actionSymbol,
+                color = TaggoTheme.colors.textSecondary,
+                fontSize = metrics.actionSymbolSize,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = metrics.actionSymbolSize,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+            )
         }
     }
 }

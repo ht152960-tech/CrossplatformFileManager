@@ -9,7 +9,7 @@ private const val SNAPSHOT_FILE_NAME = "app_snapshot.json"
 
 private class AndroidSnapshotSaveException(
     cause: Throwable,
-) : Exception("Failed to save Android app snapshot.", cause)
+) : Exception("Failed to save Android app snapshot: ${cause.message ?: cause}", cause)
 
 actual fun createAppSnapshotStore(): AppSnapshotStore? {
     val context = AndroidContextHolder.applicationContext ?: return null

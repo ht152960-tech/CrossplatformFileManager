@@ -73,9 +73,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -97,7 +99,6 @@ import org.jetbrains.compose.resources.painterResource
 import taggo.composeapp.generated.resources.TaggoLogoBig2048
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDropDown
@@ -153,6 +154,7 @@ import com.example.cross_platformfilemanager.ui.components.TagPill
 import com.example.cross_platformfilemanager.ui.components.TaggoTagChip
 import com.example.cross_platformfilemanager.ui.components.TaggoTagRow
 import com.example.cross_platformfilemanager.ui.components.fileTypeIconStyle
+import com.example.cross_platformfilemanager.ui.components.operableTagChipSpacing
 import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalAlpha
 import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalColors
 import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalRadius
@@ -160,6 +162,7 @@ import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalSpacing
 import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalTypography
 import com.example.cross_platformfilemanager.ui.theme.TaggoCompactTokens
 import com.example.cross_platformfilemanager.ui.theme.TaggoFileCoverTokens
+import com.example.cross_platformfilemanager.ui.theme.TaggoFileTypeColorTokens
 
 private enum class AppPage {
     Home,
@@ -196,6 +199,55 @@ private enum class AllFilesTypeFilter {
     Presentation,
     Other,
 }
+
+private fun Modifier.compactHomeAmbientBackground(): Modifier =
+    background(TaggoCompactTokens.AmbientBaseBackground)
+        .drawBehind {
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        TaggoCompactTokens.AmbientGlowPurple,
+                        Color.Transparent,
+                    ),
+                    center = Offset(size.width * 0.86f, size.height * 0.10f),
+                    radius = size.maxDimension * 0.42f,
+                ),
+            )
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        TaggoCompactTokens.AmbientGlowBluePurple,
+                        Color.Transparent,
+                    ),
+                    center = Offset(size.width * 0.22f, size.height * 0.46f),
+                    radius = size.maxDimension * 0.48f,
+                ),
+            )
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        TaggoCompactTokens.AmbientGlowCyanBlue,
+                        Color.Transparent,
+                    ),
+                    center = Offset(size.width * 0.78f, size.height * 0.58f),
+                    radius = size.maxDimension * 0.36f,
+                ),
+            )
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        TaggoCompactTokens.AmbientGlowBottomPurple,
+                        Color.Transparent,
+                    ),
+                    center = Offset(size.width * 0.50f, size.height * 0.96f),
+                    radius = size.maxDimension * 0.34f,
+                ),
+            )
+        }
+
+private fun snapshotFailureDescription(error: Throwable): String =
+    generateSequence(error) { it.cause }
+        .joinToString(separator = " <- ") { it.toString() }
 
 @Composable
 private fun SidebarUploadButton(
@@ -463,6 +515,7 @@ fun App() {
     var currentPage by remember { mutableStateOf(AppPage.Home) }
     var selectedNavigationPage by remember { mutableStateOf(AppPage.Home) }
     var detailBackTarget by remember { mutableStateOf<AppPage?>(AppPage.Home) }
+    var searchBackTarget by remember { mutableStateOf<AppPage?>(AppPage.Home) }
     var searchDraft by remember { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(FileSortMode.RecentOpened) }
     var allFilesTypeFilter by remember { mutableStateOf(AllFilesTypeFilter.All) }
@@ -475,7 +528,8 @@ fun App() {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showSideMenu by remember { mutableStateOf(false) }
     var snapshotReady by remember { mutableStateOf(false) }
-    var snapshotSaveFailurePending by remember { mutableStateOf(false) }
+    var snapshotSaveFailureEventId by remember { mutableStateOf(0) }
+    var snapshotSaveFailureShownEventId by remember { mutableStateOf(0) }
     var searchFeedbackMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
@@ -504,20 +558,24 @@ fun App() {
         if (snapshotReady) {
             try {
                 snapshotStore?.save(appState.exportSnapshot())
-            } catch (_: Exception) {
-                snapshotSaveFailurePending = true
+                snapshotSaveFailureShownEventId = snapshotSaveFailureEventId
+                snapshotSnackbarHostState.currentSnackbarData?.dismiss()
+            } catch (error: Exception) {
+                println("Snapshot save failed: ${snapshotFailureDescription(error)}")
+                error.printStackTrace()
+                snapshotSaveFailureEventId++
             }
         }
     }
 
-    LaunchedEffect(snapshotSaveFailurePending) {
-        if (snapshotSaveFailurePending) {
+    LaunchedEffect(snapshotSaveFailureEventId) {
+        if (snapshotSaveFailureEventId > snapshotSaveFailureShownEventId) {
+            snapshotSaveFailureShownEventId = snapshotSaveFailureEventId
             snapshotSnackbarHostState.showSnackbar(
                 message = "\u4fdd\u5b58\u5931\u8d25\uff0c\u4fee\u6539\u53ef\u80fd\u4e0d\u4f1a\u4fdd\u7559",
                 actionLabel = "\u77e5\u9053\u4e86",
                 duration = SnackbarDuration.Indefinite,
             )
-            snapshotSaveFailurePending = false
         }
     }
 
@@ -576,33 +634,53 @@ fun App() {
         detailBackTarget = currentPage
     }
 
+    fun navigateBackFromSearch() {
+        val target = searchBackTarget
+        currentPage = when (target) {
+            AppPage.Home,
+            AppPage.Tags,
+            AppPage.AllFiles,
+            -> target
+
+            else -> selectedNavigationPage
+        }
+        searchBackTarget = currentPage
+    }
+
+    fun enterSearchPage() {
+        if (currentPage != AppPage.Search) {
+            searchBackTarget = currentPage
+        }
+        currentPage = AppPage.Search
+    }
+
     fun startSearchFromHome() {
         appState.resetSearchSession()
         val validationMessage = searchValidationMessage(searchDraft, appState.locale)
         if (validationMessage != null) {
             searchFeedbackMessage = validationMessage
-            currentPage = AppPage.Search
+            enterSearchPage()
             return
         }
         if (appState.submitSearch(searchDraft)) {
             searchDraft = ""
             searchFeedbackMessage = null
         }
-        currentPage = AppPage.Search
+        enterSearchPage()
     }
 
     fun startSearchFromSearchPage() {
         val validationMessage = searchValidationMessage(searchDraft, appState.locale)
         if (validationMessage != null) {
             searchFeedbackMessage = validationMessage
-            currentPage = AppPage.Search
+            enterSearchPage()
             return
         }
         if (appState.submitSearch(searchDraft)) {
             searchDraft = ""
             searchFeedbackMessage = null
         }
-        currentPage = AppPage.Search
+        enterSearchPage()
     }
 
     fun startRecentSearch(query: String) {
@@ -613,7 +691,7 @@ fun App() {
         } else {
             searchDraft = query
         }
-        currentPage = AppPage.Search
+        enterSearchPage()
     }
 
     fun addPickedReference(draft: BrowserReferenceDraft) {
@@ -637,7 +715,7 @@ fun App() {
         appState.resetSearchSession()
         appState.addSearchTag(SearchTag(value = tag, source = SearchTagSource.LibraryTag))
         searchFeedbackMessage = null
-        currentPage = AppPage.Search
+        enterSearchPage()
     }
 
     fun showAddReferenceDialog(notice: String? = null) {
@@ -694,6 +772,14 @@ fun App() {
         coverArtSource = appState.draftCoverArtSource.ifBlank { null },
         notes = appState.draftNotes,
     )
+
+    TaggoBackHandler(enabled = currentPage == AppPage.Detail || currentPage == AppPage.Search) {
+        when (currentPage) {
+            AppPage.Detail -> navigateBackFromDetail()
+            AppPage.Search -> navigateBackFromSearch()
+            else -> Unit
+        }
+    }
 
     @Composable
     fun AppMainSurface() {
@@ -810,7 +896,13 @@ fun App() {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(TaggoTheme.colors.backgroundBrush),
+                                    .then(
+                                        if (homeCompactLayout) {
+                                            Modifier.compactHomeAmbientBackground()
+                                        } else {
+                                            Modifier.background(TaggoTheme.colors.backgroundBrush)
+                                        },
+                                    ),
                             ) {
                                 Column(
                                     modifier = Modifier
@@ -915,7 +1007,7 @@ fun App() {
                                             searchFeedbackMessage = null
                                         },
                                         onSearch = ::startSearchFromSearchPage,
-                                        onBackHome = { currentPage = selectedNavigationPage },
+                                        onBackHome = ::navigateBackFromSearch,
                                         onOpenReference = ::openReference,
                                         onRecentSearchClick = ::startRecentSearch,
                                     )
@@ -1075,14 +1167,11 @@ fun App() {
                                 hostState = snapshotSnackbarHostState,
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
+                                    .zIndex(4f)
                                     .padding(
                                         start = TaggoGlobalSpacing.Md,
                                         end = TaggoGlobalSpacing.Md,
-                                        bottom = if (actualWindowSizeClass == TaggoWindowSizeClass.Compact) {
-                                            TaggoCompactTokens.BottomNavigationClearance
-                                        } else {
-                                            TaggoGlobalSpacing.Md
-                                        },
+                                        bottom = 0.dp,
                                     ),
                             )
                         }
@@ -1280,10 +1369,10 @@ private fun HomeExpandedDashboard(
     onTagClick: (String) -> Unit,
 ) {
     val recentItems = appState.recentAddedReferences.take(3)
-    val tagSummaries = remember(appState.allReferences, appState.topTags) {
+    val tagSummaries = remember(appState.snapshotVersion, appState.topTags) {
         resolveDashboardTagSummaries(appState.allReferences, appState.topTags)
     }
-    val typeSummaries = remember(appState.allReferences) {
+    val typeSummaries = remember(appState.snapshotVersion) {
         resolveDashboardTypeSummaries(appState.allReferences)
     }
     val entryTags = tagSummaries.take(6)
@@ -1537,8 +1626,8 @@ private object MediumHomeMetrics {
     val RecommendationRowPadding = 10.dp
     val RecommendationRowVerticalPadding = 6.dp
     val RecommendationBadgeIconSize = 12.dp
-    val CoverOverlaySize = 20.dp
-    val CoverOverlayIconSize = 12.dp
+    val CoverOverlaySize = 14.dp
+    val CoverOverlayIconSize = 9.dp
     val CoverOverlayEdgePadding = 4.dp
     val RecentRowHeight = 26.dp
     val RecentIconSize = 24.dp
@@ -1564,7 +1653,7 @@ private object MediumHomeMetrics {
     val SectionTitleLineHeight = 18.sp
     val SectionTitleHeight = 28.dp
     val RecommendationSectionTitleFontSize = 14.sp
-    val RecommendationTitleFontSize = 13.sp
+    val RecommendationTitleFontSize = 15.sp
     val RecentTitleFontSize = 12.sp
     val AuxiliaryFontSize = 10.sp
     val RecommendationTagChipHeight = 20.dp
@@ -1616,10 +1705,10 @@ private fun HomeMediumDashboard(
     onOpenTypeFilter: (AllFilesTypeFilter) -> Unit,
     onTagClick: (String) -> Unit,
 ) {
-    val tagSummaries = remember(appState.allReferences, appState.topTags) {
+    val tagSummaries = remember(appState.snapshotVersion, appState.topTags) {
         resolveDashboardTagSummaries(appState.allReferences, appState.topTags)
     }
-    val typeSummaries = remember(appState.allReferences) {
+    val typeSummaries = remember(appState.snapshotVersion) {
         resolveDashboardTypeSummaries(appState.allReferences)
     }
     CompositionLocalProvider(
@@ -2245,6 +2334,10 @@ private fun MediumRecommendedFileRow(
             modifier = Modifier.size(MediumHomeMetrics.RecommendationIconSize),
             cornerRadius = 10.dp,
             iconSize = TaggoFileCoverTokens.MediumRecommendationIconSize,
+            overlayContainerSize = MediumHomeMetrics.CoverOverlaySize,
+            overlayIconSize = MediumHomeMetrics.CoverOverlayIconSize,
+            overlayBackgroundAlpha = 0.12f,
+            overlayIconAlpha = 0.42f,
             onOpenFile = onOpenFile,
         )
         Column(
@@ -2262,7 +2355,7 @@ private fun MediumRecommendedFileRow(
                     modifier = Modifier.weight(1f, fill = false),
                     color = TaggoGlobalColors.TextPrimary,
                     fontSize = MediumHomeMetrics.RecommendationTitleFontSize,
-                    lineHeight = 15.sp,
+                    lineHeight = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -2284,8 +2377,8 @@ private fun MediumRecommendedFileRow(
                 fullCjkFontReady = fullCjkFontReady,
                 modifier = Modifier.fillMaxWidth(),
                 color = TaggoGlobalColors.TextSecondary.copy(alpha = 0.90f),
-                fontSize = 10.sp,
-                lineHeight = 11.sp,
+                fontSize = 12.sp,
+                lineHeight = 14.sp,
                 fontWeight = FontWeight.Normal,
                 fontFamily = fullCjkFontFamily,
             )
@@ -2366,17 +2459,15 @@ private fun MediumOpenableCover(
     fullCjkFontFamily: FontFamily,
     cornerRadius: Dp,
     iconSize: Dp,
+    overlayContainerSize: Dp = 20.dp,
+    overlayIconSize: Dp = 12.dp,
+    overlayBackgroundAlpha: Float = 0.14f,
+    overlayIconAlpha: Float = 0.46f,
     onOpenFile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val iconStyle = fileTypeIconStyle(reference)
     val shape = RoundedCornerShape(cornerRadius)
-    val fileType = FileTypeClassifier.classify(reference)
-    val overlayIcon = when (fileType) {
-        FileTypeCategory.Video -> Icons.Outlined.PlayArrow
-        FileTypeCategory.Audio -> Icons.Outlined.MusicNote
-        else -> Icons.AutoMirrored.Outlined.OpenInNew
-    }
     Box(
         modifier = modifier
             .clip(shape)
@@ -2391,39 +2482,11 @@ private fun MediumOpenableCover(
             modifier = Modifier.fillMaxSize(),
             cornerShape = shape,
             iconSize = iconSize,
+            overlayContainerSize = overlayContainerSize,
+            overlayIconSize = overlayIconSize,
+            overlayBackgroundAlpha = overlayBackgroundAlpha,
+            overlayIconAlpha = overlayIconAlpha,
         )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(MediumHomeMetrics.CoverOverlayEdgePadding),
-            contentAlignment = Alignment.BottomEnd,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(MediumHomeMetrics.CoverOverlaySize)
-                    .clip(RoundedCornerShape(MediumHomeMetrics.CoverOverlaySize / 2))
-                    .background(
-                        TaggoGlobalColors.PanelBackgroundSoft.copy(
-                            alpha = MediumHomeMetrics.CoverOverlayBackgroundAlpha,
-                        ),
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = TaggoGlobalColors.BorderStrong.copy(
-                            alpha = MediumHomeMetrics.CoverOverlayBorderAlpha,
-                        ),
-                        shape = RoundedCornerShape(MediumHomeMetrics.CoverOverlaySize / 2),
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = overlayIcon,
-                    contentDescription = null,
-                    tint = TaggoGlobalColors.TextPrimary.copy(alpha = 0.9f),
-                    modifier = Modifier.size(MediumHomeMetrics.CoverOverlayIconSize),
-                )
-            }
-        }
     }
 }
 
@@ -2661,13 +2724,13 @@ private object CompactHomeMetrics {
     val TypeProgressHeight = 5.dp
     val TypeCountWidth = 22.dp
     val RecommendationEmptyCardHeight = 160.dp
-    val RecommendationRowHeight = 68.dp
+    val RecommendationRowHeight = 82.dp
     val RecommendationCoverSize = TaggoFileCoverTokens.CompactRecommendationCoverSize
-    val RecommendationRowVerticalPadding = 6.dp
+    val RecommendationRowVerticalPadding = 14.dp
     val RecommendationBadgeIconSize = 12.dp
     val RecommendationTitleBadgeGap = 5.dp
-    val RecommendationTagSummaryFontSize = 10.sp
-    val RecommendationTagSummaryLineHeight = 11.sp
+    val RecommendationTagSummaryFontSize = 13.sp
+    val RecommendationTagSummaryLineHeight = 16.sp
     val FabSize = 62.dp
     val FabIconSize = 30.dp
     val FabEndPadding = 24.dp
@@ -2820,20 +2883,39 @@ private fun CompactUploadFab(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(TaggoGlobalRadius.Badge),
-        color = TaggoGlobalColors.PrimaryAccent,
-        contentColor = TaggoGlobalColors.TextPrimary,
+        color = Color.Transparent,
+        contentColor = TaggoCompactTokens.FabIcon,
         tonalElevation = 0.dp,
-        shadowElevation = 12.dp,
-        modifier = modifier.size(CompactHomeMetrics.FabSize),
+        shadowElevation = 0.dp,
+        modifier = modifier
+            .size(CompactHomeMetrics.FabSize)
+            .drawBehind {
+                drawCircle(
+                    color = TaggoCompactTokens.FabGlow,
+                    radius = size.minDimension * 0.58f,
+                    center = center,
+                )
+            },
     ) {
         Box(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(TaggoGlobalRadius.Badge))
+                .background(TaggoCompactTokens.fabGradient())
+                .border(1.dp, TaggoCompactTokens.FabBorder, RoundedCornerShape(TaggoGlobalRadius.Badge)),
             contentAlignment = Alignment.Center,
         ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth(0.62f)
+                    .height(1.dp)
+                    .background(TaggoCompactTokens.FabHighlight),
+            )
             Icon(
                 imageVector = Icons.Outlined.Add,
                 contentDescription = null,
-                tint = TaggoGlobalColors.TextPrimary,
+                tint = TaggoCompactTokens.FabIcon,
                 modifier = Modifier.size(CompactHomeMetrics.FabIconSize),
             )
         }
@@ -2855,10 +2937,10 @@ private fun HomeCompactDashboard(
     onTagClick: (String) -> Unit,
 ) {
     val recentItems = appState.recentAddedReferences.take(3)
-    val tagSummaries = remember(appState.allReferences, appState.topTags) {
+    val tagSummaries = remember(appState.snapshotVersion, appState.topTags) {
         resolveDashboardTagSummaries(appState.allReferences, appState.topTags)
     }
-    val typeSummaries = remember(appState.allReferences) {
+    val typeSummaries = remember(appState.snapshotVersion) {
         resolveDashboardTypeSummaries(appState.allReferences)
     }
     val entryTags = tagSummaries.take(6)
@@ -3100,12 +3182,9 @@ private fun CompactTagGrid(
                     Box(modifier = Modifier.weight(1f)) {
                         TaggoListItemSurface(
                             shape = RoundedCornerShape(TaggoGlobalRadius.Item),
-                            backgroundColor = TaggoGlobalColors.ItemBackground.copy(
-                                alpha = CompactHomeMetrics.TagItemBackgroundAlpha,
-                            ),
-                            borderColor = TaggoGlobalColors.Border.copy(
-                                alpha = CompactHomeMetrics.TagItemBorderAlpha,
-                            ),
+                            backgroundColor = Color.Transparent,
+                            backgroundBrush = TaggoCompactTokens.glassListItemBackgroundBrush(),
+                            borderColor = TaggoCompactTokens.GlassListItemBorder,
                             height = CompactHomeMetrics.TagChipHeight,
                             contentPadding = PaddingValues(
                                 horizontal = CompactHomeMetrics.TagItemHorizontalPadding,
@@ -3151,13 +3230,13 @@ private fun CompactFileTypeRow(
     locale: AppLocale,
     onClick: () -> Unit,
 ) {
-    val accent = accentForTypeFilter(summary.filter)
+    val typeColors = colorTokensForTypeFilter(summary.filter)
     TaggoListItemSurface(
         shape = RoundedCornerShape(TaggoGlobalRadius.Item),
         backgroundColor = Color.Transparent,
-        borderColor = Color.Transparent,
+        backgroundBrush = TaggoCompactTokens.glassListItemBackgroundBrush(),
+        borderColor = TaggoCompactTokens.GlassListItemBorder,
         height = CompactHomeMetrics.TypeRowHeight,
-        borderWidth = 0.dp,
         contentPadding = PaddingValues(0.dp),
         horizontalArrangement = Arrangement.spacedBy(TaggoGlobalSpacing.Sm),
         onClick = onClick,
@@ -3165,7 +3244,7 @@ private fun CompactFileTypeRow(
         Icon(
             imageVector = iconForTypeFilter(summary.filter),
             contentDescription = null,
-            tint = accent,
+            tint = typeColors.iconColor,
             modifier = Modifier.size(CompactHomeMetrics.TypeIconSize),
         )
         Text(
@@ -3188,7 +3267,7 @@ private fun CompactFileTypeRow(
                 modifier = Modifier
                     .fillMaxWidth(summary.share.coerceIn(0.08f, 1f))
                     .fillMaxHeight()
-                    .background(accent),
+                    .background(typeColors.progressColor),
             )
         }
         Text(
@@ -3413,10 +3492,10 @@ private fun DashboardRecentFileRow(
     if (compactLayout) {
         TaggoListItemSurface(
             shape = RoundedCornerShape(8.dp),
-            backgroundColor = TaggoGlobalColors.ItemBackground.copy(alpha = 0.28f),
-            borderColor = Color.Transparent,
+            backgroundColor = Color.Transparent,
+            backgroundBrush = TaggoCompactTokens.glassListItemBackgroundBrush(),
+            borderColor = TaggoCompactTokens.GlassListItemBorder,
             height = CompactHomeMetrics.RecentRowHeight,
-            borderWidth = 0.dp,
             contentPadding = PaddingValues(
                 horizontal = TaggoGlobalSpacing.Sm,
                 vertical = 4.dp,
@@ -3455,6 +3534,7 @@ private fun DashboardRecentFileRow(
                     )
                     CompactFileTypeBadge(
                         label = compactFileTypeLabel(reference),
+                        reference = reference,
                     )
                 }
             }
@@ -3552,11 +3632,15 @@ private fun compactFileTypeLabel(reference: FileReference): String {
 }
 
 @Composable
-private fun CompactFileTypeBadge(label: String) {
+private fun CompactFileTypeBadge(
+    label: String,
+    reference: FileReference,
+) {
+    val typeColors = TaggoFileTypeColorTokens.forCategory(FileTypeClassifier.classify(reference))
     Surface(
         shape = RoundedCornerShape(TaggoGlobalRadius.Badge),
-        color = TaggoGlobalColors.SurfaceVariant.copy(alpha = 0.72f),
-        contentColor = TaggoGlobalColors.TextSecondary,
+        color = typeColors.badgeBackground,
+        contentColor = typeColors.badgeContentColor,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {
@@ -3617,7 +3701,7 @@ private fun RecommendationTagSummaryText(
         fontFamily = fontFamily,
     )
     BoxWithConstraints(modifier = modifier) {
-        val availableWidthPx = with(density) { maxWidth.toPx() }
+        val availableWidthPx = with(density) { (maxWidth - 12.dp).coerceAtLeast(0.dp).toPx() }
         val summary = remember(tags, locale, fullCjkFontReady, availableWidthPx, style) {
             measuredRecommendationTagSummary(
                 tags = tags,
@@ -3843,12 +3927,9 @@ private fun DashboardCompactRecommendedFileRow(
     TaggoListItemSurface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(TaggoGlobalRadius.Item),
-        backgroundColor = TaggoGlobalColors.ItemBackground.copy(
-            alpha = CompactHomeMetrics.RecommendationItemBackgroundAlpha,
-        ),
-        borderColor = TaggoGlobalColors.Border.copy(
-            alpha = CompactHomeMetrics.RecommendationItemBorderAlpha,
-        ),
+        backgroundColor = Color.Transparent,
+        backgroundBrush = TaggoCompactTokens.glassListItemBackgroundBrush(),
+        borderColor = TaggoCompactTokens.GlassListItemBorder,
         height = CompactHomeMetrics.RecommendationRowHeight,
         contentPadding = PaddingValues(
             horizontal = CompactHomeMetrics.TagItemHorizontalPadding,
@@ -3868,6 +3949,8 @@ private fun DashboardCompactRecommendedFileRow(
                 .clickable(onClick = onOpenFile),
             cornerShape = RoundedCornerShape(10.dp),
             iconSize = TaggoFileCoverTokens.CompactRecommendationIconSize,
+            overlayContainerSize = 18.dp,
+            overlayIconSize = 12.dp,
         )
         Column(
             modifier = Modifier
@@ -3883,7 +3966,8 @@ private fun DashboardCompactRecommendedFileRow(
                     text = displayTextForUi(reference.title, fullCjkFontReady),
                     modifier = Modifier.weight(1f, fill = false),
                     color = TaggoGlobalColors.TextPrimary,
-                    fontSize = TaggoGlobalTypography.Body,
+                    fontSize = 16.sp,
+                    lineHeight = 20.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -4016,19 +4100,23 @@ private fun iconForTypeFilter(filter: AllFilesTypeFilter): ImageVector =
         -> Icons.Outlined.InsertDriveFile
     }
 
-@Composable
-private fun accentForTypeFilter(filter: AllFilesTypeFilter): Color =
+private fun colorTokensForTypeFilter(filter: AllFilesTypeFilter) =
     when (filter) {
-        AllFilesTypeFilter.Image -> TaggoTheme.colors.dashboardProgressFillImage
-        AllFilesTypeFilter.Video -> TaggoTheme.colors.dashboardProgressFillVideo
-        AllFilesTypeFilter.Audio -> TaggoTheme.colors.dashboardProgressFillAudio
-        AllFilesTypeFilter.Document -> TaggoTheme.colors.dashboardProgressFill
-        AllFilesTypeFilter.Spreadsheet -> TaggoTheme.colors.dashboardProgressFill
-        AllFilesTypeFilter.Presentation -> TaggoTheme.colors.dashboardProgressFillVideo
+        AllFilesTypeFilter.Image -> TaggoFileTypeColorTokens.Image
+        AllFilesTypeFilter.Video -> TaggoFileTypeColorTokens.Video
+        AllFilesTypeFilter.Audio -> TaggoFileTypeColorTokens.Audio
+        AllFilesTypeFilter.Document,
+        AllFilesTypeFilter.Spreadsheet,
+        AllFilesTypeFilter.Presentation,
+        -> TaggoFileTypeColorTokens.Document
         AllFilesTypeFilter.Other,
         AllFilesTypeFilter.All,
-        -> TaggoTheme.colors.dashboardProgressFillAudio
+        -> TaggoFileTypeColorTokens.Other
     }
+
+@Composable
+private fun accentForTypeFilter(filter: AllFilesTypeFilter): Color =
+    colorTokensForTypeFilter(filter).progressColor
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -4148,10 +4236,10 @@ private fun AllFilesPage(
     val windowSizeClass = LocalTaggoWindowSizeClass.current
     val compactLayout = windowSizeClass == TaggoWindowSizeClass.Compact
     val compactBottomPadding = if (compactLayout) TaggoCompactTokens.BottomNavigationClearance else 0.dp
-    val availableTypeFilters = remember(appState.allReferences) {
+    val availableTypeFilters = remember(appState.snapshotVersion) {
         resolveAvailableTypeFilters(appState.allReferences)
     }
-    val filteredFiles = remember(appState.allReferences, typeFilter) {
+    val filteredFiles = remember(appState.snapshotVersion, typeFilter) {
         filterReferencesByType(appState.allReferences, typeFilter)
     }
     val sortedFiles = remember(filteredFiles, sortMode) {
@@ -4543,7 +4631,9 @@ private fun RecentSearchesSection(
     fullCjkFontReady: Boolean,
     onRecentSearchClick: (String) -> Unit,
 ) {
-    val compactLayout = LocalTaggoWindowSizeClass.current == TaggoWindowSizeClass.Compact
+    val windowSizeClass = LocalTaggoWindowSizeClass.current
+    val compactLayout = windowSizeClass == TaggoWindowSizeClass.Compact
+    val historyMetrics = searchHistoryChipMetrics(windowSizeClass)
     if (compactLayout) {
         TaggoSectionCard(
             title = if (locale == AppLocale.ZhCn) "最近搜索" else "Recent searches",
@@ -4554,8 +4644,8 @@ private fun RecentSearchesSection(
             trailing = {},
         ) {
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(TaggoCompactTokens.FileItemGap),
-                verticalArrangement = Arrangement.spacedBy(TaggoCompactTokens.FileItemGap),
+                horizontalArrangement = Arrangement.spacedBy(historyMetrics.horizontalSpacing),
+                verticalArrangement = Arrangement.spacedBy(historyMetrics.verticalSpacing),
             ) {
                 searches.forEach { query ->
                     TaggoSearchHistoryChip(
@@ -4574,8 +4664,8 @@ private fun RecentSearchesSection(
         responsiveHeader = true,
     ) {
         FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(historyMetrics.horizontalSpacing),
+            verticalArrangement = Arrangement.spacedBy(historyMetrics.verticalSpacing),
         ) {
             searches.forEach { query ->
                 TaggoSearchHistoryChip(
@@ -4592,37 +4682,80 @@ private fun TaggoSearchHistoryChip(
     label: String,
     onClick: () -> Unit,
 ) {
-    val compactLayout = LocalTaggoWindowSizeClass.current == TaggoWindowSizeClass.Compact
-    val shape = RoundedCornerShape(if (compactLayout) 12.dp else 10.dp)
+    val metrics = searchHistoryChipMetrics(LocalTaggoWindowSizeClass.current)
+    val shape = RoundedCornerShape(metrics.cornerRadius)
     Surface(
         modifier = Modifier
-            .widthIn(min = if (compactLayout) 52.dp else 48.dp, max = if (compactLayout) 180.dp else 220.dp)
+            .wrapContentWidth()
+            .height(metrics.height)
+            .widthIn(max = metrics.maxWidth)
             .clip(shape)
             .clickable(onClick = onClick)
             .border(
                 width = 1.dp,
-                color = TaggoTheme.colors.panelBorder.copy(alpha = 0.72f),
+                color = TaggoGlobalColors.PrimaryAccentSoft.copy(alpha = 0.34f),
                 shape = shape,
             ),
         shape = shape,
-        color = TaggoTheme.colors.panelBackgroundSoft.copy(alpha = 0.62f),
+        color = TaggoTheme.colors.panelBackgroundSoft.copy(alpha = 0.58f),
         contentColor = TaggoTheme.colors.textSecondary,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(
-                horizontal = if (compactLayout) 11.dp else 10.dp,
-                vertical = if (compactLayout) 7.dp else 6.dp,
-            ),
-            fontSize = if (compactLayout) TaggoCompactTokens.Caption else 12.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Box(
+            modifier = Modifier
+                .height(metrics.height)
+                .wrapContentWidth()
+                .padding(horizontal = metrics.horizontalPadding),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = label,
+                fontSize = metrics.fontSize,
+                lineHeight = metrics.lineHeight,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
+
+private data class SearchHistoryChipMetrics(
+    val height: Dp,
+    val maxWidth: Dp,
+    val horizontalPadding: Dp,
+    val cornerRadius: Dp,
+    val fontSize: TextUnit,
+    val lineHeight: TextUnit,
+    val horizontalSpacing: Dp,
+    val verticalSpacing: Dp,
+)
+
+private fun searchHistoryChipMetrics(windowSizeClass: TaggoWindowSizeClass): SearchHistoryChipMetrics =
+    if (windowSizeClass == TaggoWindowSizeClass.Compact) {
+        SearchHistoryChipMetrics(
+            height = 34.dp,
+            maxWidth = 180.dp,
+            horizontalPadding = 14.dp,
+            cornerRadius = 0.dp,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
+            horizontalSpacing = 12.dp,
+            verticalSpacing = 12.dp,
+        )
+    } else {
+        SearchHistoryChipMetrics(
+            height = 32.dp,
+            maxWidth = 220.dp,
+            horizontalPadding = 13.dp,
+            cornerRadius = 0.dp,
+            fontSize = 13.sp,
+            lineHeight = 17.sp,
+            horizontalSpacing = 11.dp,
+            verticalSpacing = 11.dp,
+        )
+    }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -4634,6 +4767,7 @@ private fun AllTagsEntrySection(
     onTagClick: (String) -> Unit,
     onRemoveTag: (String) -> Unit,
 ) {
+    val chipSpacing = operableTagChipSpacing(LocalTaggoWindowSizeClass.current)
     SectionCard(
         title = if (locale == AppLocale.ZhCn) "\u5168\u90e8\u6807\u7b7e" else "All tags",
         subtitle = if (locale == AppLocale.ZhCn) "\u70b9\u51fb\u8fdb\u5165\u641c\u7d22\uff0c\u53f3\u4e0a\u89d2 \u00d7 \u53ef\u5220\u9664\u6807\u7b7e" else "Click to search. Use the corner \u00d7 to delete a tag.",
@@ -4645,8 +4779,8 @@ private fun AllTagsEntrySection(
             )
         } else {
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(chipSpacing.horizontal),
+                verticalArrangement = Arrangement.spacedBy(chipSpacing.vertical),
             ) {
                 allTags.forEach { tag ->
                     RemovableTagChip(
@@ -5956,8 +6090,6 @@ private fun FileTileCard(
     val desktopThumbnailSize = if (mediumLayout) TaggoFileCoverTokens.MediumFileTileCoverSize else 72.dp
     val metaLine = remember(reference, fullCjkFontReady) {
         buildList {
-            val fileTypeLabel = displayTextForUi(reference.fileType, fullCjkFontReady).ifBlank { "file" }
-            add(fileTypeLabel)
             add(formatRelativeTime(reference.lastOpenedAtMillis))
             add(formatFileSize(reference.fileSizeBytes ?: guessFileSizeFromNotes(reference.notes)))
         }.joinToString(separator = " • ")
@@ -6009,17 +6141,22 @@ private fun FileTileCard(
                     fullCjkFontFamily = fullCjkFontFamily,
                     modifier = Modifier.size(TaggoCompactTokens.FileCoverSize),
                     iconSize = TaggoCompactTokens.FileIconSize,
+                    overlayContainerSize = 18.dp,
+                    overlayIconSize = 12.dp,
                 )
 
                 Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(TaggoCompactTokens.FileCoverSize),
+                    verticalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
                         text = displayTextForUi(reference.title, fullCjkFontReady),
                         color = TaggoTheme.colors.textPrimary,
                         fontWeight = FontWeight.Medium,
-                        fontSize = TaggoCompactTokens.Caption,
+                        fontSize = 16.sp,
+                        lineHeight = 20.sp,
                         minLines = 1,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -6029,18 +6166,11 @@ private fun FileTileCard(
                     Text(
                         text = metaLine,
                         color = TaggoTheme.colors.textMuted,
-                        fontSize = TaggoCompactTokens.CaptionSmall,
+                        fontSize = 13.sp,
+                        lineHeight = 16.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-
-                    if (reference.tags.isNotEmpty()) {
-                        TaggoTagRow(
-                            tags = reference.tags,
-                            fullCjkFontReady = fullCjkFontReady,
-                            fullCjkFontFamily = fullCjkFontFamily,
-                        )
-                    }
                 }
             }
         } else if (mediumLayout) {
@@ -6062,20 +6192,27 @@ private fun FileTileCard(
                     } else {
                         42.dp
                     },
+                    overlayContainerSize = 22.dp,
+                    overlayIconSize = 15.dp,
+                    overlayBackgroundAlpha = 0.14f,
+                    overlayIconAlpha = 0.48f,
                 )
 
                 Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(desktopThumbnailSize),
+                    verticalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
                         text = displayTextForUi(reference.title, fullCjkFontReady),
                         modifier = Modifier.fillMaxWidth(),
                         color = TaggoTheme.colors.textPrimary,
                         fontWeight = FontWeight.Medium,
-                        fontSize = 12.sp,
+                        fontSize = 17.sp,
+                        lineHeight = 22.sp,
                         minLines = 1,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         fontFamily = fullCjkFontFamily,
                     )
@@ -6084,18 +6221,11 @@ private fun FileTileCard(
                         text = metaLine,
                         modifier = Modifier.fillMaxWidth(),
                         color = TaggoTheme.colors.textMuted,
-                        fontSize = 10.sp,
+                        fontSize = 13.sp,
+                        lineHeight = 17.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-
-                    if (reference.tags.isNotEmpty()) {
-                        TaggoTagRow(
-                            tags = reference.tags,
-                            fullCjkFontReady = fullCjkFontReady,
-                            fullCjkFontFamily = fullCjkFontFamily,
-                        )
-                    }
                 }
             }
         } else {
@@ -6115,6 +6245,10 @@ private fun FileTileCard(
                         modifier = Modifier.fillMaxSize(),
                         cornerShape = RoundedCornerShape(14.dp),
                         iconSize = 42.dp,
+                        overlayContainerSize = 22.dp,
+                        overlayIconSize = 15.dp,
+                        overlayBackgroundAlpha = 0.14f,
+                        overlayIconAlpha = 0.48f,
                     )
                 }
                 Box(
@@ -6297,7 +6431,7 @@ private fun DetailHeroCard(
                     TaggoCompactTokens.DetailHeroPadding,
                 ),
             ) {
-                Box(
+                BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(TaggoCompactTokens.DetailCoverAspectRatio)
@@ -6309,6 +6443,9 @@ private fun DetailHeroCard(
                             },
                         ),
                 ) {
+                    val coverLongSide = maxOf(maxWidth, maxHeight)
+                    val overlaySize = coverLongSide / 3f
+                    val overlayIconSize = overlaySize * 0.58f
                     FileCoverArtFrame(
                         reference = reference,
                         iconStyle = iconStyle,
@@ -6317,26 +6454,14 @@ private fun DetailHeroCard(
                         modifier = Modifier.fillMaxSize(),
                         cornerShape = RoundedCornerShape(TaggoCompactTokens.HeroCoverRadius),
                         iconSize = TaggoCompactTokens.DetailIconSize,
+                        canOpen = canOpenFile,
+                        overlayContainerSize = overlaySize,
+                        overlayIconSize = overlayIconSize,
+                        overlayBackgroundAlpha = 0.08f,
+                        overlayIconAlpha = 0.30f,
+                        disabledOverlayBackgroundAlpha = 0.05f,
+                        disabledOverlayIconAlpha = 0.22f,
                     )
-
-                    if (canOpenFile) {
-                        Surface(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(TaggoCompactTokens.FileItemHorizontalPadding),
-                            shape = RoundedCornerShape(TaggoCompactTokens.ButtonRadius),
-                            color = TaggoTheme.colors.panelBackground.copy(alpha = 0.82f),
-                            contentColor = TaggoTheme.colors.textSecondary,
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
-                                contentDescription = openButtonLabel,
-                                modifier = Modifier
-                                    .padding(7.dp)
-                                    .size(18.dp),
-                            )
-                        }
-                    }
                 }
 
                 Column(
@@ -6383,6 +6508,11 @@ private fun DetailHeroCard(
                         .size(96.dp),
                     cornerShape = RoundedCornerShape(22.dp),
                     iconSize = 44.dp,
+                    canOpen = canOpenFile,
+                    overlayContainerSize = 32.dp,
+                    overlayIconSize = 19.dp,
+                    overlayBackgroundAlpha = 0.12f,
+                    overlayIconAlpha = 0.44f,
                 )
 
                 Column(

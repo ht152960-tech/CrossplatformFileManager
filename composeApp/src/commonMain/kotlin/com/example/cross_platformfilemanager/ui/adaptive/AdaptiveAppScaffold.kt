@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
@@ -24,9 +25,13 @@ internal fun <Page> AdaptiveAppScaffold(
     content: @Composable (TaggoWindowSizeClass) -> Unit,
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val windowSizeClass = taggoWindowSizeClassForWidth(maxWidth)
+        val windowSizeClass = taggoWindowSizeClassForSize(maxWidth, maxHeight)
         CompositionLocalProvider(LocalTaggoWindowSizeClass provides windowSizeClass) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .safeDrawingPadding(),
+            ) {
                 topBar?.invoke(windowSizeClass)
                 Box(modifier = Modifier.weight(1f)) {
                     when {

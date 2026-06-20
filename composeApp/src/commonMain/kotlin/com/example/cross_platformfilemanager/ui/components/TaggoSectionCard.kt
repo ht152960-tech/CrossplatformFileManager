@@ -24,6 +24,7 @@ import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalColors
 import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalRadius
 import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalSpacing
 import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalTypography
+import com.example.cross_platformfilemanager.ui.theme.TaggoCompactTokens
 import com.example.cross_platformfilemanager.ui.theme.TaggoThemeTokens.HomeWide
 
 /**
@@ -51,11 +52,12 @@ internal fun TaggoSectionCard(
     if (compact) {
         val compactShape = RoundedCornerShape(TaggoGlobalRadius.Card)
         Card(
-            colors = CardDefaults.cardColors(containerColor = TaggoGlobalColors.PanelBackgroundSoft),
+            colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
             shape = compactShape,
             modifier = modifier
                 .fillMaxWidth()
-                .border(1.dp, TaggoGlobalColors.Border, compactShape),
+                .background(TaggoCompactTokens.glassCardBackgroundBrush(), compactShape)
+                .border(1.dp, TaggoCompactTokens.GlassCardBorder, compactShape),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         ) {
             TaggoSectionCardContent(
@@ -66,6 +68,7 @@ internal fun TaggoSectionCard(
                 compactPadding = compactPadding,
                 compactContentGap = compactContentGap,
                 compactTitleFontSize = compactTitleFontSize,
+                modifier = Modifier.background(TaggoCompactTokens.GlassCardSubtleHighlight.copy(alpha = 0.18f)),
                 trailing = trailing,
                 footer = footer,
                 content = content,

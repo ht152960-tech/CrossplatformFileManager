@@ -33,7 +33,7 @@ internal object AndroidBrowserReferencePickerHolder {
 
 internal class AndroidBrowserReferencePicker(
     private val contentResolver: ContentResolver,
-    private val launcher: ActivityResultLauncher<Array<String>>,
+    private val launcher: ActivityResultLauncher<Intent>,
     private val pickerState: AndroidFilePickerViewModel,
 ) : BrowserReferencePicker {
     private var pendingContinuation: CancellableContinuation<BrowserReferenceDraft?>? = null
@@ -52,7 +52,7 @@ internal class AndroidBrowserReferencePicker(
                 }
             }
             try {
-                launcher.launch(arrayOf("*/*"))
+                launcher.launch(createOpenDocumentIntent())
             } catch (_: Exception) {
                 if (pendingContinuation === continuation) {
                     pendingContinuation = null
@@ -141,11 +141,38 @@ internal class AndroidBrowserReferencePicker(
                 )
             }
         }.getOrNull() ?: AndroidDocumentMetadata()
+
+    private fun createOpenDocumentIntent(): Intent =
+        Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, supportedOpenDocumentMimeTypes)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
 }
 
 private data class AndroidDocumentMetadata(
     val displayName: String? = null,
     val sizeBytes: Long? = null,
+)
+
+private val supportedOpenDocumentMimeTypes = arrayOf(
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/octet-stream",
+    "image/*",
+    "video/*",
+    "audio/*",
+    "application/pdf",
+    "text/*",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "*/*",
 )
 
 private fun inferFileType(displayName: String, mimeType: String): String {

@@ -12,12 +12,35 @@
 
 ## Android 第三阶段最终收口规则
 
+### 横屏手机窗口分类与安全区
+
+- App 根级自适应 scaffold 统一处理 safe drawing 区域。
+- 页面不得各自硬编码状态栏或导航栏 padding。
+- Android 手机横屏内容不得压到 status bar 下方。
+- Compact 底部 dock 不得被 navigation bar 覆盖。
+- 窗口分类必须同时参考宽度和可用高度。
+- `width >= 840dp` 且 `usable height <= 560dp` 时，不进入 Expanded。
+- 这类横屏手机走 Medium / landscape compact-like 布局。
+- Expanded 只用于宽度和高度都足够的桌面 / 平板宽屏场景。
+- 不因横屏手机修复重做 Medium / Expanded 大布局结构。
+
 ### Compact 底部导航
 
 - Compact 底部导航以推荐页 dock 风格为准。
 - 所有 Compact 页面若显示底部导航，必须复用同一视觉容器。
 - 不允许搜索页等页面使用另一套全宽底栏。
 - 不得改变导航项、选中态或页面切换业务逻辑来迁就视觉。
+- Compact 首页 floating dock 使用 `TaggoCompactTokens` 中的 dock glass / border /
+  selected indicator / weak bottom glow token；只允许弱玻璃浮层感，不应盖过主要内容。
+
+### Compact 首页视觉 token
+
+- Compact 首页背景使用深蓝黑 base，并叠加低透明紫、蓝紫、青蓝氛围光。
+- Compact 首页 `TaggoSectionCard(compact = true)` 使用 glass card token，首页内列表行使用
+  glass list item token；普通卡片不得添加强外发光。
+- 文件类型头像、最近添加 type badge、文件类型统计进度条必须通过
+  `TaggoFileTypeColorTokens` / helper 统一取色，品牌紫只用于主强调，不作为内容类型色。
+- Compact 首页 FAB 使用 compact FAB gradient / glow / border token，位置、尺寸和上传行为不随视觉调整改变。
 
 ### Operable tag chip
 
@@ -27,6 +50,10 @@
 - 短文本 chip 也必须保持矩形感，可以通过最小宽度保障。
 - 操作按钮视觉可小，但点击热区至少 40dp。
 - 点击热区是透明交互区域，不得改变 chip 视觉占位。
+- Compact：高度 34dp，最小宽度 64dp，左 padding 14dp，右 padding 18dp，圆角 13dp，操作点视觉 20dp，操作图标 11dp，操作点偏移 x=6dp/y=-6dp。
+- Medium：高度 32dp，最小宽度 60dp，左 padding 13dp，右 padding 17dp，圆角 12dp，操作点视觉 19dp，操作图标 10.5dp，操作点偏移 x=5dp/y=-5dp。
+- Expanded：高度 30dp，最小宽度 56dp，左 padding 12dp，右 padding 16dp，圆角 11dp，操作点视觉 18dp，操作图标 10dp，操作点偏移 x=5dp/y=-5dp。
+- 标签页 / 全部标签区域 chip 间距：Compact 14dp x 16dp，Medium 13dp x 15dp，Expanded 12dp x 14dp。
 
 ### 最近搜索 chip
 
@@ -35,6 +62,9 @@
 - 最近搜索不使用 operable chip 的右上角操作点。
 - 最近搜索使用低强调 search history chip，可复用 Taggo 边框、背景和固定圆角 token。
 - 点击整个 chip 恢复搜索。
+- Compact：高度 34dp，最小宽度 56dp，水平 padding 15dp，圆角 12dp，字号 14sp，间距 12dp x 12dp。
+- Medium / Expanded：高度 32dp，最小宽度 54dp，水平 padding 14dp，圆角 11dp，字号 13sp，间距 11dp x 11dp。
+- 最近搜索 chip 不复用 `SortChip`，也不复用正式标签 chip 的右上角操作结构。
 
 ### 最近搜索数据
 
@@ -72,6 +102,50 @@
 - 头像位于条目左侧，并在条目内容高度内垂直居中。
 - 推荐徽标位于文件名行右侧。
 - 不恢复长推荐理由。
+- 文件头像 / 封面整体是打开区域；中央遮罩只是提示，不是独立按钮。
+- 不新增或保留头像角落小打开按钮。
+- 可打开音频 / 视频中央显示 `PlayArrow`。
+- 可打开图片、文档、PDF、TXT、DOCX 和其他文件中央显示 `OpenInNew` / OpenFile 类图标。
+- 不可打开文件中央显示 `Block` / LinkOff 类图标，透明度更低。
+- Compact file tile 头像 50dp，中央遮罩 24dp，图标 16dp。
+- Compact recommendation 头像 48dp，中央遮罩 24dp，图标 16dp。
+- Medium file tile 头像 68dp，中央遮罩 32dp，图标 22dp。
+- Medium recommendation 头像 36dp，中央遮罩 20dp，图标 12dp。
+- fallback 头像内部只显示缩略图或纯类型图标，不显示 `Reserved` 等装饰性文字。
+- fallback 图标必须居中，不得通过放大头像外框解决裁切。
+- 图片使用 Image 图标，视频使用 Movie / Video 图标，音频使用 MusicNote，PDF 使用 PictureAsPdf，文档 / DOCX / TXT 使用 Description，其他使用 InsertDriveFile。
+
+### Android 图片缩略图
+
+- Android 第一版只为 `content://` 图片文件生成真实缩略图。
+- 不做视频首帧、音频封面、PDF 首图。
+- 优先使用 `ContentResolver.loadThumbnail(uri, Size(...), null)`。
+- `loadThumbnail` 不可用或失败时，可使用采样解码兜底。
+- 缩略图生成不得阻塞 UI 主线程。
+- 不加载原图全尺寸进内存。
+- 结果可用内存缓存复用，避免列表滚动反复解码。
+- 失败时回退到图片类型 fallback 图标。
+- 不改 Web / Wasm 缩略图逻辑。
+
+### 文件类型统计刷新
+
+- 首页文件类型统计必须从当前文件列表派生。
+- 上传新增文件后，文件类型统计必须立即刷新。
+- 不需要重启 App、切换页面或手动刷新。
+- 不允许只更新最近添加列表而不更新文件类型统计。
+- 不改变文件类型分类规则时，`mp4`、`mp3`、`png`、`pdf`、`docx`、`txt` 必须继续映射到对应类型。
+
+### 文件条目两行结构
+
+- 推荐、全部文件、搜索结果文件条目统一为两行信息结构。
+- 推荐条目：左侧文件头像；第一行文件名 + 推荐徽标；第二行标签摘要 / 无标签。
+- 全部文件页 / 搜索结果条目：左侧文件头像；第一行文件名；第二行时间 · 大小。
+- 全部文件页 / 搜索结果第二行不显示文件类型文本。
+- 头像外框尺寸不变，`TaggoFileCoverTokens` 数值不变。
+- 外层 Row 中，头像和右侧信息块整体在条目内垂直居中。
+- 右侧信息块高度等于头像高度。
+- 第一行贴近信息块顶部，第二行贴近信息块底部。
+- 不新增第三行辅助信息。
 
 ### Android 启动
 
@@ -283,17 +357,16 @@ C（窄屏 / Compact）
 
 缩略图遮罩规则：
 
-- 视频文件：播放键遮罩。
-- 音频文件：播放或音频提示遮罩。
-- 图片文件：图片类型提示或轻量遮罩。
-- 普通文档：使用文件类型图标。
-- 遮罩应轻量，不破坏缩略图识别。
+- 视频 / 音频文件：中央 `PlayArrow` 遮罩。
+- 图片、文档、PDF、TXT、DOCX、其他可打开文件：中央 `OpenInNew` / OpenFile 类遮罩。
+- 不可打开文件：中央 `Block` / LinkOff 类遮罩，透明度更低。
+- 遮罩应轻量，不破坏缩略图识别，也不作为独立小按钮。
 
 响应式规则：
 
 - `W`：显示完整信息，可补充路径、最近打开时间或操作按钮。
-- `M`：保留文件图标 / 缩略图、文件名.扩展名、添加时间、文件大小、标签；空间不足时收敛标签数量或标签数量提示。
-- `C`：优先保留文件图标 / 缩略图、文件名.扩展名、添加时间；文件大小、标签可以隐藏或收纳。
+- `M`：全部文件 / 搜索结果保留文件图标 / 缩略图、文件名.扩展名、时间和文件大小；不在第二行显示文件类型。
+- `C`：全部文件 / 搜索结果保留文件图标 / 缩略图、文件名.扩展名、时间和文件大小；不新增第三行标签摘要。
 
 ## 最近添加条目 `RecentFileItem`
 

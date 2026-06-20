@@ -32,11 +32,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.cross_platformfilemanager.ui.theme.TaggoTheme
+import com.example.cross_platformfilemanager.ui.theme.TaggoCompactTokens
 import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalSpacing
 import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalTypography
 
@@ -82,27 +85,41 @@ internal fun <Page> TaggoBottomNavigation(
                 Modifier
                     .padding(start = 16.dp, end = 16.dp, bottom = 10.dp)
                     .fillMaxWidth()
+                    .drawBehind {
+                        drawCircle(
+                            color = TaggoCompactTokens.DockBottomGlow,
+                            radius = size.width * 0.42f,
+                            center = center.copy(y = size.height * 1.08f),
+                        )
+                    }
             } else {
                 Modifier.fillMaxWidth()
             },
         ),
         shape = navigationShape,
-        color = TaggoTheme.colors.surface.copy(alpha = 0.96f),
+        color = if (floating) Color.Transparent else TaggoTheme.colors.surface.copy(alpha = 0.96f),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .then(
+                    if (floating) {
+                        Modifier.background(TaggoCompactTokens.dockGlassBackgroundBrush(), navigationShape)
+                    } else {
+                        Modifier
+                    },
+                )
                 .border(
                     width = 1.dp,
-                    color = TaggoTheme.colors.panelBorder.copy(alpha = 0.6f),
+                    color = if (floating) TaggoCompactTokens.DockBorder else TaggoTheme.colors.panelBorder.copy(alpha = 0.6f),
                     shape = navigationShape,
                 ),
         ) {
             HorizontalDivider(
                 thickness = 1.dp,
-                color = TaggoTheme.colors.panelHighlight.copy(alpha = 0.75f),
+                color = if (floating) TaggoCompactTokens.GlassCardSubtleHighlight else TaggoTheme.colors.panelHighlight.copy(alpha = 0.75f),
             )
             if (floating) {
                 Row(
@@ -132,9 +149,9 @@ internal fun <Page> TaggoBottomNavigation(
                                         imageVector = it,
                                         contentDescription = null,
                                         tint = if (selected) {
-                                            TaggoTheme.colors.primaryAccent
+                                            TaggoCompactTokens.DockSelectedIcon
                                         } else {
-                                            TaggoTheme.colors.textMuted
+                                            TaggoCompactTokens.DockUnselectedContent
                                         },
                                         modifier = Modifier.size(22.dp),
                                     )
@@ -144,7 +161,7 @@ internal fun <Page> TaggoBottomNavigation(
                                     color = if (selected) {
                                         TaggoTheme.colors.textPrimary
                                     } else {
-                                        TaggoTheme.colors.textMuted
+                                        TaggoCompactTokens.DockUnselectedContent
                                     },
                                     fontSize = TaggoGlobalTypography.BodySmall,
                                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
@@ -160,7 +177,7 @@ internal fun <Page> TaggoBottomNavigation(
                                         .width(52.dp)
                                         .height(3.dp)
                                         .clip(RoundedCornerShape(100.dp))
-                                        .background(TaggoTheme.colors.primaryAccent),
+                                        .background(TaggoCompactTokens.DockSelectedIndicator),
                                 )
                             }
                         }

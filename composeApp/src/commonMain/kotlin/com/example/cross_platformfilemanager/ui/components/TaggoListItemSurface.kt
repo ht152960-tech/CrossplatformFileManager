@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
@@ -36,6 +37,7 @@ internal fun TaggoListItemSurface(
     shape: Shape,
     backgroundColor: Color,
     borderColor: Color,
+    backgroundBrush: Brush? = null,
     height: Dp? = null,
     borderWidth: Dp = 1.dp,
     contentPadding: PaddingValues,
@@ -48,7 +50,13 @@ internal fun TaggoListItemSurface(
         .fillMaxWidth()
         .then(if (height != null) Modifier.height(height) else Modifier)
         .clip(shape)
-        .background(backgroundColor)
+        .then(
+            if (backgroundBrush != null) {
+                Modifier.background(backgroundBrush)
+            } else {
+                Modifier.background(backgroundColor)
+            },
+        )
         .border(borderWidth, borderColor, shape)
         .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
         .padding(contentPadding)
