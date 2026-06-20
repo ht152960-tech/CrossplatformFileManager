@@ -81,6 +81,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -108,6 +109,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Image
@@ -899,7 +901,14 @@ fun App() {
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .then(
-                                        if (homeCompactLayout || searchCompactLayout) {
+                                        if (
+                                            homeCompactLayout ||
+                                            searchCompactLayout ||
+                                            (
+                                                currentPage == AppPage.AllFiles &&
+                                                    actualWindowSizeClass == TaggoWindowSizeClass.Compact
+                                            )
+                                        ) {
                                             Modifier.compactHomeAmbientBackground()
                                         } else {
                                             Modifier.background(TaggoTheme.colors.backgroundBrush)
@@ -4278,6 +4287,7 @@ private fun AllFilesPage(
             TopBarCard(
                 locale = locale,
                 title = if (locale == AppLocale.ZhCn) "\u6587\u4ef6" else "Files",
+                compactGlass = compactLayout,
             )
 
             if (appState.allReferences.isEmpty()) {
@@ -4288,6 +4298,7 @@ private fun AllFilesPage(
                     } else {
                         "The file list is currently empty."
                     },
+                    compactGlass = compactLayout,
                 )
             } else {
                 AllFilesControlsRow(
@@ -4296,6 +4307,7 @@ private fun AllFilesPage(
                     availableTypeFilters = availableTypeFilters,
                     locale = locale,
                     compactLayout = compactLayout,
+                    compactVisual = compactLayout,
                     onSortModeChange = onSortModeChange,
                     onTypeFilterChange = onTypeFilterChange,
                 )
@@ -4308,6 +4320,7 @@ private fun AllFilesPage(
                         } else {
                             "Switch to another type, or keep All selected to browse every file."
                         },
+                        compactGlass = compactLayout,
                     )
                 } else {
                     AdaptiveFileGrid(
@@ -4330,19 +4343,24 @@ private fun AllFilesControlsRow(
     availableTypeFilters: List<AllFilesTypeFilter>,
     locale: AppLocale,
     compactLayout: Boolean,
+    compactVisual: Boolean,
     onSortModeChange: (FileSortMode) -> Unit,
     onTypeFilterChange: (AllFilesTypeFilter) -> Unit,
 ) {
     var sortMenuExpanded by remember { mutableStateOf(false) }
     var typeMenuExpanded by remember { mutableStateOf(false) }
-    val buttonHeight = if (compactLayout) TaggoCompactTokens.SearchButtonHeight else 42.dp
-    val buttonRadius = if (compactLayout) TaggoCompactTokens.ButtonRadius else 12.dp
-    val buttonHorizontalPadding = if (compactLayout) {
+    var sortAnchorWidth by remember { mutableStateOf<Dp?>(null) }
+    var typeAnchorWidth by remember { mutableStateOf<Dp?>(null) }
+    val buttonHeight = if (compactVisual) 50.dp else if (compactLayout) TaggoCompactTokens.SearchButtonHeight else 42.dp
+    val buttonRadius = if (compactVisual) 18.dp else if (compactLayout) TaggoCompactTokens.ButtonRadius else 12.dp
+    val buttonHorizontalPadding = if (compactVisual) {
+        16.dp
+    } else if (compactLayout) {
         TaggoCompactTokens.FileItemHorizontalPadding
     } else {
         12.dp
     }
-    val labelFontSize = if (compactLayout) TaggoCompactTokens.Caption else 12.sp
+    val labelFontSize = if (compactVisual) 15.sp else if (compactLayout) TaggoCompactTokens.Caption else 12.sp
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -4362,15 +4380,63 @@ private fun AllFilesControlsRow(
                 cornerRadius = buttonRadius,
                 horizontalPadding = buttonHorizontalPadding,
                 fontSize = labelFontSize,
+                compactVisual = compactVisual,
+                onAnchorWidthChanged = { sortAnchorWidth = it },
                 onClick = { sortMenuExpanded = true },
             )
+            val sortMenuModifier = if (sortAnchorWidth != null) {
+                Modifier.width(sortAnchorWidth!!)
+            } else {
+                Modifier
+            }
             DropdownMenu(
                 expanded = sortMenuExpanded,
                 onDismissRequest = { sortMenuExpanded = false },
+                modifier = sortMenuModifier,
+                shape = RoundedCornerShape(buttonRadius),
+                containerColor = if (compactVisual) {
+                    Color(0xE80E1422)
+                } else {
+                    TaggoTheme.colors.surface
+                },
+                tonalElevation = 0.dp,
+                shadowElevation = if (compactVisual) 4.dp else 2.dp,
+                border = if (compactVisual) {
+                    BorderStroke(1.dp, Color(0x2AA9B8FF))
+                } else {
+                    null
+                },
             ) {
                 FileSortMode.entries.forEach { mode ->
                     DropdownMenuItem(
-                        text = { Text(sortModeLabel(mode, locale)) },
+                        modifier = Modifier.height(50.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                        text = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier.width(26.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (mode == sortMode) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Check,
+                                            contentDescription = null,
+                                            tint = Color(0xB89C6BFF),
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = sortModeLabel(mode, locale),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (mode == sortMode) Color(0xE8EEF2FF) else Color(0xD0EEF2FF),
+                                )
+                            }
+                        },
                         onClick = {
                             onSortModeChange(mode)
                             sortMenuExpanded = false
@@ -4391,15 +4457,63 @@ private fun AllFilesControlsRow(
                 cornerRadius = buttonRadius,
                 horizontalPadding = buttonHorizontalPadding,
                 fontSize = labelFontSize,
+                compactVisual = compactVisual,
+                onAnchorWidthChanged = { typeAnchorWidth = it },
                 onClick = { typeMenuExpanded = true },
             )
+            val typeMenuModifier = if (typeAnchorWidth != null) {
+                Modifier.width(typeAnchorWidth!!)
+            } else {
+                Modifier
+            }
             DropdownMenu(
                 expanded = typeMenuExpanded,
                 onDismissRequest = { typeMenuExpanded = false },
+                modifier = typeMenuModifier,
+                shape = RoundedCornerShape(buttonRadius),
+                containerColor = if (compactVisual) {
+                    Color(0xE80E1422)
+                } else {
+                    TaggoTheme.colors.surface
+                },
+                tonalElevation = 0.dp,
+                shadowElevation = if (compactVisual) 4.dp else 2.dp,
+                border = if (compactVisual) {
+                    BorderStroke(1.dp, Color(0x2AA9B8FF))
+                } else {
+                    null
+                },
             ) {
                 availableTypeFilters.forEach { filter ->
                     DropdownMenuItem(
-                        text = { Text(typeFilterLabel(filter, locale)) },
+                        modifier = Modifier.height(50.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                        text = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier.width(26.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (filter == typeFilter) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Check,
+                                            contentDescription = null,
+                                            tint = Color(0xB89C6BFF),
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = typeFilterLabel(filter, locale),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (filter == typeFilter) Color(0xE8EEF2FF) else Color(0xD0EEF2FF),
+                                )
+                            }
+                        },
                         onClick = {
                             onTypeFilterChange(filter)
                             typeMenuExpanded = false
@@ -4418,33 +4532,87 @@ private fun AllFilesDropdownButton(
     cornerRadius: Dp,
     horizontalPadding: Dp,
     fontSize: androidx.compose.ui.unit.TextUnit,
+    compactVisual: Boolean,
+    onAnchorWidthChanged: (Dp) -> Unit,
     onClick: () -> Unit,
 ) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(height),
-        shape = RoundedCornerShape(cornerRadius),
-        contentPadding = PaddingValues(horizontal = horizontalPadding),
-        border = BorderStroke(TaggoCompactTokens.BorderWidth, TaggoTheme.colors.panelBorder),
-        colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = TaggoTheme.colors.panelBackgroundSoft,
-            contentColor = TaggoTheme.colors.textPrimary,
-        ),
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.weight(1f),
-            fontSize = fontSize,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Icon(
-            imageVector = Icons.Outlined.ArrowDropDown,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp),
-        )
+    val shape = RoundedCornerShape(cornerRadius)
+    if (compactVisual) {
+        val density = LocalDensity.current
+        var anchorWidth by remember { mutableStateOf<Dp?>(null) }
+        val sizeModifier = if (anchorWidth != null) {
+            Modifier.width(anchorWidth!!)
+        } else {
+            Modifier.fillMaxWidth()
+        }
+        Surface(
+            onClick = onClick,
+            modifier = Modifier
+                .onGloballyPositioned {
+                    val measuredWidth = with(density) { it.size.width.toDp() }
+                    if (anchorWidth != measuredWidth) {
+                        anchorWidth = measuredWidth
+                        onAnchorWidthChanged(measuredWidth)
+                    }
+                }
+                .then(sizeModifier)
+                .height(height),
+            shape = shape,
+            color = Color.Transparent,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0x16161B31), shape)
+                    .border(1.dp, Color(0x24A9B8FF), shape)
+                    .padding(horizontal = horizontalPadding),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = label,
+                    modifier = Modifier.weight(1f),
+                    fontSize = fontSize,
+                    color = Color(0xE0EEF2FF),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Icon(
+                    imageVector = Icons.Outlined.ArrowDropDown,
+                    contentDescription = null,
+                    tint = Color(0xB8BFC7D8),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(height),
+            shape = shape,
+            contentPadding = PaddingValues(horizontal = horizontalPadding),
+            border = BorderStroke(TaggoCompactTokens.BorderWidth, TaggoTheme.colors.panelBorder),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = TaggoTheme.colors.panelBackgroundSoft,
+                contentColor = TaggoTheme.colors.textPrimary,
+            ),
+        ) {
+            Text(
+                text = label,
+                modifier = Modifier.weight(1f),
+                fontSize = fontSize,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Icon(
+                imageVector = Icons.Outlined.ArrowDropDown,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }
 
@@ -5603,19 +5771,34 @@ private fun TopBarCard(
     onBack: (() -> Unit)? = null,
     leading: @Composable RowScope.() -> Unit = {},
     trailing: @Composable RowScope.() -> Unit = {},
+    compactGlass: Boolean = false,
 ) {
     val windowSizeClass = LocalTaggoWindowSizeClass.current
     val compactLayout = windowSizeClass == TaggoWindowSizeClass.Compact
     val cardRadius = if (compactLayout) TaggoCompactTokens.CardRadius else 20.dp
     Card(
-        colors = CardDefaults.cardColors(containerColor = TaggoTheme.colors.panelBackground),
+        colors = CardDefaults.cardColors(
+            containerColor = if (compactGlass && compactLayout) {
+                Color.Transparent
+            } else {
+                TaggoTheme.colors.panelBackground
+            },
+        ),
         shape = RoundedCornerShape(cardRadius),
         modifier = Modifier
             .fillMaxWidth()
-            .border(
-                if (compactLayout) TaggoCompactTokens.BorderWidth else 1.dp,
-                TaggoTheme.colors.panelBorder,
-                RoundedCornerShape(cardRadius),
+            .then(
+                if (compactGlass && compactLayout) {
+                    Modifier
+                        .background(TaggoCompactTokens.glassCardBackgroundBrush(), RoundedCornerShape(cardRadius))
+                        .border(1.dp, TaggoCompactTokens.GlassCardBorder, RoundedCornerShape(cardRadius))
+                } else {
+                    Modifier.border(
+                        if (compactLayout) TaggoCompactTokens.BorderWidth else 1.dp,
+                        TaggoTheme.colors.panelBorder,
+                        RoundedCornerShape(cardRadius),
+                    )
+                },
             ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
