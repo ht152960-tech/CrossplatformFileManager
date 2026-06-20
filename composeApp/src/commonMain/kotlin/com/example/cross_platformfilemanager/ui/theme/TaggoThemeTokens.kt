@@ -154,15 +154,15 @@ object TaggoCompactTokens {
         val BackgroundBrush: Brush =
             Brush.linearGradient(
                 listOf(
-                    Color(0x33161B31),
-                    Color(0x24101527),
-                    Color(0x150B0F1D),
+                    Color(0x28161B31),
+                    Color(0x1A101527),
+                    Color(0x0D0B0F1D),
                 ),
             )
-        val Border = Color(0x39A9B8FF)
-        val Icon = Color(0xC6BFC7D8)
-        val Placeholder = Color(0xA2AAB3C4)
-        val InnerHighlight = Color(0x14FFFFFF)
+        val Border = Color(0x2BA9B8FF)
+        val Icon = Color(0xB2BFC7D8)
+        val Placeholder = Color(0x92AAB3C4)
+        val InnerHighlight = Color(0x08FFFFFF)
     }
 
     val DockBorder = Color(0x40B7C4FF)

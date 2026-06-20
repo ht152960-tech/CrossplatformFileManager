@@ -883,6 +883,8 @@ fun App() {
                         ) { actualWindowSizeClass ->
                             val homeCompactLayout = currentPage == AppPage.Home &&
                                 actualWindowSizeClass == TaggoWindowSizeClass.Compact
+                            val searchCompactLayout = currentPage == AppPage.Search &&
+                                actualWindowSizeClass == TaggoWindowSizeClass.Compact
                             val homeWideOuterLayout = currentPage == AppPage.Home && !homeCompactLayout
                             val pagePadding = when {
                                 homeWideOuterLayout -> PaddingValues(0.dp)
@@ -897,7 +899,7 @@ fun App() {
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .then(
-                                        if (homeCompactLayout) {
+                                        if (homeCompactLayout || searchCompactLayout) {
                                             Modifier.compactHomeAmbientBackground()
                                         } else {
                                             Modifier.background(TaggoTheme.colors.backgroundBrush)
@@ -4519,11 +4521,19 @@ private fun SearchResultsPage(
                 if (compactLayout) TaggoCompactTokens.PageSectionGap else 14.dp,
             ),
         ) {
-            TopBarCard(
-                locale = locale,
-                title = appState.searchTitle,
-                onBack = onBackHome,
-            )
+            if (compactLayout) {
+                SearchPageTopBar(
+                    locale = locale,
+                    title = appState.searchTitle,
+                    onBack = onBackHome,
+                )
+            } else {
+                TopBarCard(
+                    locale = locale,
+                    title = appState.searchTitle,
+                    onBack = onBackHome,
+                )
+            }
 
             SearchBarCard(
                 query = searchDraft,
@@ -4623,16 +4633,98 @@ private fun SearchPageEmptyState(
     body: String,
 ) {
     if (compact) {
-        TaggoEmptyState(
+        SearchPageCompactEmptyState(
             title = title,
-            description = body,
-            compact = true,
+            body = body,
         )
     } else {
         SearchEmptyState(
             title = title,
             body = body,
         )
+    }
+}
+
+@Composable
+private fun SearchPageCompactEmptyState(
+    title: String,
+    body: String,
+) {
+    TaggoSectionCard(
+        title = title,
+        compact = true,
+        compactPadding = TaggoCompactTokens.SearchCardPadding,
+        compactContentGap = TaggoGlobalSpacing.Sm,
+        trailing = {},
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(TaggoGlobalSpacing.Sm),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(TaggoCompactTokens.glassListItemBackgroundBrush())
+                    .border(1.dp, TaggoCompactTokens.GlassListItemBorder, RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    contentDescription = null,
+                    tint = TaggoCompactTokens.Search.Icon,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            Text(
+                text = body,
+                color = TaggoGlobalColors.TextSecondary.copy(alpha = 0.88f),
+                fontSize = TaggoGlobalTypography.Caption,
+                lineHeight = 14.sp,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SearchPageTopBar(
+    locale: AppLocale,
+    title: String,
+    onBack: () -> Unit,
+) {
+    val shape = RoundedCornerShape(TaggoCompactTokens.CardRadius)
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        shape = shape,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(TaggoCompactTokens.glassCardBackgroundBrush(), shape)
+            .border(1.dp, TaggoCompactTokens.GlassCardBorder, shape),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = TaggoGlobalSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TaggoIconActionButton(
+                icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                contentDescription = if (locale == AppLocale.ZhCn) "返回" else "Back",
+                onClick = onBack,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -4704,14 +4796,15 @@ private fun TaggoSearchHistoryChip(
             .widthIn(max = metrics.maxWidth)
             .clip(shape)
             .clickable(onClick = onClick)
+            .background(TaggoCompactTokens.glassListItemBackgroundBrush(), shape)
             .border(
                 width = 1.dp,
-                color = TaggoGlobalColors.PrimaryAccentSoft.copy(alpha = 0.34f),
+                color = TaggoCompactTokens.GlassListItemBorder,
                 shape = shape,
             ),
         shape = shape,
-        color = TaggoTheme.colors.panelBackgroundSoft.copy(alpha = 0.58f),
-        contentColor = TaggoTheme.colors.textSecondary,
+        color = Color.Transparent,
+        contentColor = TaggoGlobalColors.TextSecondary.copy(alpha = 0.88f),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {
@@ -5835,7 +5928,11 @@ private fun ResponsiveSearchControls(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { onSearch() }),
                     textStyle = inputTextStyle,
-                    colors = taggoOutlinedTextFieldColors(),
+                    colors = if (compactLayout) {
+                        taggoCompactSearchTextFieldColors()
+                    } else {
+                        taggoOutlinedTextFieldColors()
+                    },
                 )
                 ToolButton(
                     label = buttonLabel,
@@ -5874,7 +5971,11 @@ private fun ResponsiveSearchControls(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { onSearch() }),
                     textStyle = inputTextStyle,
-                    colors = taggoOutlinedTextFieldColors(),
+                    colors = if (compactLayout) {
+                        taggoCompactSearchTextFieldColors()
+                    } else {
+                        taggoOutlinedTextFieldColors()
+                    },
                 )
                 ToolButton(
                     label = buttonLabel,
@@ -5905,14 +6006,41 @@ private fun SearchBarCard(
     val compactLayout = LocalTaggoWindowSizeClass.current == TaggoWindowSizeClass.Compact
     val cardRadius = if (compactLayout) TaggoCompactTokens.CardRadius else 20.dp
     Card(
-        colors = CardDefaults.cardColors(containerColor = TaggoTheme.colors.panelBackground),
+        colors = CardDefaults.cardColors(
+            containerColor = if (compactLayout) Color.Transparent else TaggoTheme.colors.panelBackground,
+        ),
         shape = RoundedCornerShape(cardRadius),
         modifier = Modifier
             .fillMaxWidth()
-            .border(
-                if (compactLayout) TaggoCompactTokens.BorderWidth else 1.dp,
-                TaggoTheme.colors.panelBorder,
-                RoundedCornerShape(cardRadius),
+            .then(
+                if (compactLayout) {
+                    Modifier
+                        .clip(RoundedCornerShape(cardRadius))
+                        .background(TaggoCompactTokens.Search.BackgroundBrush, RoundedCornerShape(cardRadius))
+                        .border(
+                            TaggoCompactTokens.BorderWidth,
+                            TaggoCompactTokens.Search.Border,
+                            RoundedCornerShape(cardRadius),
+                        )
+                        .drawBehind {
+                            drawRect(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        TaggoCompactTokens.Search.InnerHighlight,
+                                        Color.Transparent,
+                                    ),
+                                    center = Offset(size.width * 0.12f, size.height * 0.16f),
+                                    radius = size.maxDimension * 0.95f,
+                                ),
+                            )
+                        }
+                } else {
+                    Modifier.border(
+                        1.dp,
+                        TaggoTheme.colors.panelBorder,
+                        RoundedCornerShape(cardRadius),
+                    )
+                }
             ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
@@ -5992,6 +6120,28 @@ private fun taggoOutlinedTextFieldColors() = TextFieldDefaults.colors(
     unfocusedSupportingTextColor = TaggoTheme.colors.textSecondary,
     disabledSupportingTextColor = TaggoTheme.colors.textMuted,
     cursorColor = TaggoTheme.colors.primaryAccent,
+)
+
+@Composable
+private fun taggoCompactSearchTextFieldColors() = TextFieldDefaults.colors(
+    focusedContainerColor = Color.Transparent,
+    unfocusedContainerColor = Color.Transparent,
+    disabledContainerColor = Color.Transparent,
+    focusedTextColor = TaggoGlobalColors.TextPrimary,
+    unfocusedTextColor = TaggoGlobalColors.TextPrimary,
+    disabledTextColor = TaggoGlobalColors.TextMuted,
+    focusedLabelColor = TaggoCompactTokens.Search.Placeholder,
+    unfocusedLabelColor = TaggoCompactTokens.Search.Placeholder,
+    disabledLabelColor = TaggoCompactTokens.Search.Placeholder,
+    focusedIndicatorColor = Color.Transparent,
+    unfocusedIndicatorColor = Color.Transparent,
+    disabledIndicatorColor = Color.Transparent,
+    focusedPlaceholderColor = TaggoCompactTokens.Search.Placeholder,
+    unfocusedPlaceholderColor = TaggoCompactTokens.Search.Placeholder,
+    focusedSupportingTextColor = TaggoGlobalColors.TextSecondary,
+    unfocusedSupportingTextColor = TaggoGlobalColors.TextSecondary,
+    disabledSupportingTextColor = TaggoGlobalColors.TextMuted,
+    cursorColor = TaggoGlobalColors.PrimaryAccent,
 )
 
 @Composable

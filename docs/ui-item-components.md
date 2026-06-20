@@ -38,8 +38,8 @@
 
 - Compact 首页背景使用深蓝黑 base，并叠加低透明紫、蓝紫、青蓝氛围光；底部紫雾
   必须更弱、更大且中心在屏幕外，避免明显圆形色块。
-- Compact 首页搜索入口使用 Compact search token，背景更透、边框更柔，图标和
-  placeholder 低透明但保持可读。
+- Compact 首页搜索入口与搜索页搜索框共用 Compact search token，背景偏暗偏透、
+  内高光更弱，图标和 placeholder 低透明但保持可读。
 - Compact 首页 `TaggoSectionCard(compact = true)` 使用 glass card token，首页内列表行使用
   glass list item token；普通卡片不得添加强外发光，也不得用只覆盖内容高度的
   独立 highlight 造成上下分割。
