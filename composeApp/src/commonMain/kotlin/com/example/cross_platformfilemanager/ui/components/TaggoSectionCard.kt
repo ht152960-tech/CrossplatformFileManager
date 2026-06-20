@@ -68,7 +68,6 @@ internal fun TaggoSectionCard(
                 compactPadding = compactPadding,
                 compactContentGap = compactContentGap,
                 compactTitleFontSize = compactTitleFontSize,
-                modifier = Modifier.background(TaggoCompactTokens.GlassCardSubtleHighlight.copy(alpha = 0.18f)),
                 trailing = trailing,
                 footer = footer,
                 content = content,

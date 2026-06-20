@@ -239,8 +239,8 @@ private fun Modifier.compactHomeAmbientBackground(): Modifier =
                         TaggoCompactTokens.AmbientGlowBottomPurple,
                         Color.Transparent,
                     ),
-                    center = Offset(size.width * 0.50f, size.height * 0.96f),
-                    radius = size.maxDimension * 0.34f,
+                    center = Offset(size.width * 0.50f, size.height * 1.18f),
+                    radius = size.maxDimension * 0.64f,
                 ),
             )
         }
@@ -2812,15 +2812,28 @@ private fun CompactSearchEntry(
         modifier = modifier
             .height(CompactHomeMetrics.SearchHeight)
             .clip(searchShape),
-        color = TaggoGlobalColors.PanelBackgroundSoft.copy(alpha = TaggoGlobalAlpha.Strong),
-        contentColor = TaggoGlobalColors.TextSecondary,
+        color = Color.Transparent,
+        contentColor = TaggoCompactTokens.Search.Placeholder,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .border(1.dp, TaggoGlobalColors.BorderStrong, searchShape)
+                .background(TaggoCompactTokens.Search.BackgroundBrush, searchShape)
+                .border(1.dp, TaggoCompactTokens.Search.Border, searchShape)
+                .drawBehind {
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                TaggoCompactTokens.Search.InnerHighlight,
+                                Color.Transparent,
+                            ),
+                            center = Offset(size.width * 0.12f, size.height * 0.16f),
+                            radius = size.maxDimension * 0.95f,
+                        ),
+                    )
+                }
                 .padding(horizontal = TaggoGlobalSpacing.Md),
             horizontalArrangement = Arrangement.spacedBy(TaggoGlobalSpacing.Sm),
             verticalAlignment = Alignment.CenterVertically,
@@ -2828,12 +2841,12 @@ private fun CompactSearchEntry(
             Icon(
                 imageVector = Icons.Outlined.Search,
                 contentDescription = null,
-                tint = TaggoGlobalColors.TextSecondary,
+                tint = TaggoCompactTokens.Search.Icon,
                 modifier = Modifier.size(CompactHomeMetrics.SearchIconSize),
             )
             Text(
                 text = if (query.isBlank()) placeholder else query,
-                color = if (query.isBlank()) TaggoGlobalColors.TextMuted else TaggoGlobalColors.TextPrimary,
+                color = if (query.isBlank()) TaggoCompactTokens.Search.Placeholder else TaggoGlobalColors.TextPrimary,
                 fontSize = TaggoGlobalTypography.Body,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,

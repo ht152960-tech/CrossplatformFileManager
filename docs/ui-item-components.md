@@ -31,13 +31,20 @@
 - 不允许搜索页等页面使用另一套全宽底栏。
 - 不得改变导航项、选中态或页面切换业务逻辑来迁就视觉。
 - Compact 首页 floating dock 使用 `TaggoCompactTokens` 中的 dock glass / border /
-  selected indicator / weak bottom glow token；只允许弱玻璃浮层感，不应盖过主要内容。
+  selected indicator / weak bottom glow token；底部 glow 必须极弱、中心靠屏幕外，
+  不得形成可见半圆或盖过主要内容。
 
 ### Compact 首页视觉 token
 
-- Compact 首页背景使用深蓝黑 base，并叠加低透明紫、蓝紫、青蓝氛围光。
+- Compact 首页背景使用深蓝黑 base，并叠加低透明紫、蓝紫、青蓝氛围光；底部紫雾
+  必须更弱、更大且中心在屏幕外，避免明显圆形色块。
+- Compact 首页搜索入口使用 Compact search token，背景更透、边框更柔，图标和
+  placeholder 低透明但保持可读。
 - Compact 首页 `TaggoSectionCard(compact = true)` 使用 glass card token，首页内列表行使用
-  glass list item token；普通卡片不得添加强外发光。
+  glass list item token；普通卡片不得添加强外发光，也不得用只覆盖内容高度的
+  独立 highlight 造成上下分割。
+- Compact 首页只允许 SectionCard 加极弱局部受光，不允许给列表行或 dock 加 glow；
+  底部 ambient 若出现几何痕迹，应优先关掉底部光团而不是加重下半屏。
 - 文件类型头像、最近添加 type badge、文件类型统计进度条必须通过
   `TaggoFileTypeColorTokens` / helper 统一取色，品牌紫只用于主强调，不作为内容类型色。
 - Compact 首页 FAB 使用 compact FAB gradient / glow / border token，位置、尺寸和上传行为不随视觉调整改变。

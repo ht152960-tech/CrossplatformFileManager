@@ -32,7 +32,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -85,13 +84,6 @@ internal fun <Page> TaggoBottomNavigation(
                 Modifier
                     .padding(start = 16.dp, end = 16.dp, bottom = 10.dp)
                     .fillMaxWidth()
-                    .drawBehind {
-                        drawCircle(
-                            color = TaggoCompactTokens.DockBottomGlow,
-                            radius = size.width * 0.42f,
-                            center = center.copy(y = size.height * 1.08f),
-                        )
-                    }
             } else {
                 Modifier.fillMaxWidth()
             },

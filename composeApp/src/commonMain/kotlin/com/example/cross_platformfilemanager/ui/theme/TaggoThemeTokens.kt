@@ -122,46 +122,61 @@ object TaggoCompactTokens {
     val DisabledSurfaceAlpha = 0.55f
 
     val AmbientBaseBackground = Color(0xFF070A16)
-    val AmbientGlowPurple = Color(0xFF8F63FF).copy(alpha = 0.13f)
-    val AmbientGlowBluePurple = Color(0xFF536DFF).copy(alpha = 0.10f)
-    val AmbientGlowCyanBlue = Color(0xFF35D2FF).copy(alpha = 0.06f)
-    val AmbientGlowBottomPurple = Color(0xFF9C63FF).copy(alpha = 0.08f)
+    val AmbientGlowPurple = Color(0xFF8F63FF).copy(alpha = 0.09f)
+    val AmbientGlowBluePurple = Color(0xFF536DFF).copy(alpha = 0.08f)
+    val AmbientGlowCyanBlue = Color(0xFF35D2FF).copy(alpha = 0.05f)
+    val AmbientGlowBottomPurple = Color(0xFF9C63FF).copy(alpha = 0.0f)
 
-    val GlassCardBorder = Color(0x66A9B8FF)
-    val GlassCardSubtleHighlight = Color(0x1CFFFFFF)
-    val GlassListItemBorder = Color(0x38A9B8FF)
-    val GlassListItemHighlight = Color(0x14FFFFFF)
+    val GlassCardBorder = Color(0x20A9B8FF)
+    val GlassCardSubtleHighlight = Color(0x08FFFFFF)
+    val GlassListItemBorder = Color(0x12A9B8FF)
+    val GlassListItemHighlight = Color(0x08FFFFFF)
 
     fun glassCardBackgroundBrush(): Brush =
         Brush.linearGradient(
             listOf(
-                Color(0x9A171B33),
-                Color(0x7A11162A),
-                Color(0x5C0B1022),
+                Color(0x3D14192D),
+                Color(0x2A101523),
+                Color(0x18090C18),
             ),
         )
 
     fun glassListItemBackgroundBrush(): Brush =
         Brush.linearGradient(
             listOf(
-                Color(0x661E2440),
-                Color(0x4C151A32),
-                Color(0x36101526),
+                Color(0x251B2134),
+                Color(0x19131826),
+                Color(0x100C101E),
             ),
         )
 
-    val DockBorder = Color(0x78B7C4FF)
+    object Search {
+        val BackgroundBrush: Brush =
+            Brush.linearGradient(
+                listOf(
+                    Color(0x33161B31),
+                    Color(0x24101527),
+                    Color(0x150B0F1D),
+                ),
+            )
+        val Border = Color(0x39A9B8FF)
+        val Icon = Color(0xC6BFC7D8)
+        val Placeholder = Color(0xA2AAB3C4)
+        val InnerHighlight = Color(0x14FFFFFF)
+    }
+
+    val DockBorder = Color(0x40B7C4FF)
     val DockSelectedIcon = Color(0xFFA98BFF)
     val DockUnselectedContent = Color(0xA0AEB8D0)
     val DockSelectedIndicator = Color(0xFF9C6BFF)
-    val DockBottomGlow = Color(0xFF8B5CFF).copy(alpha = 0.11f)
+    val DockBottomGlow = Color(0xFF8B5CFF).copy(alpha = 0.025f)
 
     fun dockGlassBackgroundBrush(): Brush =
         Brush.linearGradient(
             listOf(
-                Color(0xD51C2138),
-                Color(0xB814192E),
-                Color(0xA40D1122),
+                Color(0xB8171C32),
+                Color(0x9C11162A),
+                Color(0x880B1021),
             ),
         )
 
@@ -174,10 +189,10 @@ object TaggoCompactTokens {
             ),
         )
 
-    val FabGlow = Color(0xFF9C63FF).copy(alpha = 0.24f)
+    val FabGlow = Color(0xFF9C63FF).copy(alpha = 0.14f)
     val FabIcon = Color.White
-    val FabBorder = Color(0x80D8C7FF)
-    val FabHighlight = Color(0x36FFFFFF)
+    val FabBorder = Color(0x47D8C7FF)
+    val FabHighlight = Color(0x24FFFFFF)
 }
 
 data class FileTypeColorTokens(
