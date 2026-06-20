@@ -6466,8 +6466,9 @@ private fun FileTileCard(
             TaggoListItemSurface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(TaggoCompactTokens.ItemRadius),
+                backgroundBrush = TaggoCompactTokens.glassListItemBackgroundBrush(),
                 backgroundColor = TaggoTheme.colors.panelBackgroundSoft,
-                borderColor = TaggoTheme.colors.panelBorder,
+                borderColor = Color(0x24A9B8FF),
                 height = TaggoCompactTokens.FileItemHeight,
                 borderWidth = TaggoCompactTokens.BorderWidth,
                 contentPadding = PaddingValues(
