@@ -134,16 +134,14 @@ import com.example.cross_platformfilemanager.ui.adaptive.TaggoBottomNavigation
 import com.example.cross_platformfilemanager.ui.adaptive.TaggoNavigationRail
 import com.example.cross_platformfilemanager.ui.adaptive.TaggoSidebarNavigation
 import com.example.cross_platformfilemanager.ui.adaptive.TaggoWindowSizeClass
-import com.example.cross_platformfilemanager.ui.components.AddableTagChip
+import com.example.cross_platformfilemanager.ui.components.TaggoAddTagCandidateChip
 import com.example.cross_platformfilemanager.ui.theme.TaggoTheme
 import com.example.cross_platformfilemanager.ui.theme.TaggoThemeTokens.HomeWide
 import com.example.cross_platformfilemanager.ui.theme.ProvideTaggoTheme
 import com.example.cross_platformfilemanager.ui.components.EmptyPanel
 import com.example.cross_platformfilemanager.ui.components.FileCoverArtFrame
 import com.example.cross_platformfilemanager.ui.components.InfoRow
-import com.example.cross_platformfilemanager.ui.components.RemovableTagChip
 import com.example.cross_platformfilemanager.ui.components.SearchEmptyState
-import com.example.cross_platformfilemanager.ui.components.SearchTagChip
 import com.example.cross_platformfilemanager.ui.components.SectionCard
 import com.example.cross_platformfilemanager.ui.components.SortChip
 import com.example.cross_platformfilemanager.ui.components.TaggoEmptyState
@@ -155,6 +153,9 @@ import com.example.cross_platformfilemanager.ui.components.TaggoOpenButton
 import com.example.cross_platformfilemanager.ui.components.TagPill
 import com.example.cross_platformfilemanager.ui.components.TaggoTagChip
 import com.example.cross_platformfilemanager.ui.components.TaggoTagRow
+import com.example.cross_platformfilemanager.ui.components.TaggoFileTagChip
+import com.example.cross_platformfilemanager.ui.components.TaggoSearchConditionChip
+import com.example.cross_platformfilemanager.ui.components.TaggoTagDeleteChip
 import com.example.cross_platformfilemanager.ui.components.fileTypeIconStyle
 import com.example.cross_platformfilemanager.ui.components.operableTagChipSpacing
 import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalAlpha
@@ -5071,13 +5072,12 @@ private fun AllTagsEntrySection(
                     verticalArrangement = Arrangement.spacedBy(chipSpacing.vertical),
                 ) {
                     allTags.forEach { tag ->
-                        RemovableTagChip(
+                        TaggoTagDeleteChip(
                             tag = tag,
                             fullCjkFontReady = fullCjkFontReady,
                             fullCjkFontFamily = fullCjkFontFamily,
                             onClick = { onTagClick(tag) },
-                            onRemove = { onRemoveTag(tag) },
-                            actionIcon = Icons.Outlined.Close,
+                            onDelete = { onRemoveTag(tag) },
                         )
                     }
                 }
@@ -5099,13 +5099,12 @@ private fun AllTagsEntrySection(
                     verticalArrangement = Arrangement.spacedBy(chipSpacing.vertical),
                 ) {
                     allTags.forEach { tag ->
-                        RemovableTagChip(
+                        TaggoTagDeleteChip(
                             tag = tag,
                             fullCjkFontReady = fullCjkFontReady,
                             fullCjkFontFamily = fullCjkFontFamily,
                             onClick = { onTagClick(tag) },
-                            onRemove = { onRemoveTag(tag) },
-                            actionIcon = Icons.Outlined.Close,
+                            onDelete = { onRemoveTag(tag) },
                         )
                     }
                 }
@@ -5138,7 +5137,7 @@ private fun ActiveSearchTagsSection(
                 verticalArrangement = Arrangement.spacedBy(TaggoCompactTokens.FileItemGap),
             ) {
                 tags.forEach { tag ->
-                    SearchTagChip(
+                    TaggoSearchConditionChip(
                         tag = tag,
                         fullCjkFontReady = fullCjkFontReady,
                         fullCjkFontFamily = fullCjkFontFamily,
@@ -5160,7 +5159,7 @@ private fun ActiveSearchTagsSection(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             tags.forEach { tag ->
-                SearchTagChip(
+                TaggoSearchConditionChip(
                     tag = tag,
                     fullCjkFontReady = fullCjkFontReady,
                     fullCjkFontFamily = fullCjkFontFamily,
@@ -5520,7 +5519,7 @@ private fun DetailPage(
                         ),
                     ) {
                         reference.tags.forEach { tag ->
-                            RemovableTagChip(
+                            TaggoFileTagChip(
                                 tag = tag,
                                 fullCjkFontReady = fullCjkFontReady,
                                 fullCjkFontFamily = fullCjkFontFamily,
@@ -5693,7 +5692,7 @@ private fun DetailPage(
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 tagCandidates.forEach { tag ->
-                                    AddableTagChip(
+                                    TaggoAddTagCandidateChip(
                                         tag = tag,
                                         fullCjkFontReady = fullCjkFontReady,
                                         fullCjkFontFamily = fullCjkFontFamily,

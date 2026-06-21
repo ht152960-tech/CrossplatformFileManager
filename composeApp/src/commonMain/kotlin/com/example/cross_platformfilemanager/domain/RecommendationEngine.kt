@@ -20,7 +20,6 @@ class RecommendationEngine(
     private val resolvedEventDao: RecommendationEventDao =
         eventDao ?: (stateDao as? RecommendationEventDao) ?: InMemoryRecommendationEventDao()
     private var lastOpenedFileId: String? = null
-
     init {
         stateDao.loadState()?.let { restoreSnapshot(it) }
     }
