@@ -150,8 +150,6 @@ import com.example.cross_platformfilemanager.ui.components.TaggoListItemSurface
 import com.example.cross_platformfilemanager.ui.components.TaggoMoreButton
 import com.example.cross_platformfilemanager.ui.components.TaggoSectionCard
 import com.example.cross_platformfilemanager.ui.components.TaggoOpenButton
-import com.example.cross_platformfilemanager.ui.components.TagPill
-import com.example.cross_platformfilemanager.ui.components.TaggoTagChip
 import com.example.cross_platformfilemanager.ui.components.TaggoTagRow
 import com.example.cross_platformfilemanager.ui.components.TaggoFileTagChip
 import com.example.cross_platformfilemanager.ui.components.TaggoSearchConditionChip
@@ -2387,16 +2385,21 @@ private fun MediumRecommendedFileRow(
                     modifier = Modifier.size(MediumHomeMetrics.RecommendationBadgeIconSize),
                 )
             }
-            RecommendationTagSummaryText(
+            TaggoInlineTagSummary(
                 tags = reference.tags,
-                locale = locale,
                 fullCjkFontReady = fullCjkFontReady,
+                fullCjkFontFamily = fullCjkFontFamily,
+                locale = locale,
                 modifier = Modifier.fillMaxWidth(),
-                color = TaggoGlobalColors.TextSecondary.copy(alpha = 0.90f),
-                fontSize = 12.sp,
-                lineHeight = 14.sp,
-                fontWeight = FontWeight.Normal,
-                fontFamily = fullCjkFontFamily,
+                mode = TaggoInlineTagSummaryMode.Recommendation(
+                    style = androidx.compose.ui.text.TextStyle(
+                        color = TaggoGlobalColors.TextSecondary.copy(alpha = 0.90f),
+                        fontSize = 12.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.Normal,
+                        fontFamily = fullCjkFontFamily,
+                    ),
+                ),
             )
         }
     }
@@ -2578,8 +2581,9 @@ private fun MediumTagGrid(
                 horizontalArrangement = Arrangement.spacedBy(MediumHomeMetrics.TagGridHorizontalGap),
             ) {
                 rowTags.forEach { summary ->
-                    MediumTagItem(
-                        summary = summary,
+                    TaggoTagEntryItem(
+                        label = summary.tag,
+                        count = summary.count,
                         fullCjkFontReady = fullCjkFontReady,
                         fullCjkFontFamily = fullCjkFontFamily,
                         onClick = { onTagClick(summary.tag) },
@@ -2591,50 +2595,6 @@ private fun MediumTagGrid(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun MediumTagItem(
-    summary: DashboardTagSummary,
-    fullCjkFontReady: Boolean,
-    fullCjkFontFamily: FontFamily,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    TaggoListItemSurface(
-        modifier = modifier,
-        shape = RoundedCornerShape(TaggoGlobalRadius.Item),
-        backgroundColor = TaggoGlobalColors.ItemBackground.copy(
-            alpha = MediumHomeMetrics.TagItemBackgroundAlpha,
-        ),
-        borderColor = TaggoGlobalColors.Border.copy(alpha = MediumHomeMetrics.TagItemBorderAlpha),
-        height = MediumHomeMetrics.TagItemHeight,
-        contentPadding = PaddingValues(horizontal = MediumHomeMetrics.TagItemHorizontalPadding),
-        onClick = onClick,
-    ) {
-        Text(
-            text = displayFormalTagForUi(summary.tag, fullCjkFontReady),
-            modifier = Modifier.weight(1f),
-            color = TaggoGlobalColors.TextPrimary.copy(
-                alpha = MediumHomeMetrics.SupportLabelAlpha,
-            ),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontFamily = fullCjkFontFamily,
-        )
-        Text(
-            text = summary.count.toString(),
-            modifier = Modifier.width(MediumHomeMetrics.TagCountWidth),
-            color = TaggoGlobalColors.TextMuted,
-            fontSize = MediumHomeMetrics.CountFontSize,
-            fontWeight = FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.End,
-        )
     }
 }
 
@@ -3208,42 +3168,14 @@ private fun CompactTagGrid(
                 horizontalArrangement = Arrangement.spacedBy(CompactHomeMetrics.TagGridGap),
             ) {
                 rowTags.forEach { summary ->
-                    Box(modifier = Modifier.weight(1f)) {
-                        TaggoListItemSurface(
-                            shape = RoundedCornerShape(TaggoGlobalRadius.Item),
-                            backgroundColor = Color.Transparent,
-                            backgroundBrush = TaggoCompactTokens.glassListItemBackgroundBrush(),
-                            borderColor = TaggoCompactTokens.GlassListItemBorder,
-                            height = CompactHomeMetrics.TagChipHeight,
-                            contentPadding = PaddingValues(
-                                horizontal = CompactHomeMetrics.TagItemHorizontalPadding,
-                            ),
-                            onClick = { onTagClick(summary.tag) },
-                        ) {
-                            Text(
-                                text = displayFormalTagForUi(summary.tag, fullCjkFontReady),
-                                modifier = Modifier.weight(1f),
-                                color = TaggoGlobalColors.TextPrimary.copy(
-                                    alpha = CompactHomeMetrics.TagLabelAlpha,
-                                ),
-                                fontSize = TaggoGlobalTypography.Button,
-                                fontWeight = FontWeight.Normal,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontFamily = fullCjkFontFamily,
-                            )
-                            Text(
-                                text = summary.count.toString(),
-                                modifier = Modifier.width(CompactHomeMetrics.TagCountWidth),
-                                color = TaggoGlobalColors.TextMuted,
-                                fontSize = TaggoGlobalTypography.Caption,
-                                fontWeight = FontWeight.Normal,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.End,
-                            )
-                        }
-                    }
+                    TaggoTagEntryItem(
+                        label = summary.tag,
+                        count = summary.count,
+                        fullCjkFontReady = fullCjkFontReady,
+                        fullCjkFontFamily = fullCjkFontFamily,
+                        onClick = { onTagClick(summary.tag) },
+                        modifier = Modifier.weight(1f),
+                    )
                 }
                 if (rowTags.size == 1) {
                     Spacer(modifier = Modifier.weight(1f))
@@ -3709,48 +3641,60 @@ private fun displayFormalTagForUi(
 }
 
 @Composable
-private fun RecommendationTagSummaryText(
+private fun TaggoInlineTagSummary(
     tags: List<String>,
     locale: AppLocale,
     fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
     modifier: Modifier = Modifier,
-    color: Color,
-    fontSize: TextUnit,
-    lineHeight: TextUnit,
-    fontWeight: FontWeight,
-    fontFamily: FontFamily,
+    mode: TaggoInlineTagSummaryMode = TaggoInlineTagSummaryMode.File,
 ) {
-    val textMeasurer = rememberTextMeasurer()
-    val density = LocalDensity.current
-    val style = androidx.compose.ui.text.TextStyle(
-        color = color,
-        fontSize = fontSize,
-        lineHeight = lineHeight,
-        fontWeight = fontWeight,
-        fontFamily = fontFamily,
-    )
-    BoxWithConstraints(modifier = modifier) {
-        val availableWidthPx = with(density) { (maxWidth - 12.dp).coerceAtLeast(0.dp).toPx() }
-        val summary = remember(tags, locale, fullCjkFontReady, availableWidthPx, style) {
-            measuredRecommendationTagSummary(
+    when (mode) {
+        TaggoInlineTagSummaryMode.File -> {
+            TaggoTagRow(
                 tags = tags,
-                locale = locale,
                 fullCjkFontReady = fullCjkFontReady,
-                availableWidthPx = availableWidthPx,
-                measure = { text -> textMeasurer.measure(text = text, style = style).size.width },
+                fullCjkFontFamily = fullCjkFontFamily,
+                modifier = modifier,
             )
         }
-        Text(
-            text = summary,
-            color = color,
-            fontSize = fontSize,
-            lineHeight = lineHeight,
-            fontWeight = fontWeight,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontFamily = fontFamily,
-        )
+
+        is TaggoInlineTagSummaryMode.Recommendation -> {
+            val textMeasurer = rememberTextMeasurer()
+            val density = LocalDensity.current
+            val style = mode.style
+            BoxWithConstraints(modifier = modifier) {
+                val availableWidthPx = with(density) { (maxWidth - 12.dp).coerceAtLeast(0.dp).toPx() }
+                val summary = remember(tags, locale, fullCjkFontReady, availableWidthPx, style) {
+                    measuredRecommendationTagSummary(
+                        tags = tags,
+                        locale = locale,
+                        fullCjkFontReady = fullCjkFontReady,
+                        availableWidthPx = availableWidthPx,
+                        measure = { text -> textMeasurer.measure(text = text, style = style).size.width },
+                    )
+                }
+                Text(
+                    text = summary,
+                    color = style.color,
+                    fontSize = style.fontSize,
+                    lineHeight = style.lineHeight,
+                    fontWeight = style.fontWeight,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontFamily = style.fontFamily ?: fullCjkFontFamily,
+                )
+            }
+        }
     }
+}
+
+private sealed interface TaggoInlineTagSummaryMode {
+    data object File : TaggoInlineTagSummaryMode
+
+    data class Recommendation(
+        val style: androidx.compose.ui.text.TextStyle,
+    ) : TaggoInlineTagSummaryMode
 }
 
 private fun measuredRecommendationTagSummary(
@@ -3812,7 +3756,7 @@ private fun DashboardTagGrid(
                 horizontalArrangement = Arrangement.spacedBy(HomeWide.Spacing.TagGridGap),
             ) {
                 rowItems.forEach { summary ->
-                    DashboardTagButton(
+                    TaggoTagEntryItem(
                         label = summary.tag,
                         count = summary.count,
                         fullCjkFontReady = fullCjkFontReady,
@@ -3830,7 +3774,7 @@ private fun DashboardTagGrid(
 }
 
 @Composable
-private fun DashboardTagButton(
+private fun TaggoTagEntryItem(
     label: String,
     count: Int,
     fullCjkFontReady: Boolean,
@@ -3838,31 +3782,112 @@ private fun DashboardTagButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val tagShape = RoundedCornerShape(HomeWide.Radius.TagButton)
-    TaggoListItemSurface(
-        modifier = modifier,
-        shape = tagShape,
-        backgroundColor = HomeWide.Colors.DashboardItemBackground,
-        borderColor = HomeWide.Colors.DashboardItemBorder,
-        height = HomeWide.Size.TagButtonHeight,
-        contentPadding = PaddingValues(
-            horizontal = HomeWide.Spacing.TagButtonPaddingX,
-            vertical = HomeWide.Spacing.TagButtonPaddingY,
-        ),
-        horizontalArrangement = Arrangement.spacedBy(HomeWide.Spacing.TagGridGap),
-        onClick = onClick,
-    ) {
-        Text(
-            text = displayFormalTagForUi(label, fullCjkFontReady),
-            modifier = Modifier.weight(1f),
-            color = HomeWide.Colors.TextPrimary,
-            fontSize = HomeWide.Typography.TagButton,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontFamily = fullCjkFontFamily,
-        )
-        DashboardCountBadge(label = count.toString())
+    val windowSizeClass = LocalTaggoWindowSizeClass.current
+    when (windowSizeClass) {
+        TaggoWindowSizeClass.Compact -> {
+            Box(modifier = modifier) {
+                TaggoListItemSurface(
+                    shape = RoundedCornerShape(TaggoGlobalRadius.Item),
+                    backgroundColor = Color.Transparent,
+                    backgroundBrush = TaggoCompactTokens.glassListItemBackgroundBrush(),
+                    borderColor = TaggoCompactTokens.GlassListItemBorder,
+                    height = CompactHomeMetrics.TagChipHeight,
+                    contentPadding = PaddingValues(
+                        horizontal = CompactHomeMetrics.TagItemHorizontalPadding,
+                    ),
+                    onClick = onClick,
+                ) {
+                    Text(
+                        text = displayFormalTagForUi(label, fullCjkFontReady),
+                        modifier = Modifier.weight(1f),
+                        color = TaggoGlobalColors.TextPrimary.copy(
+                            alpha = CompactHomeMetrics.TagLabelAlpha,
+                        ),
+                        fontSize = TaggoGlobalTypography.Button,
+                        fontWeight = FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontFamily = fullCjkFontFamily,
+                    )
+                    Text(
+                        text = count.toString(),
+                        modifier = Modifier.width(CompactHomeMetrics.TagCountWidth),
+                        color = TaggoGlobalColors.TextMuted,
+                        fontSize = TaggoGlobalTypography.Caption,
+                        fontWeight = FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.End,
+                    )
+                }
+            }
+        }
+
+        TaggoWindowSizeClass.Medium -> {
+            TaggoListItemSurface(
+                modifier = modifier,
+                shape = RoundedCornerShape(TaggoGlobalRadius.Item),
+                backgroundColor = TaggoGlobalColors.ItemBackground.copy(
+                    alpha = MediumHomeMetrics.TagItemBackgroundAlpha,
+                ),
+                borderColor = TaggoGlobalColors.Border.copy(alpha = MediumHomeMetrics.TagItemBorderAlpha),
+                height = MediumHomeMetrics.TagItemHeight,
+                contentPadding = PaddingValues(horizontal = MediumHomeMetrics.TagItemHorizontalPadding),
+                onClick = onClick,
+            ) {
+                Text(
+                    text = displayFormalTagForUi(label, fullCjkFontReady),
+                    modifier = Modifier.weight(1f),
+                    color = TaggoGlobalColors.TextPrimary.copy(
+                        alpha = MediumHomeMetrics.SupportLabelAlpha,
+                    ),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontFamily = fullCjkFontFamily,
+                )
+                Text(
+                    text = count.toString(),
+                    modifier = Modifier.width(MediumHomeMetrics.TagCountWidth),
+                    color = TaggoGlobalColors.TextMuted,
+                    fontSize = MediumHomeMetrics.CountFontSize,
+                    fontWeight = FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.End,
+                )
+            }
+        }
+
+        TaggoWindowSizeClass.Expanded -> {
+            val tagShape = RoundedCornerShape(HomeWide.Radius.TagButton)
+            TaggoListItemSurface(
+                modifier = modifier,
+                shape = tagShape,
+                backgroundColor = HomeWide.Colors.DashboardItemBackground,
+                borderColor = HomeWide.Colors.DashboardItemBorder,
+                height = HomeWide.Size.TagButtonHeight,
+                contentPadding = PaddingValues(
+                    horizontal = HomeWide.Spacing.TagButtonPaddingX,
+                    vertical = HomeWide.Spacing.TagButtonPaddingY,
+                ),
+                horizontalArrangement = Arrangement.spacedBy(HomeWide.Spacing.TagGridGap),
+                onClick = onClick,
+            ) {
+                Text(
+                    text = displayFormalTagForUi(label, fullCjkFontReady),
+                    modifier = Modifier.weight(1f),
+                    color = HomeWide.Colors.TextPrimary,
+                    fontSize = HomeWide.Typography.TagButton,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontFamily = fullCjkFontFamily,
+                )
+                DashboardCountBadge(label = count.toString())
+            }
+        }
     }
 }
 
@@ -4012,18 +4037,23 @@ private fun DashboardCompactRecommendedFileRow(
                     modifier = Modifier.size(CompactHomeMetrics.RecommendationBadgeIconSize),
                 )
             }
-            RecommendationTagSummaryText(
+            TaggoInlineTagSummary(
                 tags = reference.tags,
-                locale = locale,
                 fullCjkFontReady = fullCjkFontReady,
+                fullCjkFontFamily = fullCjkFontFamily,
+                locale = locale,
                 modifier = Modifier.fillMaxWidth(),
-                color = TaggoGlobalColors.TextSecondary.copy(
-                    alpha = CompactHomeMetrics.RecommendationTagSummaryAlpha,
+                mode = TaggoInlineTagSummaryMode.Recommendation(
+                    style = androidx.compose.ui.text.TextStyle(
+                        color = TaggoGlobalColors.TextSecondary.copy(
+                            alpha = CompactHomeMetrics.RecommendationTagSummaryAlpha,
+                        ),
+                        fontSize = CompactHomeMetrics.RecommendationTagSummaryFontSize,
+                        lineHeight = CompactHomeMetrics.RecommendationTagSummaryLineHeight,
+                        fontWeight = FontWeight.Normal,
+                        fontFamily = fullCjkFontFamily,
+                    ),
                 ),
-                fontSize = CompactHomeMetrics.RecommendationTagSummaryFontSize,
-                lineHeight = CompactHomeMetrics.RecommendationTagSummaryLineHeight,
-                fontWeight = FontWeight.Normal,
-                fontFamily = fullCjkFontFamily,
             )
         }
     }
@@ -6682,49 +6712,17 @@ private fun FileTileCard(
                         )
 
                         if (reference.tags.isNotEmpty()) {
-                            TaggoTagRow(
+                            TaggoInlineTagSummary(
                                 tags = reference.tags,
+                                locale = locale,
                                 fullCjkFontReady = fullCjkFontReady,
                                 fullCjkFontFamily = fullCjkFontFamily,
+                                mode = TaggoInlineTagSummaryMode.File,
                             )
                         }
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun ReferenceTagSummary(
-    tags: List<String>,
-    locale: AppLocale,
-    fullCjkFontReady: Boolean,
-    fullCjkFontFamily: FontFamily,
-) {
-    val windowSizeClass = LocalTaggoWindowSizeClass.current
-    val visibleTags = remember(tags, windowSizeClass) {
-        resolveVisibleCardTags(tags, windowSizeClass)
-    }
-    val remainingTagCount = tags.size - visibleTags.size
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        visibleTags.forEach { tag ->
-            TagPill(
-                tag = tag,
-                fullCjkFontReady = fullCjkFontReady,
-                fullCjkFontFamily = fullCjkFontFamily,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-        }
-        if (remainingTagCount > 0) {
-            OverflowTagHint(
-                count = remainingTagCount,
-                locale = locale,
-            )
         }
     }
 }

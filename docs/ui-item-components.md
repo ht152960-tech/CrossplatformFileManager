@@ -567,6 +567,51 @@ C（窄屏 / Compact）
 - 正式标签表示长期存在的数据，视觉上应更稳定、更肯定。
 - 正式标签可使用较实的背景或较稳定的紫色层级。
 
+## 标签组件分类 / Tag components
+
+本小节只记录当前项目里已经形成稳定语义的标签组件分层，避免把所有标签都混成同一种 chip。
+
+### `TaggoOperableTagChip`
+
+- 可操作标签核心。
+- 用于添加、移除、删除等操作。
+- 右上角有 `+` / `−` / `×` action dot。
+- 视觉来源是 `OperableTagChipTokens`。
+- 语义外皮包括：
+  - `TaggoSearchConditionChip`
+  - `TaggoFileTagChip`
+  - `TaggoTagDeleteChip`
+  - `TaggoAddTagCandidateChip`
+
+### `TaggoTagEntryItem`
+
+- 标签入口条目，不是 chip。
+- 用于首页常用标签。
+- 显示 `#` 标签名 + 数量。
+- 可点击进入标签结果，没有 action dot。
+
+### `TaggoInlineTagSummary`
+
+- 行内标签摘要。
+- 用于文件条目 / 推荐条目里的低权重标签展示。
+- 形式类似 `#A #B +N`。
+- 不可操作。
+- 不使用 action dot。
+- 不应升级为 operable chip。
+
+### `TaggoSearchHistoryChip`
+
+- 搜索历史关键词 chip。
+- 直角例外。
+- 不一定带 `#`。
+- 不属于正式标签组件体系。
+- 不要和 operable tag chip 混用。
+
+### `StaticTagChip`
+
+- 当前暂不新增。
+- 如果未来需要“不可点击、无圆圈、但长得像 chip 的只读标签”，再单独设计。
+
 ## 搜索条件 / 临时搜索标签 `SearchTokenChip`
 
 本质：

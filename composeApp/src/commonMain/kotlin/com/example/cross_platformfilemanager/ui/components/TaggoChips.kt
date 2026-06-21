@@ -37,7 +37,6 @@ import com.example.cross_platformfilemanager.SearchTagSource
 import com.example.cross_platformfilemanager.displayTextForUi
 import com.example.cross_platformfilemanager.ui.adaptive.LocalTaggoWindowSizeClass
 import com.example.cross_platformfilemanager.ui.adaptive.TaggoWindowSizeClass
-import com.example.cross_platformfilemanager.ui.theme.TaggoTheme
 import kotlin.math.roundToInt
 
 @Composable
@@ -56,33 +55,6 @@ internal fun TaggoSearchConditionChip(
         actionSymbol = "−",
         onActionClick = onRemove,
     )
-}
-
-@Composable
-internal fun TagPill(
-    tag: String,
-    fullCjkFontReady: Boolean,
-    fullCjkFontFamily: FontFamily,
-    modifier: Modifier = Modifier,
-) {
-    val windowSizeClass = LocalTaggoWindowSizeClass.current
-    val maxChipWidth = if (windowSizeClass == TaggoWindowSizeClass.Compact) 140.dp else 176.dp
-    Surface(
-        color = TaggoTheme.colors.panelBackgroundSoft,
-        contentColor = TaggoTheme.colors.textSecondary,
-        shape = RoundedCornerShape(999.dp),
-        modifier = modifier.widthIn(max = maxChipWidth),
-    ) {
-        Text(
-            text = displayFormalTagForUi(tag, fullCjkFontReady),
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-            fontWeight = FontWeight.Medium,
-            fontSize = if (windowSizeClass == TaggoWindowSizeClass.Compact) 12.sp else 11.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontFamily = fullCjkFontFamily,
-        )
-    }
 }
 
 @Composable
