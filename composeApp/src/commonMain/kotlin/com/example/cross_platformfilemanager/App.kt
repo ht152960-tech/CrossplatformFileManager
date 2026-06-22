@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -47,6 +48,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
@@ -83,6 +85,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -100,6 +103,7 @@ import org.jetbrains.compose.resources.painterResource
 import taggo.composeapp.generated.resources.TaggoLogoBig2048
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDropDown
@@ -109,6 +113,8 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Home
@@ -119,7 +125,6 @@ import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.PictureAsPdf
-import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Slideshow
@@ -127,6 +132,7 @@ import androidx.compose.material.icons.outlined.TableChart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
+import com.example.cross_platformfilemanager.ThumbnailStatus
 import com.example.cross_platformfilemanager.ui.adaptive.AdaptiveAppScaffold
 import com.example.cross_platformfilemanager.ui.adaptive.AdaptiveNavigationItem
 import com.example.cross_platformfilemanager.ui.adaptive.LocalTaggoWindowSizeClass
@@ -154,6 +160,8 @@ import com.example.cross_platformfilemanager.ui.components.TaggoTagRow
 import com.example.cross_platformfilemanager.ui.components.TaggoFileTagChip
 import com.example.cross_platformfilemanager.ui.components.TaggoSearchConditionChip
 import com.example.cross_platformfilemanager.ui.components.TaggoTagDeleteChip
+import com.example.cross_platformfilemanager.FileTypeClassifier
+import com.example.cross_platformfilemanager.rememberThumbnailPainter
 import com.example.cross_platformfilemanager.ui.components.fileTypeIconStyle
 import com.example.cross_platformfilemanager.ui.components.operableTagChipSpacing
 import com.example.cross_platformfilemanager.ui.theme.TaggoGlobalAlpha
@@ -5434,75 +5442,177 @@ private fun DetailPage(
         )
 
         val detailInfoTitle = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u4fe1\u606f" else "File info"
-        val detailInfoSubtitle = if (locale == AppLocale.ZhCn) {
-            "\u8fd9\u91cc\u663e\u793a\u4e0a\u4f20\u65f6\u95f4\u3001\u5927\u5c0f\u548c\u6587\u4ef6\u8def\u5f84\u3002"
-        } else {
-            "Upload time, size, and file path are shown here."
-        }
-        val detailInfoContent: @Composable () -> Unit = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(
-                    if (compactLayout) TaggoCompactTokens.FileItemGap else 8.dp,
-                ),
-            ) {
-                InfoRow(
-                    label = appState.createdAtLabel,
-                    value = formatRelativeTime(reference.createdAtMillis),
-                )
-                InfoRow(
-                    label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u5927\u5c0f" else "File size",
-                    value = formatFileSize(reference.fileSizeBytes ?: guessFileSizeFromNotes(reference.notes)),
-                )
-                InfoRow(
-                    label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u8def\u5f84" else "File path",
-                    value = summarizeReferenceSource(reference, locale, fullCjkFontReady).ifBlank {
-                        if (locale == AppLocale.ZhCn) "\u6682\u672a\u4fdd\u5b58\u8def\u5f84" else "No file path saved"
-                    },
-                    valueFontFamily = fullCjkFontFamily,
-                )
-                if (reference.coverArtSource?.isNotBlank() == true) {
-                    InfoRow(
-                        label = if (locale == AppLocale.ZhCn) "\u5c01\u9762\u6765\u6e90" else "Cover art source",
-                        value = displayTextForUi(reference.coverArtSource.orEmpty(), fullCjkFontReady),
+        val detailInfoSubtitle: String? = null
+        val detailInfoContent: @Composable () -> Unit = if (compactLayout) {
+            {
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val fileNameValue = displayTextForUi(reference.title, fullCjkFontReady)
+                    val fileTypeValue = displayTextForUi(reference.fileType, fullCjkFontReady).ifBlank { "file" }
+                    val coverArtSourceValue = displayTextForUi(reference.coverArtSource.orEmpty(), fullCjkFontReady)
+                    val fileNameFitsInline = rememberCompactDetailFieldFitsInline(
+                        value = fileNameValue,
+                        availableWidth = maxWidth,
+                        fullCjkFontReady = fullCjkFontReady,
                         valueFontFamily = fullCjkFontFamily,
+                        widthFraction = 0.42f,
                     )
-                }
-                if (reference.thumbnailPath?.isNotBlank() == true) {
-                    InfoRow(
-                        label = if (locale == AppLocale.ZhCn) "\u7f29\u7565\u56fe\u7f13\u5b58" else "Thumbnail cache",
-                        value = thumbnailStatusLabel(reference, locale),
-                        valueFontFamily = fullCjkFontFamily,
-                    )
-                }
-                if (openFileMessage != null) {
-                    Text(
-                        text = openFileMessage!!,
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = if (compactLayout) TaggoCompactTokens.Caption else 12.sp,
-                    )
-                } else if (canUseWebReopenFlow && !canOpenReferenceExternally(reference)) {
-                    Text(
-                        text = webFileReselectionMessage(locale),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = if (compactLayout) TaggoCompactTokens.Caption else 12.sp,
-                    )
-                } else if (!canOpenFile) {
-                    Text(
-                        text = if (locale == AppLocale.ZhCn) {
-                            "\u8fd9\u4e2a\u6587\u4ef6\u8fd8\u6ca1\u6709\u53ef\u76f4\u63a5\u6253\u5f00\u7684\u672c\u5730\u8def\u5f84\u3002"
+                    val coverArtFitsInline = reference.coverArtSource?.isNotBlank() == true &&
+                        rememberCompactDetailFieldFitsInline(
+                            value = coverArtSourceValue,
+                            availableWidth = maxWidth,
+                            fullCjkFontReady = fullCjkFontReady,
+                            valueFontFamily = fullCjkFontFamily,
+                            widthFraction = 0.42f,
+                        )
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(TaggoCompactTokens.FileItemGap),
+                    ) {
+                        if (fileNameFitsInline) {
+                            CompactDetailShortField(
+                                label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u540d" else "File name",
+                                value = fileNameValue,
+                                valueFontFamily = fullCjkFontFamily,
+                            )
                         } else {
-                            "This file does not have a directly openable local path."
-                        },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = if (compactLayout) TaggoCompactTokens.Caption else 12.sp,
+                            CompactDetailLongField(
+                                label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u540d" else "File name",
+                                value = fileNameValue,
+                                valueFontFamily = fullCjkFontFamily,
+                            )
+                        }
+                        CompactDetailShortField(
+                            label = appState.createdAtLabel,
+                            value = formatRelativeTime(reference.createdAtMillis),
+                        )
+                        CompactDetailShortField(
+                            label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u5927\u5c0f" else "File size",
+                            value = formatFileSize(reference.fileSizeBytes ?: guessFileSizeFromNotes(reference.notes)),
+                        )
+                        CompactDetailShortField(
+                            label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u7c7b\u578b" else "File type",
+                            value = fileTypeValue,
+                        )
+                        if (reference.coverArtSource?.isNotBlank() == true) {
+                            if (coverArtFitsInline) {
+                                CompactDetailShortField(
+                                    label = if (locale == AppLocale.ZhCn) "\u5c01\u9762\u6765\u6e90" else "Cover art source",
+                                    value = coverArtSourceValue,
+                                    valueFontFamily = fullCjkFontFamily,
+                                )
+                            } else {
+                                CompactDetailLongField(
+                                    label = if (locale == AppLocale.ZhCn) "\u5c01\u9762\u6765\u6e90" else "Cover art source",
+                                    value = coverArtSourceValue,
+                                    valueFontFamily = fullCjkFontFamily,
+                                )
+                            }
+                        }
+                        CompactDetailLongField(
+                            label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u8def\u5f84" else "File path",
+                            value = summarizeReferenceSource(reference, locale, fullCjkFontReady).ifBlank {
+                                if (locale == AppLocale.ZhCn) "\u6682\u672a\u4fdd\u5b58\u8def\u5f84" else "No file path saved"
+                            },
+                            valueFontFamily = fullCjkFontFamily,
+                        )
+                        if (reference.thumbnailPath?.isNotBlank() == true) {
+                            CompactDetailShortField(
+                                label = if (locale == AppLocale.ZhCn) "\u7f29\u7565\u56fe\u7f13\u5b58" else "Thumbnail cache",
+                                value = thumbnailStatusLabel(reference, locale),
+                            )
+                        }
+                        if (openFileMessage != null) {
+                            Text(
+                                text = openFileMessage!!,
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = TaggoCompactTokens.Caption,
+                            )
+                        } else if (canUseWebReopenFlow && !canOpenReferenceExternally(reference)) {
+                            Text(
+                                text = webFileReselectionMessage(locale),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = TaggoCompactTokens.Caption,
+                            )
+                        } else if (!canOpenFile) {
+                            Text(
+                                text = if (locale == AppLocale.ZhCn) {
+                                    "\u8fd9\u4e2a\u6587\u4ef6\u8fd8\u6ca1\u6709\u53ef\u76f4\u63a5\u6253\u5f00\u7684\u672c\u5730\u8def\u5f84\u3002"
+                                } else {
+                                    "This file does not have a directly openable local path."
+                                },
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = TaggoCompactTokens.Caption,
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(
+                        if (compactLayout) TaggoCompactTokens.FileItemGap else 8.dp,
+                    ),
+                ) {
+                    InfoRow(
+                        label = appState.createdAtLabel,
+                        value = formatRelativeTime(reference.createdAtMillis),
                     )
+                    InfoRow(
+                        label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u5927\u5c0f" else "File size",
+                        value = formatFileSize(reference.fileSizeBytes ?: guessFileSizeFromNotes(reference.notes)),
+                    )
+                    InfoRow(
+                        label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u8def\u5f84" else "File path",
+                        value = summarizeReferenceSource(reference, locale, fullCjkFontReady).ifBlank {
+                            if (locale == AppLocale.ZhCn) "\u6682\u672a\u4fdd\u5b58\u8def\u5f84" else "No file path saved"
+                        },
+                        valueFontFamily = fullCjkFontFamily,
+                    )
+                    if (reference.coverArtSource?.isNotBlank() == true) {
+                        InfoRow(
+                            label = if (locale == AppLocale.ZhCn) "\u5c01\u9762\u6765\u6e90" else "Cover art source",
+                            value = displayTextForUi(reference.coverArtSource.orEmpty(), fullCjkFontReady),
+                            valueFontFamily = fullCjkFontFamily,
+                        )
+                    }
+                    if (reference.thumbnailPath?.isNotBlank() == true) {
+                        InfoRow(
+                            label = if (locale == AppLocale.ZhCn) "\u7f29\u7565\u56fe\u7f13\u5b58" else "Thumbnail cache",
+                            value = thumbnailStatusLabel(reference, locale),
+                            valueFontFamily = fullCjkFontFamily,
+                        )
+                    }
+                    if (openFileMessage != null) {
+                        Text(
+                            text = openFileMessage!!,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = if (compactLayout) TaggoCompactTokens.Caption else 12.sp,
+                        )
+                    } else if (canUseWebReopenFlow && !canOpenReferenceExternally(reference)) {
+                        Text(
+                            text = webFileReselectionMessage(locale),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = if (compactLayout) TaggoCompactTokens.Caption else 12.sp,
+                        )
+                    } else if (!canOpenFile) {
+                        Text(
+                            text = if (locale == AppLocale.ZhCn) {
+                                "\u8fd9\u4e2a\u6587\u4ef6\u8fd8\u6ca1\u6709\u53ef\u76f4\u63a5\u6253\u5f00\u7684\u672c\u5730\u8def\u5f84\u3002"
+                            } else {
+                                "This file does not have a directly openable local path."
+                            },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = if (compactLayout) TaggoCompactTokens.Caption else 12.sp,
+                        )
+                    }
                 }
             }
         }
         if (compactLayout) {
             TaggoSectionCard(
                 title = detailInfoTitle,
-                meta = detailInfoSubtitle,
+                meta = null,
                 compact = true,
                 compactPadding = TaggoCompactTokens.FileItemHorizontalPadding,
                 compactContentGap = TaggoCompactTokens.FileItemGap,
@@ -5512,17 +5622,13 @@ private fun DetailPage(
         } else {
             SectionCard(
                 title = detailInfoTitle,
-                subtitle = detailInfoSubtitle,
+                subtitle = detailInfoSubtitle ?: "",
                 content = detailInfoContent,
             )
         }
 
         val detailTagsTitle = if (locale == AppLocale.ZhCn) "\u6807\u7b7e" else "Tags"
-        val detailTagsSubtitle = if (locale == AppLocale.ZhCn) {
-            "\u7528\u6807\u7b7e\u7ed9\u6587\u4ef6\u5206\u7c7b\uff0c\u4fbf\u4e8e\u641c\u7d22\u548c\u63a8\u8350"
-        } else {
-            "Use tags to organize files for search and recommendations."
-        }
+        val detailTagsSubtitle: String? = null
         val detailTagsContent: @Composable () -> Unit = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(
@@ -5586,29 +5692,34 @@ private fun DetailPage(
         } else {
             SectionCard(
                 title = detailTagsTitle,
-                subtitle = detailTagsSubtitle,
+                subtitle = detailTagsSubtitle ?: "",
                 content = detailTagsContent,
             )
         }
 
         val detailActionsTitle = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u64cd\u4f5c" else "File actions"
-        val detailActionsSubtitle = if (locale == AppLocale.ZhCn) {
-            "\u4fdd\u7559\u5f53\u524d\u6807\u7b7e\u548c\u8bb0\u5f55\uff0c\u53ea\u66f4\u6362\u8fd9\u4e2a\u6761\u76ee\u6307\u5411\u7684\u672c\u5730\u6587\u4ef6\u3002"
-        } else {
-            "Keep the current tags and history, and only replace the local file linked to this entry."
-        }
+        val detailActionsSubtitle: String? = null
         val detailActionsContent: @Composable () -> Unit = {
             OutlinedButton(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { onReplaceReference(reference) },
             ) {
-                Text(if (locale == AppLocale.ZhCn) "\u66f4\u6362\u6587\u4ef6\u8def\u5f84" else "Change file path")
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DetailActionLeadingIcon(
+                        imageVector = Icons.Outlined.FolderOpen,
+                        tint = TaggoTheme.colors.textPrimary,
+                    )
+                    Text(if (locale == AppLocale.ZhCn) "\u66f4\u6362\u6587\u4ef6\u8def\u5f84" else "Change file path")
+                }
             }
         }
         if (compactLayout) {
             TaggoSectionCard(
                 title = detailActionsTitle,
-                meta = detailActionsSubtitle,
+                meta = null,
                 compact = true,
                 compactPadding = TaggoCompactTokens.FileItemHorizontalPadding,
                 compactContentGap = TaggoCompactTokens.FileItemGap,
@@ -5618,17 +5729,13 @@ private fun DetailPage(
         } else {
             SectionCard(
                 title = detailActionsTitle,
-                subtitle = detailActionsSubtitle,
+                subtitle = detailActionsSubtitle ?: "",
                 content = detailActionsContent,
             )
         }
 
         val dangerZoneTitle = if (locale == AppLocale.ZhCn) "\u5371\u9669\u64cd\u4f5c" else "Danger zone"
-        val dangerZoneSubtitle = if (locale == AppLocale.ZhCn) {
-            "\u4ece\u5e94\u7528\u4e2d\u5220\u9664\u8fd9\u4e2a\u6587\u4ef6\u6761\u76ee\uff0c\u4e0d\u4f1a\u5220\u9664\u672c\u5730\u539f\u6587\u4ef6\u3002"
-        } else {
-            "Remove this file entry from the app. The original local file will not be deleted."
-        }
+        val dangerZoneSubtitle: String? = null
         val dangerZoneContent: @Composable () -> Unit = {
             OutlinedButton(
                 modifier = Modifier.fillMaxWidth(),
@@ -5637,13 +5744,22 @@ private fun DetailPage(
                     contentColor = TaggoTheme.colors.danger,
                 ),
             ) {
-                Text(if (locale == AppLocale.ZhCn) "\u5220\u9664\u6587\u4ef6\u6761\u76ee" else "Delete file entry")
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DetailActionLeadingIcon(
+                        imageVector = Icons.Outlined.DeleteForever,
+                        tint = TaggoTheme.colors.danger,
+                    )
+                    Text(if (locale == AppLocale.ZhCn) "\u5220\u9664\u6587\u4ef6\u6761\u76ee" else "Delete file entry")
+                }
             }
         }
         if (compactLayout) {
             TaggoSectionCard(
                 title = dangerZoneTitle,
-                meta = dangerZoneSubtitle,
+                meta = null,
                 compact = true,
                 compactPadding = TaggoCompactTokens.FileItemHorizontalPadding,
                 compactContentGap = TaggoCompactTokens.FileItemGap,
@@ -5653,7 +5769,7 @@ private fun DetailPage(
         } else {
             SectionCard(
                 title = dangerZoneTitle,
-                subtitle = dangerZoneSubtitle,
+                subtitle = dangerZoneSubtitle ?: "",
                 content = dangerZoneContent,
             )
         }
@@ -6771,6 +6887,357 @@ private fun resolveVisibleCardTags(
 }
 
 @Composable
+private fun CompactDetailShortField(
+    label: String,
+    value: String,
+    valueFontFamily: FontFamily? = null,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            color = TaggoTheme.colors.textSecondary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Normal,
+            lineHeight = 18.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = value,
+            modifier = Modifier.weight(1f),
+            color = TaggoTheme.colors.textPrimary,
+            fontWeight = FontWeight.Medium,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
+            fontFamily = valueFontFamily,
+            textAlign = TextAlign.End,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun CompactDetailLongField(
+    label: String,
+    value: String,
+    valueFontFamily: FontFamily? = null,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = label,
+            color = TaggoTheme.colors.textSecondary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Normal,
+            lineHeight = 18.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = value,
+            modifier = Modifier.fillMaxWidth(),
+            color = TaggoTheme.colors.textPrimary,
+            fontWeight = FontWeight.Medium,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
+            fontFamily = valueFontFamily,
+        )
+    }
+}
+
+@Composable
+private fun rememberCompactDetailFieldFitsInline(
+    value: String,
+    availableWidth: Dp,
+    fullCjkFontReady: Boolean,
+    valueFontFamily: FontFamily? = null,
+    widthFraction: Float = 0.44f,
+): Boolean {
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val displayValue = displayTextForUi(value, fullCjkFontReady)
+    return remember(displayValue, availableWidth, valueFontFamily, widthFraction) {
+        if (displayValue.isBlank()) {
+            true
+        } else {
+            val measuredWidth = textMeasurer.measure(
+                text = AnnotatedString(displayValue),
+                style = androidx.compose.ui.text.TextStyle(
+                    fontFamily = valueFontFamily,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = 18.sp,
+                ),
+                maxLines = 1,
+            ).size.width
+            val widthLimitPx = with(density) { availableWidth.toPx() } * widthFraction
+            measuredWidth <= widthLimitPx
+        }
+    }
+}
+
+private data class DetailHeroStyle(
+    val backgroundGradientColors: List<Color>,
+    val accentColor: Color,
+    val glowColor: Color,
+    val icon: ImageVector,
+)
+
+private fun resolveDetailHeroStyle(reference: FileReference): DetailHeroStyle {
+    val category = FileTypeClassifier.classify(reference)
+    val tokens = TaggoFileTypeColorTokens.forCategory(category)
+    val tint = tokens.iconColor
+    val baseBackground = when (category) {
+        FileTypeCategory.Image -> Color(0xFF07141B)
+        FileTypeCategory.Video -> Color(0xFF120B1D)
+        FileTypeCategory.Audio -> Color(0xFF08131A)
+        FileTypeCategory.TextDocument,
+        FileTypeCategory.PdfDocument,
+        FileTypeCategory.Spreadsheet,
+        FileTypeCategory.Presentation -> Color(0xFF160F0B)
+        FileTypeCategory.Archive -> Color(0xFF10121A)
+        FileTypeCategory.Code -> Color(0xFF0D1623)
+        FileTypeCategory.Folder -> Color(0xFF0E1620)
+        else -> Color(0xFF0B111A)
+    }
+    val middleTint = when (category) {
+        FileTypeCategory.Image -> Color(0xFF103448)
+        FileTypeCategory.Video -> Color(0xFF2A1338)
+        FileTypeCategory.Audio -> Color(0xFF0E3940)
+        FileTypeCategory.TextDocument,
+        FileTypeCategory.Spreadsheet,
+        FileTypeCategory.Presentation -> Color(0xFF392012)
+        FileTypeCategory.PdfDocument -> Color(0xFF40240C)
+        FileTypeCategory.Archive -> Color(0xFF1A1A2A)
+        FileTypeCategory.Code -> Color(0xFF18304A)
+        FileTypeCategory.Folder -> Color(0xFF182635)
+        else -> Color(0xFF121B26)
+    }
+    return DetailHeroStyle(
+        backgroundGradientColors = listOf(
+            baseBackground,
+            middleTint,
+            Color(0xFF080B11),
+        ),
+        accentColor = tint.copy(alpha = 0.88f),
+        glowColor = tokens.weakGlowColor.copy(alpha = 0.18f),
+        icon = resolveDetailHeroIcon(category),
+    )
+}
+
+private fun resolveDetailHeroIcon(category: FileTypeCategory): ImageVector =
+    when (category) {
+        FileTypeCategory.Image -> Icons.Outlined.Image
+        FileTypeCategory.Video -> Icons.Outlined.Movie
+        FileTypeCategory.Audio -> Icons.Outlined.MusicNote
+        FileTypeCategory.TextDocument -> Icons.Outlined.Description
+        FileTypeCategory.PdfDocument -> Icons.Outlined.PictureAsPdf
+        FileTypeCategory.Spreadsheet -> Icons.Outlined.TableChart
+        FileTypeCategory.Presentation -> Icons.Outlined.Slideshow
+        FileTypeCategory.Archive -> Icons.Outlined.Archive
+        FileTypeCategory.Code -> Icons.Outlined.Code
+        FileTypeCategory.Folder -> Icons.Outlined.Folder
+        else -> Icons.Outlined.InsertDriveFile
+    }
+
+@Composable
+private fun DetailHeroPreview(
+    reference: FileReference,
+    fullCjkFontReady: Boolean,
+    fullCjkFontFamily: FontFamily,
+    canOpenFile: Boolean,
+    openButtonLabel: String,
+    onOpenFile: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val category = FileTypeClassifier.classify(reference)
+    val heroStyle = resolveDetailHeroStyle(reference)
+    val thumbnailPainter = rememberThumbnailPainter(reference.thumbnailPath)
+    val hasRealPreview = thumbnailPainter != null &&
+        reference.thumbnailStatus == ThumbnailStatus.READY &&
+        (category == FileTypeCategory.Image || category == FileTypeCategory.Video)
+    BoxWithConstraints(
+        modifier = modifier
+            .clip(RoundedCornerShape(TaggoCompactTokens.HeroCoverRadius))
+            .background(Brush.linearGradient(heroStyle.backgroundGradientColors))
+            .then(
+                if (canOpenFile) {
+                    Modifier.clickable(onClick = onOpenFile)
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        val coverSize = minOf(maxWidth, maxHeight)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .drawBehind {
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                heroStyle.glowColor,
+                                Color.Transparent,
+                            ),
+                            center = Offset(size.width * 0.50f, size.height * 0.34f),
+                            radius = size.minDimension * 0.92f,
+                        ),
+                    )
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color(0x19080B11),
+                                Color(0xCC080B11),
+                            ),
+                        ),
+                    )
+                },
+        ) {
+            if (hasRealPreview) {
+                Image(
+                    painter = thumbnailPainter!!,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.16f)),
+                )
+
+                if (category == FileTypeCategory.Video) {
+                    Icon(
+                        imageVector = Icons.Outlined.Movie,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.72f),
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(42.dp),
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .fillMaxWidth(0.56f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = heroStyle.icon,
+                        contentDescription = null,
+                        tint = heroStyle.accentColor.copy(alpha = 0.22f),
+                        modifier = Modifier.size(coverSize * 0.36f),
+                    )
+                    Icon(
+                        imageVector = heroStyle.icon,
+                        contentDescription = null,
+                        tint = heroStyle.accentColor.copy(alpha = 0.92f),
+                        modifier = Modifier.size(coverSize * 0.29f),
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color(0x99222A39),
+                                Color(0xF20B0E14),
+                            ),
+                        ),
+                    ),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = displayTextForUi(reference.title, fullCjkFontReady),
+                        modifier = Modifier.weight(1f),
+                        color = TaggoTheme.colors.textPrimary.copy(alpha = 0.98f),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 17.sp,
+                        lineHeight = 21.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontFamily = fullCjkFontFamily,
+                    )
+                    HeroOpenIconButton(
+                        contentDescription = openButtonLabel,
+                        onClick = onOpenFile,
+                        enabled = canOpenFile,
+                        modifier = Modifier.size(36.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroOpenIconButton(
+    contentDescription: String,
+    onClick: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val iconTint = if (enabled) {
+        TaggoTheme.colors.textSecondary.copy(alpha = 0.66f)
+    } else {
+        TaggoTheme.colors.textSecondary.copy(alpha = 0.30f)
+    }
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier,
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
+            contentDescription = contentDescription,
+            tint = iconTint,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@Composable
+private fun DetailActionLeadingIcon(
+    imageVector: ImageVector,
+    tint: Color,
+    iconSize: Dp = 22.dp,
+) {
+    Box(
+        modifier = Modifier.width(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = imageVector,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(iconSize),
+        )
+    }
+}
+
+@Composable
 private fun DetailHeroCard(
     reference: FileReference,
     locale: AppLocale,
@@ -6780,184 +7247,31 @@ private fun DetailHeroCard(
     openButtonLabel: String,
     onOpenFile: () -> Unit,
 ) {
-    val iconStyle = fileTypeIconStyle(reference)
-    val windowSizeClass = LocalTaggoWindowSizeClass.current
-    val compactLayout = windowSizeClass == TaggoWindowSizeClass.Compact
-    val mediumLayout = windowSizeClass == TaggoWindowSizeClass.Medium
-    val heroMetaLine = remember(reference, fullCjkFontReady) {
-        buildList {
-            add(displayTextForUi(reference.fileType, fullCjkFontReady).ifBlank { "file" })
-            add(formatRelativeTime(reference.lastOpenedAtMillis))
-            add(formatFileSize(reference.fileSizeBytes ?: guessFileSizeFromNotes(reference.notes)))
-        }.joinToString(separator = " • ")
-    }
-
     Card(
         colors = CardDefaults.cardColors(containerColor = TaggoTheme.colors.panelBackground),
-        shape = RoundedCornerShape(
-            if (compactLayout) TaggoCompactTokens.CardRadius else 20.dp,
-        ),
+        shape = RoundedCornerShape(TaggoCompactTokens.CardRadius),
         modifier = Modifier
             .fillMaxWidth()
-            .border(
-                if (compactLayout) TaggoCompactTokens.BorderWidth else 1.dp,
-                TaggoTheme.colors.panelBorder,
-                RoundedCornerShape(
-                    if (compactLayout) TaggoCompactTokens.CardRadius else 20.dp,
-                ),
-            ),
+            .border(TaggoCompactTokens.BorderWidth, TaggoTheme.colors.panelBorder, RoundedCornerShape(TaggoCompactTokens.CardRadius)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        if (compactLayout) {
-            Column(
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(TaggoCompactTokens.DetailHeroPadding),
+            verticalArrangement = Arrangement.spacedBy(TaggoCompactTokens.DetailHeroPadding),
+        ) {
+            DetailHeroPreview(
+                reference = reference,
+                fullCjkFontReady = fullCjkFontReady,
+                fullCjkFontFamily = fullCjkFontFamily,
+                canOpenFile = canOpenFile,
+                openButtonLabel = openButtonLabel,
+                onOpenFile = onOpenFile,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(TaggoCompactTokens.DetailHeroPadding),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(
-                    TaggoCompactTokens.DetailHeroPadding,
-                ),
-            ) {
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(TaggoCompactTokens.DetailCoverAspectRatio)
-                        .then(
-                            if (canOpenFile) {
-                                Modifier.clickable(onClick = onOpenFile)
-                            } else {
-                                Modifier
-                            },
-                        ),
-                ) {
-                    val coverLongSide = maxOf(maxWidth, maxHeight)
-                    val overlaySize = coverLongSide / 3f
-                    val overlayIconSize = overlaySize * 0.58f
-                    FileCoverArtFrame(
-                        reference = reference,
-                        iconStyle = iconStyle,
-                        fullCjkFontReady = fullCjkFontReady,
-                        fullCjkFontFamily = fullCjkFontFamily,
-                        modifier = Modifier.fillMaxSize(),
-                        cornerShape = RoundedCornerShape(TaggoCompactTokens.HeroCoverRadius),
-                        iconSize = TaggoCompactTokens.DetailIconSize,
-                        canOpen = canOpenFile,
-                        overlayContainerSize = overlaySize,
-                        overlayIconSize = overlayIconSize,
-                        overlayBackgroundAlpha = 0.08f,
-                        overlayIconAlpha = 0.30f,
-                        disabledOverlayBackgroundAlpha = 0.05f,
-                        disabledOverlayIconAlpha = 0.22f,
-                    )
-                }
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(TaggoCompactTokens.FileItemGap),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        text = displayTextForUi(reference.title, fullCjkFontReady),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = TaggoTheme.colors.textPrimary,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 20.sp,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                        fontFamily = fullCjkFontFamily,
-                    )
-
-                    Text(
-                        text = heroMetaLine,
-                        color = TaggoTheme.colors.textSecondary,
-                        fontSize = TaggoCompactTokens.Caption,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-        } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                FileCoverArtFrame(
-                    reference = reference,
-                    iconStyle = iconStyle,
-                    fullCjkFontReady = fullCjkFontReady,
-                    fullCjkFontFamily = fullCjkFontFamily,
-                    modifier = Modifier
-                        .size(96.dp),
-                    cornerShape = RoundedCornerShape(22.dp),
-                    iconSize = 44.dp,
-                    canOpen = canOpenFile,
-                    overlayContainerSize = 32.dp,
-                    overlayIconSize = 19.dp,
-                    overlayBackgroundAlpha = 0.12f,
-                    overlayIconAlpha = 0.44f,
-                )
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(if (mediumLayout) 10.dp else 0.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.Top,
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                Text(
-                                    text = displayTextForUi(reference.title, fullCjkFontReady),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = TaggoTheme.colors.textPrimary,
-                                    fontWeight = FontWeight.Normal,
-                                    fontSize = 16.sp,
-                                    maxLines = if (mediumLayout) 3 else 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    fontFamily = fullCjkFontFamily,
-                                )
-                                Text(
-                                    text = heroMetaLine,
-                                    color = TaggoTheme.colors.textSecondary,
-                                    fontSize = 12.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-
-                            if (!mediumLayout) {
-                                TaggoOpenButton(
-                                    label = openButtonLabel,
-                                    onClick = onOpenFile,
-                                    enabled = canOpenFile,
-                                )
-                            }
-                        }
-
-                        if (mediumLayout) {
-                            TaggoOpenButton(
-                                label = openButtonLabel,
-                                modifier = Modifier.wrapContentWidth(Alignment.End),
-                                onClick = onOpenFile,
-                                enabled = canOpenFile,
-                            )
-                        }
-                    }
-                }
-            }
+                    .aspectRatio(TaggoCompactTokens.DetailCoverAspectRatio),
+            )
         }
     }
 }
