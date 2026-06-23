@@ -36,7 +36,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -80,7 +79,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -100,7 +101,18 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jetbrains.compose.resources.painterResource
+import androidx.compose.ui.graphics.painter.Painter
+import org.jetbrains.compose.resources.DrawableResource
 import taggo.composeapp.generated.resources.TaggoLogoBig2048
+import taggo.composeapp.generated.resources.Res
+import taggo.composeapp.generated.resources.taggo_hero_audio
+import taggo.composeapp.generated.resources.taggo_hero_doc
+import taggo.composeapp.generated.resources.taggo_hero_folder
+import taggo.composeapp.generated.resources.taggo_hero_generic
+import taggo.composeapp.generated.resources.taggo_hero_image
+import taggo.composeapp.generated.resources.taggo_hero_pdf
+import taggo.composeapp.generated.resources.taggo_hero_trash
+import taggo.composeapp.generated.resources.taggo_hero_video
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
@@ -110,12 +122,8 @@ import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Archive
-import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.DeleteForever
-import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Image
@@ -124,7 +132,6 @@ import androidx.compose.material.icons.outlined.LocalOffer
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Menu
-import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Slideshow
@@ -5453,7 +5460,6 @@ private fun DetailPage(
                         value = fileNameValue,
                         availableWidth = maxWidth,
                         fullCjkFontReady = fullCjkFontReady,
-                        valueFontFamily = fullCjkFontFamily,
                         widthFraction = 0.42f,
                     )
                     val coverArtFitsInline = reference.coverArtSource?.isNotBlank() == true &&
@@ -5466,13 +5472,12 @@ private fun DetailPage(
                         )
 
                     Column(
-                        verticalArrangement = Arrangement.spacedBy(TaggoCompactTokens.FileItemGap),
+                        verticalArrangement = Arrangement.spacedBy(TaggoTheme.spacing.md),
                     ) {
                         if (fileNameFitsInline) {
                             CompactDetailShortField(
                                 label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u540d" else "File name",
                                 value = fileNameValue,
-                                valueFontFamily = fullCjkFontFamily,
                             )
                         } else {
                             CompactDetailLongField(
@@ -5498,7 +5503,6 @@ private fun DetailPage(
                                 CompactDetailShortField(
                                     label = if (locale == AppLocale.ZhCn) "\u5c01\u9762\u6765\u6e90" else "Cover art source",
                                     value = coverArtSourceValue,
-                                    valueFontFamily = fullCjkFontFamily,
                                 )
                             } else {
                                 CompactDetailLongField(
@@ -5610,13 +5614,8 @@ private fun DetailPage(
             }
         }
         if (compactLayout) {
-            TaggoSectionCard(
+            DetailCompactSectionCard(
                 title = detailInfoTitle,
-                meta = null,
-                compact = true,
-                compactPadding = TaggoCompactTokens.FileItemHorizontalPadding,
-                compactContentGap = TaggoCompactTokens.FileItemGap,
-                trailing = {},
                 content = detailInfoContent,
             )
         } else {
@@ -5680,13 +5679,8 @@ private fun DetailPage(
             }
         }
         if (compactLayout) {
-            TaggoSectionCard(
+            DetailCompactSectionCard(
                 title = detailTagsTitle,
-                meta = detailTagsSubtitle,
-                compact = true,
-                compactPadding = TaggoCompactTokens.FileItemHorizontalPadding,
-                compactContentGap = TaggoCompactTokens.FileItemGap,
-                trailing = {},
                 content = detailTagsContent,
             )
         } else {
@@ -5705,11 +5699,11 @@ private fun DetailPage(
                 onClick = { onReplaceReference(reference) },
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     DetailActionLeadingIcon(
-                        imageVector = Icons.Outlined.FolderOpen,
+                        painter = painterResource(Res.drawable.taggo_hero_folder),
                         tint = TaggoTheme.colors.textPrimary,
                     )
                     Text(if (locale == AppLocale.ZhCn) "\u66f4\u6362\u6587\u4ef6\u8def\u5f84" else "Change file path")
@@ -5717,13 +5711,8 @@ private fun DetailPage(
             }
         }
         if (compactLayout) {
-            TaggoSectionCard(
+            DetailCompactSectionCard(
                 title = detailActionsTitle,
-                meta = null,
-                compact = true,
-                compactPadding = TaggoCompactTokens.FileItemHorizontalPadding,
-                compactContentGap = TaggoCompactTokens.FileItemGap,
-                trailing = {},
                 content = detailActionsContent,
             )
         } else {
@@ -5745,11 +5734,11 @@ private fun DetailPage(
                 ),
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     DetailActionLeadingIcon(
-                        imageVector = Icons.Outlined.DeleteForever,
+                        painter = painterResource(Res.drawable.taggo_hero_trash),
                         tint = TaggoTheme.colors.danger,
                     )
                     Text(if (locale == AppLocale.ZhCn) "\u5220\u9664\u6587\u4ef6\u6761\u76ee" else "Delete file entry")
@@ -5757,13 +5746,8 @@ private fun DetailPage(
             }
         }
         if (compactLayout) {
-            TaggoSectionCard(
+            DetailCompactSectionCard(
                 title = dangerZoneTitle,
-                meta = null,
-                compact = true,
-                compactPadding = TaggoCompactTokens.FileItemHorizontalPadding,
-                compactContentGap = TaggoCompactTokens.FileItemGap,
-                trailing = {},
                 content = dangerZoneContent,
             )
         } else {
@@ -6887,38 +6871,71 @@ private fun resolveVisibleCardTags(
 }
 
 @Composable
+private fun DetailCompactSectionCard(
+    title: String,
+    content: @Composable () -> Unit,
+) {
+    val shape = RoundedCornerShape(TaggoGlobalRadius.Card)
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        shape = shape,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(TaggoCompactTokens.glassCardBackgroundBrush(), shape)
+            .border(1.dp, TaggoCompactTokens.GlassCardBorder, shape),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(TaggoCompactTokens.FileItemHorizontalPadding),
+            verticalArrangement = Arrangement.spacedBy(TaggoCompactTokens.FileItemGap),
+        ) {
+            Text(
+                text = title,
+                color = TaggoTheme.colors.textPrimary,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 26.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            content()
+        }
+    }
+}
+
+@Composable
 private fun CompactDetailShortField(
     label: String,
     value: String,
-    valueFontFamily: FontFamily? = null,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.weight(1f),
-            color = TaggoTheme.colors.textSecondary,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Normal,
-            lineHeight = 18.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = value,
-            modifier = Modifier.weight(1f),
-            color = TaggoTheme.colors.textPrimary,
-            fontWeight = FontWeight.Medium,
-            fontSize = 14.sp,
-            lineHeight = 18.sp,
-            fontFamily = valueFontFamily,
-            textAlign = TextAlign.End,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+      Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(TaggoGlobalSpacing.Xxl),
+          verticalAlignment = Alignment.CenterVertically,
+      ) {
+            Text(
+                text = label,
+                modifier = Modifier.weight(1f),
+                color = TaggoTheme.colors.textSecondary,
+                fontSize = TaggoGlobalTypography.TitleMedium,
+                fontWeight = FontWeight.Normal,
+                lineHeight = 20.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = value,
+                modifier = Modifier.weight(1f),
+                color = TaggoTheme.colors.textPrimary,
+                fontWeight = FontWeight.Medium,
+                fontSize = TaggoGlobalTypography.TitleMedium,
+                lineHeight = 20.sp,
+                textAlign = TextAlign.End,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
     }
 }
 
@@ -6928,27 +6945,28 @@ private fun CompactDetailLongField(
     value: String,
     valueFontFamily: FontFamily? = null,
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Text(
-            text = label,
-            color = TaggoTheme.colors.textSecondary,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Normal,
-            lineHeight = 18.sp,
+      Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(TaggoTheme.spacing.sm),
+      ) {
+          Text(
+              text = label,
+              color = TaggoTheme.colors.textSecondary,
+              fontSize = TaggoGlobalTypography.TitleMedium,
+              fontWeight = FontWeight.Normal,
+              lineHeight = 20.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         Text(
             text = value,
             modifier = Modifier.fillMaxWidth(),
-            color = TaggoTheme.colors.textPrimary,
-            fontWeight = FontWeight.Medium,
-            fontSize = 14.sp,
-            lineHeight = 18.sp,
+              color = TaggoTheme.colors.textPrimary,
+              fontWeight = FontWeight.Medium,
+              fontSize = TaggoGlobalTypography.TitleMedium,
+              lineHeight = 20.sp,
             fontFamily = valueFontFamily,
+            textAlign = TextAlign.Start,
         )
     }
 }
@@ -6988,7 +7006,6 @@ private data class DetailHeroStyle(
     val backgroundGradientColors: List<Color>,
     val accentColor: Color,
     val glowColor: Color,
-    val icon: ImageVector,
 )
 
 private fun resolveDetailHeroStyle(reference: FileReference): DetailHeroStyle {
@@ -7029,24 +7046,8 @@ private fun resolveDetailHeroStyle(reference: FileReference): DetailHeroStyle {
         ),
         accentColor = tint.copy(alpha = 0.88f),
         glowColor = tokens.weakGlowColor.copy(alpha = 0.18f),
-        icon = resolveDetailHeroIcon(category),
     )
 }
-
-private fun resolveDetailHeroIcon(category: FileTypeCategory): ImageVector =
-    when (category) {
-        FileTypeCategory.Image -> Icons.Outlined.Image
-        FileTypeCategory.Video -> Icons.Outlined.Movie
-        FileTypeCategory.Audio -> Icons.Outlined.MusicNote
-        FileTypeCategory.TextDocument -> Icons.Outlined.Description
-        FileTypeCategory.PdfDocument -> Icons.Outlined.PictureAsPdf
-        FileTypeCategory.Spreadsheet -> Icons.Outlined.TableChart
-        FileTypeCategory.Presentation -> Icons.Outlined.Slideshow
-        FileTypeCategory.Archive -> Icons.Outlined.Archive
-        FileTypeCategory.Code -> Icons.Outlined.Code
-        FileTypeCategory.Folder -> Icons.Outlined.Folder
-        else -> Icons.Outlined.InsertDriveFile
-    }
 
 @Composable
 private fun DetailHeroPreview(
@@ -7076,11 +7077,34 @@ private fun DetailHeroPreview(
                 },
             ),
     ) {
-        val coverSize = minOf(maxWidth, maxHeight)
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .drawBehind {
+                    val curveColor = heroStyle.accentColor.copy(alpha = 0.06f)
+                    val curveStroke = Stroke(width = 1.dp.toPx())
+                    val firstCurve = Path().apply {
+                        moveTo(size.width * -0.06f, size.height * 0.68f)
+                        cubicTo(
+                            size.width * 0.28f,
+                            size.height * 0.62f,
+                            size.width * 0.70f,
+                            size.height * 0.64f,
+                            size.width * 1.06f,
+                            size.height * 0.58f,
+                        )
+                    }
+                    val secondCurve = Path().apply {
+                        moveTo(size.width * -0.08f, size.height * 0.82f)
+                        cubicTo(
+                            size.width * 0.32f,
+                            size.height * 0.76f,
+                            size.width * 0.68f,
+                            size.height * 0.78f,
+                            size.width * 1.08f,
+                            size.height * 0.72f,
+                        )
+                    }
                     drawRect(
                         brush = Brush.radialGradient(
                             colors = listOf(
@@ -7091,12 +7115,14 @@ private fun DetailHeroPreview(
                             radius = size.minDimension * 0.92f,
                         ),
                     )
+                    drawPath(path = firstCurve, color = curveColor, style = curveStroke)
+                    drawPath(path = secondCurve, color = curveColor, style = curveStroke)
                     drawRect(
                         brush = Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                Color(0x19080B11),
-                                Color(0xCC080B11),
+                                Color(0x14080B11),
+                                Color(0x34080B11),
                             ),
                         ),
                     )
@@ -7130,20 +7156,14 @@ private fun DetailHeroPreview(
                 Box(
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .fillMaxWidth(0.56f),
+                        .size(96.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = heroStyle.icon,
+                        painter = painterResource(resolveDetailHeroFallbackDrawable(category)),
                         contentDescription = null,
-                        tint = heroStyle.accentColor.copy(alpha = 0.22f),
-                        modifier = Modifier.size(coverSize * 0.36f),
-                    )
-                    Icon(
-                        imageVector = heroStyle.icon,
-                        contentDescription = null,
-                        tint = heroStyle.accentColor.copy(alpha = 0.92f),
-                        modifier = Modifier.size(coverSize * 0.29f),
+                        tint = heroStyle.accentColor.copy(alpha = 0.96f),
+                        modifier = Modifier.size(96.dp),
                     )
                 }
             }
@@ -7156,37 +7176,39 @@ private fun DetailHeroPreview(
                         Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                Color(0x99222A39),
-                                Color(0xF20B0E14),
+                                Color(0x16080B11),
+                                Color(0x47080B11),
                             ),
                         ),
                     ),
             ) {
-                Row(
+                Text(
+                    text = displayTextForUi(reference.title, fullCjkFontReady),
                     modifier = Modifier
+                        .align(Alignment.BottomStart)
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = displayTextForUi(reference.title, fullCjkFontReady),
-                        modifier = Modifier.weight(1f),
-                        color = TaggoTheme.colors.textPrimary.copy(alpha = 0.98f),
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 17.sp,
-                        lineHeight = 21.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        fontFamily = fullCjkFontFamily,
-                    )
-                    HeroOpenIconButton(
-                        contentDescription = openButtonLabel,
-                        onClick = onOpenFile,
-                        enabled = canOpenFile,
-                        modifier = Modifier.size(36.dp),
-                    )
-                }
+                        .padding(
+                            start = TaggoTheme.spacing.lg,
+                            end = 78.dp,
+                            bottom = 18.dp,
+                        ),
+                    color = TaggoTheme.colors.textPrimary.copy(alpha = 0.98f),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 18.sp,
+                    lineHeight = 22.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontFamily = fullCjkFontFamily,
+                )
+                HeroOpenIconButton(
+                    contentDescription = openButtonLabel,
+                    onClick = onOpenFile,
+                    enabled = canOpenFile,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 18.dp, bottom = TaggoTheme.spacing.md)
+                        .size(42.dp),
+                )
             }
         }
     }
@@ -7200,9 +7222,9 @@ private fun HeroOpenIconButton(
     modifier: Modifier = Modifier,
 ) {
     val iconTint = if (enabled) {
-        TaggoTheme.colors.textSecondary.copy(alpha = 0.66f)
+        TaggoTheme.colors.textPrimary.copy(alpha = 0.84f)
     } else {
-        TaggoTheme.colors.textSecondary.copy(alpha = 0.30f)
+        TaggoTheme.colors.textPrimary.copy(alpha = 0.30f)
     }
     IconButton(
         onClick = onClick,
@@ -7213,23 +7235,23 @@ private fun HeroOpenIconButton(
             imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
             contentDescription = contentDescription,
             tint = iconTint,
-            modifier = Modifier.size(22.dp),
+            modifier = Modifier.size(28.dp),
         )
     }
 }
 
 @Composable
 private fun DetailActionLeadingIcon(
-    imageVector: ImageVector,
+    painter: Painter,
     tint: Color,
     iconSize: Dp = 22.dp,
 ) {
     Box(
-        modifier = Modifier.width(24.dp),
+        modifier = Modifier.width(26.dp),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            imageVector = imageVector,
+            painter = painter,
             contentDescription = null,
             tint = tint,
             modifier = Modifier.size(iconSize),
@@ -7758,5 +7780,15 @@ private fun openReferenceWithRefresh(
         coroutineScope.launch {
             appState.refreshReference(reference.id)
         }
+    }
+}
+private fun resolveDetailHeroFallbackDrawable(category: FileTypeCategory): DrawableResource {
+    return when (category) {
+        FileTypeCategory.Image -> Res.drawable.taggo_hero_image
+        FileTypeCategory.Video -> Res.drawable.taggo_hero_video
+        FileTypeCategory.Audio -> Res.drawable.taggo_hero_audio
+        FileTypeCategory.TextDocument -> Res.drawable.taggo_hero_doc
+        FileTypeCategory.PdfDocument -> Res.drawable.taggo_hero_pdf
+        else -> Res.drawable.taggo_hero_generic
     }
 }
