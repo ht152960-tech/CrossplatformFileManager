@@ -7,6 +7,62 @@ import kotlin.math.exp
  *
  * 引擎只依赖仓储接口保存和恢复状态，不依赖具体存储实现，
  * 这样后续从内存实现切换到数据库实现时，主要改动可以收敛在仓储层。
+ *
+ *
+ * filePatternStore
+ * 记录每个文件自己的打开规律，比如多久打开一次、打开过几次
+ * transitionStore
+ * 记录“打开 A 之后，常常接着打开 B”这种关系
+ * weightStore
+ * 记录推荐算法里各种信号的权重，比如时间规律重要还是后继关系重要
+ * stateDao
+ * 保存/恢复推荐引擎状态
+ * eventDao
+ * 保存打开事件、点击事件
+ * onlineLearner
+ * 根据用户点击推荐结果来微调权重
+ *
+ * 用户打开文件
+ * ↓
+ * recordFileOpen()
+ * ↓
+ * 更新这个文件的打开规律
+ * ↓
+ * 更新“上一个文件 → 当前文件”的后继关系
+ * ↓
+ * 保存状态
+ *
+ *
+ * 首页需要推荐
+ * ↓
+ * recommend()
+ * ↓
+ * 每个文件计算：
+ *   时间规律分
+ *   后继关系分
+ *   最近打开分
+ * ↓
+ * 按权重合成总分
+ * ↓
+ * 根据样本数量决定信不信复杂算法
+ * ↓
+ * 排序
+ * ↓
+ * 多样性筛选
+ * ↓
+ * 返回推荐列表
+ *
+ *
+ * 用户点击推荐项
+ * ↓
+ * recordRecommendationClick()
+ * ↓
+ * 记录打开
+ * ↓
+ * 记录推荐点击反馈
+ * ↓
+ * onlineLearner 调整权重
+ *
  */
 class RecommendationEngine(
     private val stateDao: RecommendationStateDao = InMemoryRecommendationRepository(),
@@ -267,6 +323,24 @@ class RecommendationEngine(
      * - 最近打开分：样本不足时的稳定回退信号
      *
      * 排序前会先清理无效条目和重复候选，排序后再做一次轻量多样性选择。
+     *
+     * 拿到所有文件 references
+     * ↓
+     * 去掉无效文件
+     * ↓
+     * 去重
+     * ↓
+     * 去掉当前刚打开的文件
+     * ↓
+     * 给每个候选文件算三个分数
+     * ↓
+     * 按权重合成总分
+     * ↓
+     * 按总分排序
+     * ↓
+     * 做一点多样性调整
+     * ↓
+     * 返回前 limit 个
      */
     fun recommend(
         references: List<FileReference>,
@@ -291,6 +365,9 @@ class RecommendationEngine(
                     openCount = openCount,
                     hasContext = contextFileId != null,
                 )
+//                时间规律分 × 时间规律权重
+//                后继关系分 × 后继关系权重
+//                最近打开分 × 最近打开权重
                 val structuralScore =
                     (weightStore.totalIntervalWeight() * intervalScore) +
                         (weightStore.totalTransitionWeight() * transitionScore) +
