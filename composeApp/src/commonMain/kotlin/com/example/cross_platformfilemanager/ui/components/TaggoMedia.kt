@@ -18,19 +18,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
-import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Block
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.InsertDriveFile
-import androidx.compose.material.icons.outlined.Movie
-import androidx.compose.material.icons.outlined.MusicNote
-import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Slideshow
-import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,9 +50,11 @@ import com.example.cross_platformfilemanager.displayTextForUi
 import com.example.cross_platformfilemanager.rememberThumbnailPainter
 import com.example.cross_platformfilemanager.ui.theme.TaggoTheme
 import com.example.cross_platformfilemanager.ui.theme.TaggoFileTypeColorTokens
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
 
 internal data class FileTypeIconStyle(
-    val icon: ImageVector,
+    val icon: DrawableResource,
     val tint: Color,
     val backgroundBrush: Brush,
 )
@@ -86,8 +77,8 @@ internal fun FileCoverArtFrame(
     disabledOverlayBackgroundAlpha: Float = 0.08f,
     disabledOverlayIconAlpha: Float = 0.30f,
 ) {
-    val thumbnailPainter = rememberThumbnailPainter(reference.thumbnailPath)
-    val hasThumbnail = thumbnailPainter != null && reference.thumbnailStatus == ThumbnailStatus.READY
+    val readyThumbnailPainter = rememberThumbnailPainter(reference.thumbnailPath)
+        ?.takeIf { reference.thumbnailStatus == ThumbnailStatus.READY }
     val hasCoverArt = reference.coverArtSource?.isNotBlank() == true
     val fileTypeCategory = FileTypeClassifier.classify(reference)
     Box(
@@ -96,12 +87,24 @@ internal fun FileCoverArtFrame(
             .background(iconStyle.backgroundBrush),
         contentAlignment = Alignment.Center,
     ) {
-        if (hasThumbnail) {
+        if (readyThumbnailPainter != null) {
             Image(
-                painter = thumbnailPainter,
+                painter = readyThumbnailPainter,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.Crop,
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.28f),
+                            ),
+                        ),
+                    ),
             )
         } else if (hasCoverArt) {
             Column(
@@ -125,7 +128,7 @@ internal fun FileCoverArtFrame(
             }
         } else {
             Icon(
-                imageVector = iconStyle.icon,
+                painter = painterResource(iconStyle.icon),
                 contentDescription = null,
                 tint = iconStyle.tint,
                 modifier = Modifier.size(iconSize),
@@ -143,8 +146,19 @@ internal fun FileCoverArtFrame(
                 icon = overlayIcon,
                 containerSize = overlayContainerSize,
                 iconSize = overlayIconSize,
-                backgroundAlpha = if (canOpen) overlayBackgroundAlpha else disabledOverlayBackgroundAlpha,
-                iconAlpha = if (canOpen) overlayIconAlpha else disabledOverlayIconAlpha,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(4.dp),
+                backgroundAlpha = when {
+                    !canOpen -> disabledOverlayBackgroundAlpha
+                    readyThumbnailPainter != null -> 0.34f
+                    else -> overlayBackgroundAlpha
+                },
+                iconAlpha = when {
+                    !canOpen -> disabledOverlayIconAlpha
+                    readyThumbnailPainter != null -> 0.82f
+                    else -> overlayIconAlpha
+                },
             )
         }
     }
@@ -155,12 +169,13 @@ private fun FileCoverOpenStateOverlay(
     icon: ImageVector,
     containerSize: Dp,
     iconSize: Dp,
+    modifier: Modifier = Modifier,
     backgroundAlpha: Float,
     iconAlpha: Float,
 ) {
     val shape = RoundedCornerShape(999.dp)
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(containerSize)
             .clip(shape)
             .background(Color.Black.copy(alpha = backgroundAlpha)),
@@ -179,28 +194,28 @@ private fun FileCoverOpenStateOverlay(
 internal fun fileTypeIconStyle(reference: FileReference): FileTypeIconStyle {
     val colors = TaggoTheme.colors
 
-    fun style(icon: ImageVector, category: FileTypeCategory): FileTypeIconStyle {
+    fun style(category: FileTypeCategory): FileTypeIconStyle {
         val tokens = TaggoFileTypeColorTokens.forCategory(category)
         return FileTypeIconStyle(
-            icon = icon,
+            icon = FileTypeVisuals.iconDrawableForCategory(category),
             tint = tokens.iconColor,
             backgroundBrush = tokens.avatarBrush(colors.panelBackgroundSoft),
         )
     }
 
     return when (FileTypeClassifier.classify(reference)) {
-        FileTypeCategory.TextDocument -> style(Icons.Outlined.Description, FileTypeCategory.TextDocument)
-        FileTypeCategory.PdfDocument -> style(Icons.Outlined.PictureAsPdf, FileTypeCategory.PdfDocument)
-        FileTypeCategory.Video -> style(Icons.Outlined.Movie, FileTypeCategory.Video)
-        FileTypeCategory.Audio -> style(Icons.Outlined.MusicNote, FileTypeCategory.Audio)
-        FileTypeCategory.Image -> style(Icons.Outlined.Image, FileTypeCategory.Image)
-        FileTypeCategory.Archive -> style(Icons.Outlined.Archive, FileTypeCategory.Archive)
-        FileTypeCategory.Code -> style(Icons.Outlined.Code, FileTypeCategory.Code)
-        FileTypeCategory.Spreadsheet -> style(Icons.Outlined.TableChart, FileTypeCategory.Spreadsheet)
-        FileTypeCategory.Presentation -> style(Icons.Outlined.Slideshow, FileTypeCategory.Presentation)
-        FileTypeCategory.Folder -> style(Icons.Outlined.Folder, FileTypeCategory.Folder)
+        FileTypeCategory.TextDocument -> style(FileTypeCategory.TextDocument)
+        FileTypeCategory.PdfDocument -> style(FileTypeCategory.PdfDocument)
+        FileTypeCategory.Video -> style(FileTypeCategory.Video)
+        FileTypeCategory.Audio -> style(FileTypeCategory.Audio)
+        FileTypeCategory.Image -> style(FileTypeCategory.Image)
+        FileTypeCategory.Archive -> style(FileTypeCategory.Archive)
+        FileTypeCategory.Code -> style(FileTypeCategory.Code)
+        FileTypeCategory.Spreadsheet -> style(FileTypeCategory.Spreadsheet)
+        FileTypeCategory.Presentation -> style(FileTypeCategory.Presentation)
+        FileTypeCategory.Folder -> style(FileTypeCategory.Folder)
         else -> FileTypeIconStyle(
-            icon = Icons.Outlined.InsertDriveFile,
+            icon = FileTypeVisuals.iconDrawableForCategory(FileTypeCategory.Unknown),
             tint = TaggoFileTypeColorTokens.Other.iconColor,
             backgroundBrush = TaggoFileTypeColorTokens.Other.avatarBrush(colors.surface),
         )

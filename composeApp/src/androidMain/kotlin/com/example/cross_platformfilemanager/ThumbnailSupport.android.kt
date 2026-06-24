@@ -2,6 +2,7 @@ package com.example.cross_platformfilemanager
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.util.LruCache
@@ -37,7 +38,7 @@ private object AndroidThumbnailMemoryCache {
 }
 
 actual fun createThumbnailGenerator(): ThumbnailGenerator? =
-    AndroidContextHolder.applicationContext?.contentResolver?.let(::AndroidImageThumbnailGenerator)
+    AndroidContextHolder.applicationContext?.contentResolver?.let(::AndroidMediaThumbnailGenerator)
 
 @Composable
 actual fun rememberThumbnailPainter(thumbnailPath: String?): Painter? {
@@ -47,23 +48,36 @@ actual fun rememberThumbnailPainter(thumbnailPath: String?): Painter? {
     }
 }
 
-private class AndroidImageThumbnailGenerator(
+private class AndroidMediaThumbnailGenerator(
     private val contentResolver: android.content.ContentResolver,
 ) : ThumbnailGenerator {
     override suspend fun generateThumbnail(reference: FileReference): ThumbnailResult =
         withContext(Dispatchers.IO) {
-            if (FileTypeClassifier.classify(reference) != FileTypeCategory.Image) {
-                return@withContext ThumbnailResult.Unsupported("only image thumbnails are supported on Android")
+            val category = FileTypeClassifier.classify(reference)
+            if (category != FileTypeCategory.Image && category != FileTypeCategory.Video) {
+                return@withContext ThumbnailResult.Unsupported("only image and video thumbnails are supported on Android")
             }
 
             val uri = runCatching { Uri.parse(reference.source) }.getOrNull()
-                ?: return@withContext ThumbnailResult.Failed("invalid image uri")
+                ?: return@withContext ThumbnailResult.Failed("invalid media uri")
             if (uri.scheme != "content") {
-                return@withContext ThumbnailResult.Unsupported("only content uri images are supported")
+                return@withContext ThumbnailResult.Unsupported("only content uri media thumbnails are supported")
             }
 
-            val bitmap = loadThumbnail(uri) ?: decodeSampledBitmap(uri)
-                ?: return@withContext ThumbnailResult.Failed("image thumbnail decode failed")
+            val bitmap = when (category) {
+                FileTypeCategory.Image -> loadThumbnail(uri) ?: decodeSampledBitmap(uri)
+                FileTypeCategory.Video -> loadThumbnail(uri) ?: retrieveVideoFrame(uri)
+                else -> null
+            }?.scaledToThumbnail()
+            if (bitmap == null) {
+                debugLog(
+                    "TaggoThumbnailAndroid",
+                    "actual result null id=${reference.id} category=$category uriScheme=${uri.scheme.orEmpty()} " +
+                        "isContent=${uri.scheme == "content"} reason=decode failed"
+                )
+                return@withContext ThumbnailResult.Failed("${category.name.lowercase()} thumbnail decode failed")
+            }
+            debugLog("TaggoThumbnailAndroid", "actual result bitmap non-null id=${reference.id} category=$category")
             val key = AndroidThumbnailMemoryCache.keyFor(reference)
             AndroidThumbnailMemoryCache.put(key, bitmap)
             ThumbnailResult.Ready(key)
@@ -81,6 +95,8 @@ private class AndroidImageThumbnailGenerator(
                     Size(ThumbnailConfig.MAX_SIZE_PX, ThumbnailConfig.MAX_SIZE_PX),
                     null,
                 )
+            }.onFailure { error ->
+                logThumbnailFailure("loadThumbnail", uri, error)
             }.getOrNull()
         } else {
             null
@@ -92,6 +108,8 @@ private class AndroidImageThumbnailGenerator(
             contentResolver.openInputStream(uri)?.use { input ->
                 BitmapFactory.decodeStream(input, null, bounds)
             }
+        }.onFailure { error ->
+            logThumbnailFailure("BitmapFactory bounds", uri, error)
         }
         val sampleSize = calculateInSampleSize(
             width = bounds.outWidth,
@@ -106,7 +124,70 @@ private class AndroidImageThumbnailGenerator(
             contentResolver.openInputStream(uri)?.use { input ->
                 BitmapFactory.decodeStream(input, null, decodeOptions)
             }
+        }.onFailure { error ->
+            logThumbnailFailure("BitmapFactory decode", uri, error)
+        }.getOrNull().also { bitmap ->
+            if (bitmap == null) {
+                debugLog(
+                    "TaggoThumbnailAndroid",
+                    "BitmapFactory decode returned null uriScheme=${uri.scheme.orEmpty()} isContent=${uri.scheme == "content"}"
+                )
+            }
+        }
+    }
+
+    private fun retrieveVideoFrame(uri: Uri): Bitmap? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            val descriptor = try {
+                contentResolver.openFileDescriptor(uri, "r")
+            } catch (error: Exception) {
+                logThumbnailFailure("openFileDescriptor", uri, error)
+                null
+            }
+            descriptor?.use { opened ->
+                retriever.setDataSource(opened.fileDescriptor)
+                val frameTimeUs = retriever.middleFrameTimeUs()
+                retriever.getFrameAtTime(frameTimeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            }
+        } catch (error: Exception) {
+            logThumbnailFailure("MediaMetadataRetriever", uri, error)
+            null
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
+    private fun logThumbnailFailure(stage: String, uri: Uri, error: Throwable) {
+        debugLog(
+            "TaggoThumbnailAndroid",
+            "$stage failed type=${error::class.simpleName.orEmpty()} " +
+                "message=${error.message.orEmpty().thumbnailLogValue()} uriScheme=${uri.scheme.orEmpty()} " +
+                "isContent=${uri.scheme == "content"}"
+        )
+    }
+
+    private fun String.thumbnailLogValue(): String =
+        replace('\n', ' ').replace('\r', ' ').take(96)
+
+    private fun MediaMetadataRetriever.middleFrameTimeUs(): Long {
+        val durationMs = runCatching {
+            extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
         }.getOrNull()
+        return durationMs
+            ?.takeIf { it > 0L }
+            ?.let { duration -> (duration / 2L).coerceAtMost(Long.MAX_VALUE / 1_000L) * 1_000L }
+            ?: 0L
+    }
+
+    private fun Bitmap.scaledToThumbnail(): Bitmap {
+        val maxDimension = maxOf(width, height)
+        if (maxDimension <= ThumbnailConfig.MAX_SIZE_PX || maxDimension <= 0) return this
+
+        val scale = ThumbnailConfig.MAX_SIZE_PX.toFloat() / maxDimension.toFloat()
+        val scaledWidth = (width * scale).toInt().coerceAtLeast(1)
+        val scaledHeight = (height * scale).toInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(this, scaledWidth, scaledHeight, true)
     }
 
     private fun calculateInSampleSize(

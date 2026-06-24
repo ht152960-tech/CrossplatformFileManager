@@ -12,6 +12,8 @@ interface Platform {
 
 expect fun getPlatform(): Platform
 
+expect fun debugLog(tag: String, message: String)
+
 /**
  * 外部打开文件的结果。
  *

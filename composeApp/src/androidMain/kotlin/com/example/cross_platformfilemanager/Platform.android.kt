@@ -3,8 +3,10 @@ package com.example.cross_platformfilemanager
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 
 /**
  * Android 平台信息实现。
@@ -16,6 +18,14 @@ class AndroidPlatform : Platform {
 }
 
 actual fun getPlatform(): Platform = AndroidPlatform()
+
+actual fun debugLog(tag: String, message: String) {
+    val context = AndroidContextHolder.applicationContext ?: return
+    val isDebugBuild = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    if (isDebugBuild) {
+        Log.d(tag, message)
+    }
+}
 
 actual fun isReferenceExternallyOpenable(reference: FileReference): Boolean =
     reference.source.trim().startsWith("content://", ignoreCase = true)

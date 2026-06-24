@@ -2,8 +2,10 @@ package com.example.cross_platformfilemanager
 
 import android.content.ContentResolver
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CoroutineScope
@@ -33,6 +35,8 @@ internal object AndroidBrowserReferencePickerHolder {
 
 internal class AndroidBrowserReferencePicker(
     private val contentResolver: ContentResolver,
+    private val packageManager: PackageManager,
+    private val isDebugBuild: Boolean,
     private val launcher: ActivityResultLauncher<Intent>,
     private val pickerState: AndroidFilePickerViewModel,
 ) : BrowserReferencePicker {
@@ -52,7 +56,11 @@ internal class AndroidBrowserReferencePicker(
                 }
             }
             try {
-                launcher.launch(createOpenDocumentIntent())
+                val openDocumentIntent = createOpenDocumentIntent()
+                val chooserIntent = createChooserIntent(openDocumentIntent)
+                logPickerIntent(openDocumentIntent, isChooser = false)
+                logPickerIntent(chooserIntent, isChooser = true)
+                launcher.launch(chooserIntent)
             } catch (_: Exception) {
                 if (pendingContinuation === continuation) {
                     pendingContinuation = null
@@ -146,10 +154,30 @@ internal class AndroidBrowserReferencePicker(
         Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
-            putExtra(Intent.EXTRA_MIME_TYPES, supportedOpenDocumentMimeTypes)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         }
+
+    private fun createChooserIntent(openDocumentIntent: Intent): Intent =
+        Intent.createChooser(openDocumentIntent, null).apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+
+    private fun logPickerIntent(intent: Intent, isChooser: Boolean) {
+        if (!isDebugBuild) return
+        val component = intent.resolveActivity(packageManager)
+        Log.d(
+            PICKER_LOG_TAG,
+            "launchPicker isChooser=$isChooser " +
+                "action=${intent.action} " +
+                "type=${intent.type} " +
+                "categories=${intent.categories.orEmpty()} " +
+                "flags=${intent.flags} " +
+                "resolvePackage=${component?.packageName} " +
+                "resolveClass=${component?.className}",
+        )
+    }
 }
 
 private data class AndroidDocumentMetadata(
@@ -157,23 +185,7 @@ private data class AndroidDocumentMetadata(
     val sizeBytes: Long? = null,
 )
 
-private val supportedOpenDocumentMimeTypes = arrayOf(
-    "application/zip",
-    "application/x-zip-compressed",
-    "application/octet-stream",
-    "image/*",
-    "video/*",
-    "audio/*",
-    "application/pdf",
-    "text/*",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.ms-powerpoint",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "*/*",
-)
+private const val PICKER_LOG_TAG = "TaggoPicker"
 
 private fun inferFileType(displayName: String, mimeType: String): String {
     val extension = displayName.substringAfterLast('.', "").trim()

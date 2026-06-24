@@ -105,14 +105,8 @@ import androidx.compose.ui.graphics.painter.Painter
 import org.jetbrains.compose.resources.DrawableResource
 import taggo.composeapp.generated.resources.TaggoLogoBig2048
 import taggo.composeapp.generated.resources.Res
-import taggo.composeapp.generated.resources.taggo_hero_audio
-import taggo.composeapp.generated.resources.taggo_hero_doc
 import taggo.composeapp.generated.resources.taggo_hero_folder
-import taggo.composeapp.generated.resources.taggo_hero_generic
-import taggo.composeapp.generated.resources.taggo_hero_image
-import taggo.composeapp.generated.resources.taggo_hero_pdf
 import taggo.composeapp.generated.resources.taggo_hero_trash
-import taggo.composeapp.generated.resources.taggo_hero_video
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
@@ -122,20 +116,14 @@ import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.LocalOffer
-import androidx.compose.material.icons.outlined.Movie
-import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material.icons.outlined.Slideshow
-import androidx.compose.material.icons.outlined.TableChart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
@@ -153,6 +141,7 @@ import com.example.cross_platformfilemanager.ui.theme.TaggoThemeTokens.HomeWide
 import com.example.cross_platformfilemanager.ui.theme.ProvideTaggoTheme
 import com.example.cross_platformfilemanager.ui.components.EmptyPanel
 import com.example.cross_platformfilemanager.ui.components.FileCoverArtFrame
+import com.example.cross_platformfilemanager.ui.components.FileTypeVisuals
 import com.example.cross_platformfilemanager.ui.components.InfoRow
 import com.example.cross_platformfilemanager.ui.components.SearchEmptyState
 import com.example.cross_platformfilemanager.ui.components.SectionCard
@@ -264,6 +253,12 @@ private fun Modifier.compactHomeAmbientBackground(): Modifier =
 private fun snapshotFailureDescription(error: Throwable): String =
     generateSequence(error) { it.cause }
         .joinToString(separator = " <- ") { it.toString() }
+
+private fun String?.thumbnailPathSummaryForLog(): String =
+    if (isNullOrBlank()) "false" else "true:${takeLast(24)}"
+
+private fun String.thumbnailLogValue(): String =
+    replace('\n', ' ').replace('\r', ' ').take(64)
 
 @Composable
 private fun SidebarUploadButton(
@@ -547,6 +542,8 @@ fun App() {
     var snapshotSaveFailureEventId by remember { mutableStateOf(0) }
     var snapshotSaveFailureShownEventId by remember { mutableStateOf(0) }
     var searchFeedbackMessage by remember { mutableStateOf<String?>(null) }
+    val refreshedReadyThumbnailIds = remember { mutableSetOf<String>() }
+    val failedRetryThumbnailIds = remember { mutableSetOf<String>() }
 
     LaunchedEffect(Unit) {
         reportStartupTimeline("App first composition")
@@ -580,6 +577,31 @@ fun App() {
                 println("Snapshot save failed: ${snapshotFailureDescription(error)}")
                 error.printStackTrace()
                 snapshotSaveFailureEventId++
+            }
+        }
+    }
+
+    LaunchedEffect(appState.snapshotVersion, snapshotReady, thumbnailGenerator) {
+        if (snapshotReady && thumbnailGenerator != null) {
+            appState.allReferences.forEach { reference ->
+                val thumbnailPath = reference.thumbnailPath
+                if (
+                    reference.thumbnailStatus == ThumbnailStatus.READY &&
+                    !thumbnailPath.isNullOrBlank() &&
+                    refreshedReadyThumbnailIds.add(reference.id)
+                ) {
+                    debugLog(
+                        "TaggoThumbnailState",
+                        "force refresh id=${reference.id} alreadyForce=false path=${thumbnailPath.thumbnailPathSummaryForLog()}"
+                    )
+                    appState.generateThumbnailForReference(reference.id, force = true)
+                } else if (
+                    reference.thumbnailStatus == ThumbnailStatus.READY &&
+                    !thumbnailPath.isNullOrBlank() &&
+                    reference.id in refreshedReadyThumbnailIds
+                ) {
+                    debugLog("TaggoThumbnailState", "force refresh skipped duplicate id=${reference.id}")
+                }
             }
         }
     }
@@ -995,6 +1017,7 @@ fun App() {
                                         appState = appState,
                                         browserReferencePicker = browserReferencePicker,
                                         browserReferenceResolver = browserReferenceResolver,
+                                        failedRetryThumbnailIds = failedRetryThumbnailIds,
                                         locale = displayLocale,
                                         fullCjkFontReady = fullCjkFontReady,
                                         fullCjkFontFamily = fullCjkFontFamily,
@@ -2633,7 +2656,7 @@ private fun MediumFileTypeRow(
         onClick = onClick,
     ) {
         Icon(
-            imageVector = iconForTypeFilter(summary.filter),
+            painter = painterResource(iconForTypeFilter(summary.filter)),
             contentDescription = null,
             tint = accent,
             modifier = Modifier.size(MediumHomeMetrics.TypeIconSize),
@@ -3218,7 +3241,7 @@ private fun CompactFileTypeRow(
         onClick = onClick,
     ) {
         Icon(
-            imageVector = iconForTypeFilter(summary.filter),
+            painter = painterResource(iconForTypeFilter(summary.filter)),
             contentDescription = null,
             tint = typeColors.iconColor,
             modifier = Modifier.size(CompactHomeMetrics.TypeIconSize),
@@ -3935,7 +3958,7 @@ private fun DashboardTypeRow(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = icon,
+                painter = painterResource(icon),
                 contentDescription = null,
                 tint = accent,
                 modifier = Modifier.size(HomeWide.Size.TypeIconInner),
@@ -4161,17 +4184,17 @@ private fun resolveDashboardTypeSummaries(references: List<FileReference>): List
         }
 }
 
-private fun iconForTypeFilter(filter: AllFilesTypeFilter): ImageVector =
+private fun iconForTypeFilter(filter: AllFilesTypeFilter): DrawableResource =
     when (filter) {
-        AllFilesTypeFilter.Image -> Icons.Outlined.Image
-        AllFilesTypeFilter.Video -> Icons.Outlined.Movie
-        AllFilesTypeFilter.Audio -> Icons.Outlined.MusicNote
-        AllFilesTypeFilter.Document -> Icons.Outlined.Description
-        AllFilesTypeFilter.Spreadsheet -> Icons.Outlined.TableChart
-        AllFilesTypeFilter.Presentation -> Icons.Outlined.Slideshow
+        AllFilesTypeFilter.Image -> FileTypeVisuals.iconDrawableForCategory(FileTypeCategory.Image)
+        AllFilesTypeFilter.Video -> FileTypeVisuals.iconDrawableForCategory(FileTypeCategory.Video)
+        AllFilesTypeFilter.Audio -> FileTypeVisuals.iconDrawableForCategory(FileTypeCategory.Audio)
+        AllFilesTypeFilter.Document -> FileTypeVisuals.iconDrawableForCategory(FileTypeCategory.TextDocument)
+        AllFilesTypeFilter.Spreadsheet -> FileTypeVisuals.iconDrawableForCategory(FileTypeCategory.Spreadsheet)
+        AllFilesTypeFilter.Presentation -> FileTypeVisuals.iconDrawableForCategory(FileTypeCategory.Presentation)
         AllFilesTypeFilter.Other,
         AllFilesTypeFilter.All,
-        -> Icons.Outlined.InsertDriveFile
+        -> FileTypeVisuals.iconDrawableForCategory(FileTypeCategory.Unknown)
     }
 
 private fun colorTokensForTypeFilter(filter: AllFilesTypeFilter) =
@@ -5226,6 +5249,7 @@ private fun DetailPage(
     appState: FileManagerAppState,
     browserReferencePicker: BrowserReferencePicker?,
     browserReferenceResolver: BrowserReferenceResolver?,
+    failedRetryThumbnailIds: MutableSet<String>,
     locale: AppLocale,
     fullCjkFontReady: Boolean,
     fullCjkFontFamily: FontFamily,
@@ -5291,6 +5315,52 @@ private fun DetailPage(
     val canOpenFile = canOpenReferenceExternally(reference) ||
         canUseWebReopenFlow
     val openButtonLabel = if (locale == AppLocale.ZhCn) "\u2197 \u6253\u5f00\u6b64\u6587\u4ef6" else "\u2197 Open this file"
+    val detailCategory = FileTypeClassifier.classify(reference)
+
+    LaunchedEffect(reference.id, reference.title, reference.fileType, reference.thumbnailStatus, reference.thumbnailPath) {
+        debugLog(
+            "TaggoThumbnailUi",
+            "detail enter id=${reference.id} fileName=${reference.title.thumbnailLogValue()} " +
+                "category=$detailCategory thumbnailStatus=${reference.thumbnailStatus} " +
+                "thumbnailPath=${reference.thumbnailPath.thumbnailPathSummaryForLog()}"
+        )
+    }
+
+    LaunchedEffect(reference.id, reference.source, reference.thumbnailStatus, reference.thumbnailPath) {
+        val canRetryFailed = reference.thumbnailStatus == ThumbnailStatus.FAILED &&
+            reference.needsThumbnailGeneration() &&
+            reference.id !in failedRetryThumbnailIds
+        val shouldGenerate = reference.thumbnailStatus == ThumbnailStatus.NONE &&
+            reference.needsThumbnailGeneration()
+        val shouldForceRetryFailed = canRetryFailed
+        val skipReason = when {
+            shouldGenerate -> "none"
+            shouldForceRetryFailed -> "previous failure retry"
+            !reference.needsThumbnailGeneration() -> "unsupported category"
+            reference.thumbnailStatus == ThumbnailStatus.GENERATING -> "already generating"
+            reference.thumbnailStatus == ThumbnailStatus.READY &&
+                !reference.thumbnailPath.isNullOrBlank() -> "ready with thumbnail path"
+            reference.thumbnailStatus == ThumbnailStatus.READY -> "ready without thumbnail path"
+            reference.thumbnailStatus == ThumbnailStatus.FAILED &&
+                reference.id in failedRetryThumbnailIds -> "previous failure already retried"
+            reference.thumbnailStatus == ThumbnailStatus.FAILED -> "previous failure"
+            reference.thumbnailStatus == ThumbnailStatus.UNSUPPORTED -> "unsupported status"
+            else -> "unknown"
+        }
+        debugLog(
+            "TaggoThumbnailState",
+            "generation decision id=${reference.id} fileName=${reference.title.thumbnailLogValue()} " +
+                "category=$detailCategory thumbnailStatus=${reference.thumbnailStatus} " +
+                "trigger=${shouldGenerate || shouldForceRetryFailed} force=$shouldForceRetryFailed " +
+                "skipReason=${skipReason.thumbnailLogValue()}"
+        )
+        if (shouldGenerate) {
+            appState.generateThumbnailForReference(reference.id)
+        } else if (shouldForceRetryFailed) {
+            failedRetryThumbnailIds.add(reference.id)
+            appState.generateThumbnailForReference(reference.id, force = true)
+        }
+    }
 
     fun clearDuplicateTagWarning() {
         if (tagFeedbackIsWarning) {
@@ -5519,7 +5589,7 @@ private fun DetailPage(
                             },
                             valueFontFamily = fullCjkFontFamily,
                         )
-                        if (reference.thumbnailPath?.isNotBlank() == true) {
+                        if (shouldShowThumbnailStatusForDetail(reference)) {
                             CompactDetailShortField(
                                 label = if (locale == AppLocale.ZhCn) "\u7f29\u7565\u56fe\u7f13\u5b58" else "Thumbnail cache",
                                 value = thumbnailStatusLabel(reference, locale),
@@ -5580,7 +5650,7 @@ private fun DetailPage(
                             valueFontFamily = fullCjkFontFamily,
                         )
                     }
-                    if (reference.thumbnailPath?.isNotBlank() == true) {
+                    if (shouldShowThumbnailStatusForDetail(reference)) {
                         InfoRow(
                             label = if (locale == AppLocale.ZhCn) "\u7f29\u7565\u56fe\u7f13\u5b58" else "Thumbnail cache",
                             value = thumbnailStatusLabel(reference, locale),
@@ -7065,6 +7135,15 @@ private fun DetailHeroPreview(
     val hasRealPreview = thumbnailPainter != null &&
         reference.thumbnailStatus == ThumbnailStatus.READY &&
         (category == FileTypeCategory.Image || category == FileTypeCategory.Video)
+    LaunchedEffect(reference.id, reference.thumbnailStatus, reference.thumbnailPath, thumbnailPainter != null, hasRealPreview) {
+        debugLog(
+            "TaggoThumbnailUi",
+            "ui consume id=${reference.id} thumbnailStatus=${reference.thumbnailStatus} " +
+                "thumbnailPainterNull=${thumbnailPainter == null} " +
+                "display=${if (hasRealPreview) "thumbnail" else "fallback"} " +
+                "thumbnailPath=${reference.thumbnailPath.thumbnailPathSummaryForLog()}"
+        )
+    }
     BoxWithConstraints(
         modifier = modifier
             .clip(RoundedCornerShape(TaggoCompactTokens.HeroCoverRadius))
@@ -7141,17 +7220,6 @@ private fun DetailHeroPreview(
                         .fillMaxSize()
                         .background(Color.Black.copy(alpha = 0.16f)),
                 )
-
-                if (category == FileTypeCategory.Video) {
-                    Icon(
-                        imageVector = Icons.Outlined.Movie,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.72f),
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .size(42.dp),
-                    )
-                }
             } else {
                 Box(
                     modifier = Modifier
@@ -7160,7 +7228,7 @@ private fun DetailHeroPreview(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        painter = painterResource(resolveDetailHeroFallbackDrawable(category)),
+                        painter = painterResource(FileTypeVisuals.heroFallbackDrawableForCategory(category)),
                         contentDescription = null,
                         tint = heroStyle.accentColor.copy(alpha = 0.96f),
                         modifier = Modifier.size(96.dp),
@@ -7201,6 +7269,11 @@ private fun DetailHeroPreview(
                     fontFamily = fullCjkFontFamily,
                 )
                 HeroOpenIconButton(
+                    imageVector = if (category == FileTypeCategory.Audio || category == FileTypeCategory.Video) {
+                        Icons.Outlined.PlayArrow
+                    } else {
+                        Icons.AutoMirrored.Outlined.OpenInNew
+                    },
                     contentDescription = openButtonLabel,
                     onClick = onOpenFile,
                     enabled = canOpenFile,
@@ -7216,6 +7289,7 @@ private fun DetailHeroPreview(
 
 @Composable
 private fun HeroOpenIconButton(
+    imageVector: ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
     enabled: Boolean,
@@ -7232,7 +7306,7 @@ private fun HeroOpenIconButton(
         modifier = modifier,
     ) {
         Icon(
-            imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
+            imageVector = imageVector,
             contentDescription = contentDescription,
             tint = iconTint,
             modifier = Modifier.size(28.dp),
@@ -7723,6 +7797,15 @@ private fun thumbnailStatusLabel(reference: FileReference, locale: AppLocale): S
         ThumbnailStatus.NONE -> if (locale == AppLocale.ZhCn) "\u672a\u751f\u6210" else "Not generated"
     }
 
+private fun shouldShowThumbnailStatusForDetail(reference: FileReference): Boolean =
+    when (FileTypeClassifier.classify(reference)) {
+        FileTypeCategory.Image,
+        FileTypeCategory.Video,
+        -> true
+
+        else -> false
+    }
+
 private fun webDraftWeaklyMatches(
     existing: FileReference,
     replacement: BrowserReferenceDraft,
@@ -7780,15 +7863,5 @@ private fun openReferenceWithRefresh(
         coroutineScope.launch {
             appState.refreshReference(reference.id)
         }
-    }
-}
-private fun resolveDetailHeroFallbackDrawable(category: FileTypeCategory): DrawableResource {
-    return when (category) {
-        FileTypeCategory.Image -> Res.drawable.taggo_hero_image
-        FileTypeCategory.Video -> Res.drawable.taggo_hero_video
-        FileTypeCategory.Audio -> Res.drawable.taggo_hero_audio
-        FileTypeCategory.TextDocument -> Res.drawable.taggo_hero_doc
-        FileTypeCategory.PdfDocument -> Res.drawable.taggo_hero_pdf
-        else -> Res.drawable.taggo_hero_generic
     }
 }

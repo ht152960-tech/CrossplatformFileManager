@@ -30,7 +30,7 @@ object FileTypeClassifier {
     // 先把最常见、最容易被误判的人类文档类型单独收拢。
     private val textDocumentTokens = setOf("txt", "text", "md", "markdown", "log", "rtf", "doc", "docx")
     private val pdfTokens = setOf("pdf")
-    private val videoTokens = setOf("mp4", "mkv", "mov", "avi", "webm", "video", "movie")
+    private val videoTokens = setOf("mp4", "mkv", "mov", "avi", "webm", "mpg", "mpeg", "mpe", "video", "movie")
     private val audioTokens = setOf("mp3", "wav", "flac", "aac", "m4a", "ogg", "audio", "music", "song")
     private val imageTokens = setOf("png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "image", "photo", "picture")
     private val archiveTokens = setOf("zip", "rar", "7z", "tar", "gz", "archive", "compress")
@@ -53,8 +53,8 @@ object FileTypeClassifier {
         return when {
             matchesAny(tokens, textDocumentTokens) -> FileTypeCategory.TextDocument
             matchesAny(tokens, pdfTokens) -> FileTypeCategory.PdfDocument
-            matchesAny(tokens, videoTokens) -> FileTypeCategory.Video
             matchesAny(tokens, audioTokens) -> FileTypeCategory.Audio
+            matchesAny(tokens, videoTokens) -> FileTypeCategory.Video
             matchesAny(tokens, imageTokens) -> FileTypeCategory.Image
             matchesAny(tokens, archiveTokens) -> FileTypeCategory.Archive
             matchesAny(tokens, codeTokens) -> FileTypeCategory.Code
@@ -66,13 +66,29 @@ object FileTypeClassifier {
     }
 
     private fun referenceTokens(reference: FileReference): Set<String> = buildSet {
-        add(reference.fileType.trim().lowercase())
-        reference.title.substringAfterLast('.', "").trim().lowercase().takeIf { it.isNotBlank() }?.let(::add)
-        reference.source.substringAfterLast('.', "").trim().lowercase().takeIf { it.isNotBlank() }?.let(::add)
+        addTokenized(reference.fileType)
+        addExtensionToken(reference.title)
+        addExtensionToken(reference.source)
+        addTokenized(reference.source)
     }
 
     private fun matchesAny(tokens: Set<String>, candidates: Set<String>): Boolean =
-        candidates.any { candidate ->
-            tokens.any { token -> token == candidate || token.contains(candidate) }
-        }
+        candidates.any(tokens::contains)
+
+    private fun MutableSet<String>.addExtensionToken(value: String) {
+        value.substringAfterLast('.', "")
+            .trim()
+            .lowercase()
+            .takeIf { it.isNotBlank() }
+            ?.let(::add)
+    }
+
+    private fun MutableSet<String>.addTokenized(value: String) {
+        value.trim()
+            .lowercase()
+            .split('/', '.', '-', '_', '+', ';', ' ', ':', '%', '?', '&', '=')
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .forEach(::add)
+    }
 }

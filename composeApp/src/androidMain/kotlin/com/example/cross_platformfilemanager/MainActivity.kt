@@ -1,6 +1,7 @@
 package com.example.cross_platformfilemanager
 
 import android.app.Activity
+import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -39,6 +40,8 @@ class MainActivity : ComponentActivity() {
         }
         browserReferencePicker = AndroidBrowserReferencePicker(
             contentResolver = contentResolver,
+            packageManager = packageManager,
+            isDebugBuild = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0,
             launcher = documentLauncher,
             pickerState = filePickerState,
         )

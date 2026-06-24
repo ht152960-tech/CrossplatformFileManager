@@ -3,6 +3,11 @@ package com.example.cross_platformfilemanager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * 应用状态层，负责把文件仓储、推荐引擎、快照恢复和界面可读状态组织在一起。
@@ -28,6 +33,8 @@ class FileManagerAppState(
     private val defaultDraftCoverArtSource = ""
     private val defaultDraftTags = ""
     private val defaultDraftNotes = ""
+    private val thumbnailScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val generatingThumbnailIds = mutableSetOf<String>()
 
     var preferredLocale by mutableStateOf(startupDefaultLocale)
     var locale by mutableStateOf(startupDefaultLocale)
@@ -245,7 +252,7 @@ class FileManagerAppState(
         selectedTag = snapshot.selectedTag
         selectedFileType = snapshot.selectedFileType
         favoritesOnly = snapshot.favoritesOnly
-        repository.replaceReferences(snapshot.references)
+        repository.replaceReferences(snapshot.references.map(::clearStaleGeneratingThumbnail))
         repository.replaceRecentSearches(snapshot.recentSearches)
         repository.replaceRecommendationLogs(snapshot.recommendationLogs)
         recommendationEngine.restoreSnapshot(snapshot.recommendationState)
@@ -263,7 +270,7 @@ class FileManagerAppState(
      */
     fun mergeSnapshot(snapshot: AppSnapshot) {
         snapshot.references.forEach { reference ->
-            repository.upsertReference(reference)
+            repository.upsertReference(clearStaleGeneratingThumbnail(reference))
         }
         snapshot.searchTags.forEach { tag ->
             addSearchTag(tag)
@@ -596,32 +603,90 @@ class FileManagerAppState(
         snapshotVersion++
     }
 
-    suspend fun generateThumbnailForReference(referenceId: String) {
+    fun generateThumbnailForReference(referenceId: String, force: Boolean = false) {
+        thumbnailScope.launch {
+            runThumbnailGeneration(referenceId, force)
+        }
+    }
+
+    private suspend fun runThumbnailGeneration(referenceId: String, force: Boolean = false) {
         val current = repository.findReferenceById(referenceId) ?: return
-        println("Thumbnail request: fileId=${current.id}, sourceKind=${current.sourceKind}, fileType=${current.fileType}, source=${current.source}")
+        val tag = "TaggoThumbnailState"
+        val category = FileTypeClassifier.classify(current)
+        debugLog(
+            tag,
+            "generate start id=${current.id} name=${current.title.thumbnailLogValue()} category=$category force=$force " +
+                "previous=${current.thumbnailStatus} previousPath=${current.thumbnailPath.thumbnailPathLogValue()}"
+        )
         if (!current.needsThumbnailGeneration()) {
-            println("Thumbnail skipped as unsupported: fileId=${current.id}, fileType=${current.fileType}")
+            debugLog(tag, "skip unsupported type id=${current.id} category=$category")
             repository.updateReference(referenceId) { existing ->
                 existing.copy(thumbnailPath = null, thumbnailStatus = ThumbnailStatus.UNSUPPORTED)
             }
+            debugLog(tag, "state finish id=${current.id} final=UNSUPPORTED thumbnailPath=false")
             snapshotVersion++
             return
         }
         if (current.thumbnailStatus == ThumbnailStatus.GENERATING) {
+            if (current.id in generatingThumbnailIds) {
+                debugLog(tag, "skip already generating id=${current.id}")
+            } else {
+                debugLog(tag, "stale generating cleared id=${current.id}")
+                repository.updateReference(referenceId) { existing ->
+                    existing.copy(thumbnailPath = null, thumbnailStatus = ThumbnailStatus.FAILED)
+                }
+                debugLog(tag, "state finish id=${current.id} final=FAILED thumbnailPath=false")
+                snapshotVersion++
+            }
             return
         }
-        if (current.thumbnailStatus == ThumbnailStatus.READY && !current.thumbnailPath.isNullOrBlank()) {
+        if (!force && current.thumbnailStatus == ThumbnailStatus.READY && !current.thumbnailPath.isNullOrBlank()) {
+            debugLog(tag, "skip ready id=${current.id} force=false path=${current.thumbnailPath.thumbnailPathLogValue()}")
             return
         }
-
-        repository.updateReference(referenceId) { existing ->
-            existing.copy(thumbnailStatus = ThumbnailStatus.GENERATING)
+        if (force && thumbnailGenerator == null) {
+            debugLog(tag, "skip source unavailable id=${current.id} reason=thumbnail generator unavailable")
+            return
         }
-        snapshotVersion++
+        if (!generatingThumbnailIds.add(referenceId)) {
+            debugLog(tag, "skip already generating id=${current.id}")
+            return
+        }
+        if (force) {
+            current.thumbnailPath?.let { path -> thumbnailGenerator?.deleteThumbnail(path) }
+        }
 
-        println("Thumbnail generation start: fileId=${current.id}, fileType=${current.fileType}, mimeType=${current.fileType}")
-        val result = thumbnailGenerator?.generateThumbnail(repository.findReferenceById(referenceId) ?: current)
-            ?: ThumbnailResult.Unsupported("thumbnail generator unavailable")
+        val result = try {
+            repository.updateReference(referenceId) { existing ->
+                existing.copy(thumbnailStatus = ThumbnailStatus.GENERATING)
+            }
+            snapshotVersion++
+            debugLog(tag, "generating id=${current.id}")
+            thumbnailGenerator?.generateThumbnail(repository.findReferenceById(referenceId) ?: current)
+                ?: ThumbnailResult.Unsupported("thumbnail generator unavailable")
+        } catch (error: CancellationException) {
+            debugLog(
+                tag,
+                "generation canceled ignored id=${current.id} type=${error::class.simpleName} " +
+                    "message=${error.message.orEmpty().thumbnailLogValue()}"
+            )
+            repository.updateReference(referenceId) { existing ->
+                existing.copy(
+                    thumbnailPath = current.thumbnailPath,
+                    thumbnailStatus = current.thumbnailStatus,
+                )
+            }
+            snapshotVersion++
+            return
+        } catch (error: Throwable) {
+            debugLog(
+                tag,
+                "actual exception id=${current.id} type=${error::class.simpleName} message=${error.message.orEmpty().thumbnailLogValue()}"
+            )
+            ThumbnailResult.Failed("thumbnail generator exception: ${error.message ?: error::class.simpleName}")
+        } finally {
+            generatingThumbnailIds.remove(referenceId)
+        }
 
         repository.updateReference(referenceId) { existing ->
             when (result) {
@@ -631,7 +696,7 @@ class FileManagerAppState(
                 )
 
                 is ThumbnailResult.Failed -> {
-                    println("Thumbnail generation failed for ${existing.id}: ${result.reason}")
+                    debugLog(tag, "actual result null id=${existing.id} reason=${result.reason.thumbnailLogValue()}")
                     existing.copy(
                         thumbnailPath = null,
                         thumbnailStatus = ThumbnailStatus.FAILED,
@@ -639,7 +704,7 @@ class FileManagerAppState(
                 }
 
                 is ThumbnailResult.Unsupported -> {
-                    println("Thumbnail generation unsupported for ${existing.id}: ${result.reason}")
+                    debugLog(tag, "actual unsupported id=${existing.id} reason=${result.reason.thumbnailLogValue()}")
                     existing.copy(
                         thumbnailPath = null,
                         thumbnailStatus = ThumbnailStatus.UNSUPPORTED,
@@ -647,15 +712,45 @@ class FileManagerAppState(
                 }
             }
         }
-        when (result) {
-            is ThumbnailResult.Ready -> println(
-                "Thumbnail saved: fileId=${current.id}, saveMode=thumbnailPathDataUrl, key=inline-data-url, writtenBack=true, length=${result.thumbnailPath.length}"
-            )
-            is ThumbnailResult.Failed -> println("Thumbnail save skipped after failure: fileId=${current.id}")
-            is ThumbnailResult.Unsupported -> println("Thumbnail save skipped as unsupported: fileId=${current.id}")
-        }
+        debugLog(
+            tag,
+            "state finish id=${current.id} final=${result.thumbnailStatusName()} " +
+                "thumbnailPath=${(result as? ThumbnailResult.Ready)?.thumbnailPath.thumbnailPathLogValue()} " +
+                "reason=${result.thumbnailFailureReason().thumbnailLogValue()}"
+        )
         snapshotVersion++
     }
+
+    private fun clearStaleGeneratingThumbnail(reference: FileReference): FileReference =
+        if (reference.thumbnailStatus == ThumbnailStatus.GENERATING) {
+            debugLog(
+                "TaggoThumbnailState",
+                "restore stale generating id=${reference.id} name=${reference.title.thumbnailLogValue()} -> FAILED"
+            )
+            reference.copy(thumbnailPath = null, thumbnailStatus = ThumbnailStatus.FAILED)
+        } else {
+            reference
+        }
+
+    private fun ThumbnailResult.thumbnailStatusName(): String =
+        when (this) {
+            is ThumbnailResult.Ready -> ThumbnailStatus.READY.name
+            is ThumbnailResult.Failed -> ThumbnailStatus.FAILED.name
+            is ThumbnailResult.Unsupported -> ThumbnailStatus.UNSUPPORTED.name
+        }
+
+    private fun ThumbnailResult.thumbnailFailureReason(): String =
+        when (this) {
+            is ThumbnailResult.Failed -> reason.ifBlank { "generic failed" }
+            is ThumbnailResult.Unsupported -> reason.ifBlank { "unsupported" }
+            is ThumbnailResult.Ready -> "none"
+        }
+
+    private fun String?.thumbnailPathLogValue(): String =
+        if (isNullOrBlank()) "false" else "true:${takeLast(24)}"
+
+    private fun String.thumbnailLogValue(): String =
+        replace('\n', ' ').replace('\r', ' ').take(64)
 
     private fun guessSourceKind(source: String): FileSourceKind = when {
         source.startsWith("http://", ignoreCase = true) -> FileSourceKind.Url

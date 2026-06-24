@@ -468,6 +468,66 @@ class RecommendationCoreTest {
             FileTypeCategory.Video,
             classify("trailer.mov"),
         )
+        assertEquals(
+            FileTypeCategory.Video,
+            classify("movie000.mpg"),
+        )
+        assertEquals(
+            FileTypeCategory.Video,
+            classify("movie000.MPEG"),
+        )
+        assertEquals(
+            FileTypeCategory.Video,
+            classify("clip.mpe"),
+        )
+        assertEquals(
+            FileTypeCategory.Video,
+            classifyReference(title = "unknown", fileType = "video/mpeg"),
+        )
+        assertEquals(
+            FileTypeCategory.Audio,
+            classifyReference(title = "suzume_no_tojimari", fileType = "audio/mpeg"),
+        )
+        assertEquals(
+            FileTypeCategory.Audio,
+            classifyReference(
+                title = "suzume_no_tojimari",
+                fileType = "MPEG",
+                source = "content://media/external/audio%3A68",
+            ),
+        )
+        assertEquals(
+            FileTypeCategory.Video,
+            classifyReference(title = "movie000", fileType = "MPEG"),
+        )
+    }
+
+    @Test
+    fun fileTypeClassifierRecognizesZipArchivesFromNameAndMimeFallbacks() {
+        assertEquals(
+            FileTypeCategory.Archive,
+            classifyReference(title = "backup.zip", fileType = "application/zip"),
+        )
+        assertEquals(
+            FileTypeCategory.Archive,
+            classifyReference(title = "backup.zip", fileType = "application/x-zip-compressed"),
+        )
+        assertEquals(
+            FileTypeCategory.Archive,
+            classifyReference(title = "backup.zip", fileType = "application/octet-stream"),
+        )
+        assertEquals(
+            FileTypeCategory.Archive,
+            classifyReference(title = "backup.zip", fileType = ""),
+        )
+        assertEquals(
+            FileTypeCategory.Archive,
+            classifyReference(title = "BACKUP.ZIP", fileType = ""),
+        )
+        assertEquals(
+            FileTypeCategory.Unknown,
+            classifyReference(title = "payload.bin", fileType = "application/octet-stream"),
+        )
     }
 
     @Test
@@ -590,6 +650,23 @@ class RecommendationCoreTest {
         source = "/tmp/$fileName",
         sourceKind = FileSourceKind.ManualPath,
         fileType = fileName.substringAfterLast('.', fileName.uppercase()),
+        fileSizeBytes = null,
+        tags = emptyList(),
+        notes = "",
+        createdAtMillis = 0L,
+        lastOpenedAtMillis = 0L,
+    ).let(FileTypeClassifier::classify)
+
+    private fun classifyReference(
+        title: String,
+        fileType: String,
+        source: String = "/tmp/$title",
+    ): FileTypeCategory = FileReference(
+        id = title,
+        title = title,
+        source = source,
+        sourceKind = FileSourceKind.ManualPath,
+        fileType = fileType,
         fileSizeBytes = null,
         tags = emptyList(),
         notes = "",

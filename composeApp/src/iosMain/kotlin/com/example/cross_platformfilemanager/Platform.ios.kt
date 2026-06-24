@@ -14,6 +14,8 @@ class IOSPlatform : Platform {
 
 actual fun getPlatform(): Platform = IOSPlatform()
 
+actual fun debugLog(tag: String, message: String) = Unit
+
 actual fun isReferenceExternallyOpenable(reference: FileReference): Boolean {
     if (reference.source.trim().isBlank()) return false
     return when (reference.sourceKind) {
