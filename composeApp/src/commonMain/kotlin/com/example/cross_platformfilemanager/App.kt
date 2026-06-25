@@ -375,11 +375,11 @@ private fun MediumNavigationSidebar(
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.size(MediumHomeMetrics.SidebarLogoSize),
                 )
-                Text(
+            Text(
                     text = "Taggo",
                     color = TaggoTheme.colors.textPrimary,
                     fontSize = MediumHomeMetrics.SidebarBrandFontSize,
-                    lineHeight = 22.sp,
+                    lineHeight = 24.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Clip,
@@ -574,8 +574,7 @@ fun App() {
                 snapshotSaveFailureShownEventId = snapshotSaveFailureEventId
                 snapshotSnackbarHostState.currentSnackbarData?.dismiss()
             } catch (error: Exception) {
-                println("Snapshot save failed: ${snapshotFailureDescription(error)}")
-                error.printStackTrace()
+                debugLog("TaggoSnapshot", "save failed: ${snapshotFailureDescription(error)}")
                 snapshotSaveFailureEventId++
             }
         }
@@ -639,22 +638,25 @@ fun App() {
     }
 
     fun openFileDirectly(reference: FileReference) {
-        // TODO:
-        // openFileDirectly() currently records openReference()
-        // before external open succeeds.
-        // Failed external opens may still be counted as opened.
-        // Revisit after medium dashboard refactor.
         coroutineScope.launch {
-            appState.openReference(reference.id)
-            if (
+            val needsRefresh =
                 reference.sourceKind == FileSourceKind.BrowserHandle &&
-                reference.source.startsWith("browser-", ignoreCase = true)
-            ) {
+                    reference.source.startsWith("browser-handle:", ignoreCase = true)
+            if (needsRefresh) {
                 appState.refreshReference(reference.id)
             }
-            val openableReference =
-                appState.activeReference?.takeIf { it.id == reference.id } ?: reference
-            openReferenceExternallyWithResult(openableReference)
+            val openableReference = appState.activeReference?.takeIf { it.id == reference.id } ?: reference
+            val openResult = openReferenceExternallyWithResult(openableReference)
+            if (openResult.opened) {
+                appState.openReference(openableReference.id)
+            } else {
+                snapshotSnackbarHostState.showSnackbar(
+                    message = openResult.message?.let { localizeWebOpenMessage(it, appState.locale) }
+                        ?: openFileFailureMessage(openableReference, appState.locale),
+                    actionLabel = if (appState.locale == AppLocale.ZhCn) "\u77e5\u9053\u4e86" else "OK",
+                    duration = SnackbarDuration.Short,
+                )
+            }
         }
     }
 
@@ -933,7 +935,7 @@ fun App() {
                                 )
                                 else -> PaddingValues(20.dp)
                             }
-                            Box(
+            Box(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .then(
@@ -2661,7 +2663,7 @@ private fun MediumFileTypeRow(
             tint = accent,
             modifier = Modifier.size(MediumHomeMetrics.TypeIconSize),
         )
-        Text(
+            Text(
             text = typeFilterLabel(summary.filter, locale),
             modifier = Modifier.width(MediumHomeMetrics.TypeNameWidth),
             color = TaggoGlobalColors.TextPrimary.copy(
@@ -3144,13 +3146,7 @@ private fun HomeCompactDashboard(
             compactPadding = CompactHomeMetrics.CardPadding,
             compactContentGap = CompactHomeMetrics.CardContentGap,
             compactTitleFontSize = CompactHomeMetrics.CardTitleFontSize,
-            trailing = {
-                TaggoMoreButton(
-                    label = if (locale == AppLocale.ZhCn) "\u67e5\u770b\u5168\u90e8 >" else "View all >",
-                    onClick = onOpenAllFiles,
-                    compact = true,
-                )
-            },
+
         ) {
             if (scoredRecommendedReferences.isEmpty()) {
                 TaggoEmptyState(
@@ -3246,7 +3242,7 @@ private fun CompactFileTypeRow(
             tint = typeColors.iconColor,
             modifier = Modifier.size(CompactHomeMetrics.TypeIconSize),
         )
-        Text(
+            Text(
             text = typeFilterLabel(summary.filter, locale),
             modifier = Modifier.width(CompactHomeMetrics.TypeNameWidth),
             color = TaggoGlobalColors.TextPrimary,
@@ -3590,7 +3586,7 @@ private fun DashboardRecentFileRow(
                     overflow = TextOverflow.Ellipsis,
                     fontFamily = fullCjkFontFamily,
                 )
-                Text(
+            Text(
                     text = meta,
                     color = HomeWide.Colors.TextSecondary.copy(alpha = HomeWide.Alpha.RecentMeta),
                     fontSize = HomeWide.Typography.RecentMeta,
@@ -3847,7 +3843,7 @@ private fun TaggoTagEntryItem(
                         overflow = TextOverflow.Ellipsis,
                         fontFamily = fullCjkFontFamily,
                     )
-                    Text(
+            Text(
                         text = count.toString(),
                         modifier = Modifier.width(CompactHomeMetrics.TagCountWidth),
                         color = TaggoGlobalColors.TextMuted,
@@ -3885,7 +3881,7 @@ private fun TaggoTagEntryItem(
                     overflow = TextOverflow.Ellipsis,
                     fontFamily = fullCjkFontFamily,
                 )
-                Text(
+            Text(
                     text = count.toString(),
                     modifier = Modifier.width(MediumHomeMetrics.TagCountWidth),
                     color = TaggoGlobalColors.TextMuted,
@@ -3978,7 +3974,7 @@ private fun DashboardTypeRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
+            Text(
                     text = summary.count.toString(),
                     color = HomeWide.Colors.TextSecondary,
                     fontSize = HomeWide.Typography.TypeCount,
@@ -4056,10 +4052,10 @@ private fun DashboardCompactRecommendedFileRow(
             ) {
                 Text(
                     text = displayTextForUi(reference.title, fullCjkFontReady),
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier.weight(1f),
                     color = TaggoGlobalColors.TextPrimary,
-                    fontSize = 16.sp,
-                    lineHeight = 20.sp,
+                    fontSize = TaggoGlobalTypography.Button,
+                    lineHeight = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -4229,8 +4225,7 @@ private fun TagsPage(
     val compactBottomPadding = if (compactLayout) TaggoCompactTokens.BottomNavigationClearance else 0.dp
     val allTags = appState.allTags
     var pendingDeleteTag by remember { mutableStateOf<String?>(null) }
-
-    Box(
+            Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.TopCenter,
     ) {
@@ -4286,7 +4281,7 @@ private fun TagsPage(
                         },
                         color = TaggoTheme.colors.textPrimary,
                     )
-                    Text(
+            Text(
                         if (locale == AppLocale.ZhCn) {
                             "\u8be5\u6807\u7b7e\u5c06\u4ece $affectedFileCount \u4e2a\u6587\u4ef6\u4e2d\u79fb\u9664\u3002"
                         } else {
@@ -4344,8 +4339,7 @@ private fun AllFilesPage(
     val sortedFiles = remember(filteredFiles, sortMode) {
         sortReferences(filteredFiles, sortMode, defaultSortDirection(sortMode))
     }
-
-    Box(
+            Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.TopCenter,
     ) {
@@ -4520,8 +4514,7 @@ private fun AllFilesControlsRow(
                 }
             }
         }
-
-        Box(modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.weight(1f)) {
             AllFilesDropdownButton(
                 label = if (locale == AppLocale.ZhCn) {
                     "\u7c7b\u578b\uff1a${typeFilterLabel(typeFilter, locale)}"
@@ -4749,8 +4742,7 @@ private fun SearchResultsPage(
             "Type keywords to start searching"
         }
     }
-
-    Box(
+            Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.TopCenter,
     ) {
@@ -5776,7 +5768,7 @@ private fun DetailPage(
                         painter = painterResource(Res.drawable.taggo_hero_folder),
                         tint = TaggoTheme.colors.textPrimary,
                     )
-                    Text(if (locale == AppLocale.ZhCn) "\u66f4\u6362\u6587\u4ef6\u8def\u5f84" else "Change file path")
+            Text(if (locale == AppLocale.ZhCn) "\u66f4\u6362\u6587\u4ef6\u8def\u5f84" else "Change file path")
                 }
             }
         }
@@ -5811,7 +5803,7 @@ private fun DetailPage(
                         painter = painterResource(Res.drawable.taggo_hero_trash),
                         tint = TaggoTheme.colors.danger,
                     )
-                    Text(if (locale == AppLocale.ZhCn) "\u5220\u9664\u6587\u4ef6\u6761\u76ee" else "Delete file entry")
+            Text(if (locale == AppLocale.ZhCn) "\u5220\u9664\u6587\u4ef6\u6761\u76ee" else "Delete file entry")
                 }
             }
         }
@@ -5962,7 +5954,7 @@ private fun DetailPage(
                         },
                         color = TaggoTheme.colors.textPrimary,
                     )
-                    Text(
+            Text(
                         text = if (locale == AppLocale.ZhCn) {
                             "\u4f60\u53ef\u4ee5\u53d6\u6d88\uff0c\u6216\u8005\u7ee7\u7eed\u7528\u8fd9\u4e2a\u6587\u4ef6\u66ff\u6362\u5f53\u524d\u5f15\u7528\u3002"
                         } else {
@@ -6751,8 +6743,7 @@ private fun FileTileCard(
                         overflow = TextOverflow.Ellipsis,
                         fontFamily = fullCjkFontFamily,
                     )
-
-                    Text(
+            Text(
                         text = metaLine,
                         color = TaggoTheme.colors.textMuted,
                         fontSize = 13.sp,
@@ -6781,10 +6772,10 @@ private fun FileTileCard(
                     } else {
                         42.dp
                     },
-                    overlayContainerSize = 22.dp,
-                    overlayIconSize = 15.dp,
-                    overlayBackgroundAlpha = 0.14f,
-                    overlayIconAlpha = 0.48f,
+                    overlayContainerSize = 18.dp,
+                    overlayIconSize = 11.dp,
+                    overlayBackgroundAlpha = 0.12f,
+                    overlayIconAlpha = 0.42f,
                 )
 
                 Column(
@@ -6799,14 +6790,13 @@ private fun FileTileCard(
                         color = TaggoTheme.colors.textPrimary,
                         fontWeight = FontWeight.Medium,
                         fontSize = 17.sp,
-                        lineHeight = 22.sp,
+                        lineHeight = 24.sp,
                         minLines = 1,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         fontFamily = fullCjkFontFamily,
                     )
-
-                    Text(
+            Text(
                         text = metaLine,
                         modifier = Modifier.fillMaxWidth(),
                         color = TaggoTheme.colors.textMuted,
@@ -6834,13 +6824,13 @@ private fun FileTileCard(
                         modifier = Modifier.fillMaxSize(),
                         cornerShape = RoundedCornerShape(14.dp),
                         iconSize = 42.dp,
-                        overlayContainerSize = 22.dp,
-                        overlayIconSize = 15.dp,
-                        overlayBackgroundAlpha = 0.14f,
-                        overlayIconAlpha = 0.48f,
+                        overlayContainerSize = 18.dp,
+                        overlayIconSize = 11.dp,
+                        overlayBackgroundAlpha = 0.12f,
+                        overlayIconAlpha = 0.42f,
                     )
                 }
-                Box(
+            Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .fillMaxWidth()
@@ -6871,8 +6861,7 @@ private fun FileTileCard(
                             overflow = TextOverflow.Ellipsis,
                             fontFamily = fullCjkFontFamily,
                         )
-
-                        Text(
+            Text(
                             text = metaLine,
                             modifier = Modifier.fillMaxWidth(),
                             color = TaggoTheme.colors.textSecondary,
@@ -7028,7 +7017,7 @@ private fun CompactDetailLongField(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Text(
+            Text(
             text = value,
             modifier = Modifier.fillMaxWidth(),
               color = TaggoTheme.colors.textPrimary,
@@ -7196,15 +7185,6 @@ private fun DetailHeroPreview(
                     )
                     drawPath(path = firstCurve, color = curveColor, style = curveStroke)
                     drawPath(path = secondCurve, color = curveColor, style = curveStroke)
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color(0x14080B11),
-                                Color(0x34080B11),
-                            ),
-                        ),
-                    )
                 },
         ) {
             if (hasRealPreview) {
@@ -7213,12 +7193,6 @@ private fun DetailHeroPreview(
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
-                )
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.16f)),
                 )
             } else {
                 Box(
@@ -7235,54 +7209,53 @@ private fun DetailHeroPreview(
                     )
                 }
             }
-
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
+                    .matchParentSize()
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color(0x16080B11),
-                                Color(0x47080B11),
+                            colorStops = arrayOf(
+                                0.00f to Color.Transparent,
+                                0.28f to Color.Transparent,
+                                0.50f to Color.Black.copy(alpha = 0.28f),
+                                0.68f to Color.Black.copy(alpha = 0.52f),
+                                1.00f to Color.Black.copy(alpha = 0.78f),
                             ),
                         ),
                     ),
-            ) {
-                Text(
-                    text = displayTextForUi(reference.title, fullCjkFontReady),
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .fillMaxWidth()
-                        .padding(
-                            start = TaggoTheme.spacing.lg,
-                            end = 78.dp,
-                            bottom = 18.dp,
-                        ),
-                    color = TaggoTheme.colors.textPrimary.copy(alpha = 0.98f),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 18.sp,
-                    lineHeight = 22.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontFamily = fullCjkFontFamily,
-                )
-                HeroOpenIconButton(
-                    imageVector = if (category == FileTypeCategory.Audio || category == FileTypeCategory.Video) {
-                        Icons.Outlined.PlayArrow
-                    } else {
-                        Icons.AutoMirrored.Outlined.OpenInNew
-                    },
-                    contentDescription = openButtonLabel,
-                    onClick = onOpenFile,
-                    enabled = canOpenFile,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 18.dp, bottom = TaggoTheme.spacing.md)
-                        .size(42.dp),
-                )
-            }
+            )
+            Text(
+                text = displayTextForUi(reference.title, fullCjkFontReady),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(
+                        start = TaggoTheme.spacing.lg,
+                        end = 60.dp,
+                        bottom = 18.dp,
+                    ),
+                color = TaggoTheme.colors.textPrimary.copy(alpha = 0.98f),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 20.sp,
+                lineHeight = 24.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontFamily = fullCjkFontFamily,
+            )
+            HeroOpenIconButton(
+                imageVector = if (category == FileTypeCategory.Audio || category == FileTypeCategory.Video) {
+                    Icons.Outlined.PlayArrow
+                } else {
+                    Icons.AutoMirrored.Outlined.OpenInNew
+                },
+                contentDescription = openButtonLabel,
+                onClick = onOpenFile,
+                enabled = canOpenFile,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 18.dp, bottom = TaggoTheme.spacing.md)
+                    .size(36.dp),
+            )
         }
     }
 }
@@ -7296,21 +7269,33 @@ private fun HeroOpenIconButton(
     modifier: Modifier = Modifier,
 ) {
     val iconTint = if (enabled) {
-        TaggoTheme.colors.textPrimary.copy(alpha = 0.84f)
+        Color.White.copy(alpha = 0.72f)
     } else {
-        TaggoTheme.colors.textPrimary.copy(alpha = 0.30f)
+        Color.White.copy(alpha = 0.30f)
     }
-    IconButton(
+    Surface(
         onClick = onClick,
         enabled = enabled,
+        shape = RoundedCornerShape(10.dp),
+        color = Color.Black.copy(alpha = 0.34f),
+        contentColor = iconTint,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         modifier = modifier,
     ) {
-        Icon(
-            imageVector = imageVector,
-            contentDescription = contentDescription,
-            tint = iconTint,
-            modifier = Modifier.size(28.dp),
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = imageVector,
+                contentDescription = contentDescription,
+                tint = iconTint,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }
 

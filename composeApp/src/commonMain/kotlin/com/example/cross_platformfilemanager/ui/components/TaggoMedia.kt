@@ -71,9 +71,9 @@ internal fun FileCoverArtFrame(
     showOpenStateOverlay: Boolean = true,
     canOpen: Boolean = true,
     overlayContainerSize: Dp = 18.dp,
-    overlayIconSize: Dp = 12.dp,
-    overlayBackgroundAlpha: Float = 0.14f,
-    overlayIconAlpha: Float = 0.46f,
+    overlayIconSize: Dp = 11.dp,
+    overlayBackgroundAlpha: Float = 0.12f,
+    overlayIconAlpha: Float = 0.42f,
     disabledOverlayBackgroundAlpha: Float = 0.08f,
     disabledOverlayIconAlpha: Float = 0.30f,
 ) {
@@ -151,12 +151,12 @@ internal fun FileCoverArtFrame(
                     .padding(4.dp),
                 backgroundAlpha = when {
                     !canOpen -> disabledOverlayBackgroundAlpha
-                    readyThumbnailPainter != null -> 0.34f
+                    readyThumbnailPainter != null -> 0.38f
                     else -> overlayBackgroundAlpha
                 },
                 iconAlpha = when {
                     !canOpen -> disabledOverlayIconAlpha
-                    readyThumbnailPainter != null -> 0.82f
+                    readyThumbnailPainter != null -> 0.68f
                     else -> overlayIconAlpha
                 },
             )

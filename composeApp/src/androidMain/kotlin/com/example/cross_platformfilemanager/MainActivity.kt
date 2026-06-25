@@ -34,7 +34,7 @@ class MainActivity : ComponentActivity() {
         ) { result ->
             val uri = result.data?.data.takeIf { result.resultCode == Activity.RESULT_OK }
             val consumed = browserReferencePicker.onDocumentPicked(uri)
-            if (uri != null && !consumed) {
+            if (!consumed) {
                 showFilePickerStateExpiredToast()
             }
         }
