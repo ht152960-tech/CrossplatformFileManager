@@ -1,0 +1,470 @@
+CREATE TABLE app_metadata (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+CREATE TABLE file_entry (
+    id TEXT NOT NULL PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    extension TEXT,
+    mime_type TEXT,
+    taggo_file_category TEXT NOT NULL,
+    size_bytes INTEGER,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    last_content_opened_at_ms INTEGER,
+    content_open_count INTEGER NOT NULL DEFAULT 0,
+    thumbnail_state TEXT NOT NULL DEFAULT 'none',
+    thumbnail_reference_value TEXT,
+    deleted_at_ms INTEGER
+);
+
+CREATE TABLE file_reference (
+    id TEXT NOT NULL PRIMARY KEY,
+    file_id TEXT NOT NULL,
+    reference_type TEXT NOT NULL,
+    reference_value TEXT NOT NULL,
+    reference_available INTEGER NOT NULL DEFAULT 1,
+    platform TEXT,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    last_verified_at_ms INTEGER,
+    is_primary INTEGER NOT NULL DEFAULT 1,
+    FOREIGN KEY (file_id) REFERENCES file_entry(id) ON DELETE CASCADE
+);
+
+CREATE TABLE tag (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    normalized_name TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    deleted_at_ms INTEGER,
+    UNIQUE(normalized_name)
+);
+
+CREATE TABLE file_tag (
+    file_id TEXT NOT NULL,
+    tag_id TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (file_id, tag_id),
+    FOREIGN KEY (file_id) REFERENCES file_entry(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tag(id) ON DELETE CASCADE
+);
+
+CREATE TABLE recent_search (
+    id TEXT NOT NULL PRIMARY KEY,
+    raw_query TEXT NOT NULL,
+    normalized_query TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    last_used_at_ms INTEGER NOT NULL,
+    use_count INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(normalized_query)
+);
+
+CREATE TABLE behavior_session (
+    id TEXT NOT NULL PRIMARY KEY,
+    started_at_ms INTEGER NOT NULL,
+    ended_at_ms INTEGER,
+    platform TEXT NOT NULL,
+    app_version TEXT,
+    database_version INTEGER NOT NULL,
+    recommendation_model_version INTEGER NOT NULL
+);
+
+CREATE TABLE recommendation_context (
+    id TEXT NOT NULL PRIMARY KEY,
+    created_at_ms INTEGER NOT NULL,
+    context_type TEXT NOT NULL,
+    session_id TEXT,
+    trigger_file_id TEXT,
+    search_query TEXT,
+    local_hour INTEGER,
+    day_of_week INTEGER,
+    latitude REAL,
+    longitude REAL,
+    location_precision TEXT,
+    FOREIGN KEY (session_id) REFERENCES behavior_session(id) ON DELETE SET NULL,
+    FOREIGN KEY (trigger_file_id) REFERENCES file_entry(id) ON DELETE SET NULL
+);
+
+CREATE TABLE recommendation_set (
+    id TEXT NOT NULL PRIMARY KEY,
+    context_id TEXT,
+    generated_at_ms INTEGER NOT NULL,
+    set_type TEXT NOT NULL,
+    model_version INTEGER NOT NULL,
+    policy_name TEXT,
+    policy_version TEXT,
+    FOREIGN KEY (context_id) REFERENCES recommendation_context(id) ON DELETE SET NULL
+);
+
+CREATE TABLE behavior_event (
+    id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT,
+    occurred_at_ms INTEGER NOT NULL,
+    event_type TEXT NOT NULL,
+    screen_name TEXT,
+    entry_point TEXT,
+    file_id TEXT,
+    file_reference_id TEXT,
+    search_query TEXT,
+    recommendation_set_id TEXT,
+    recommendation_rank INTEGER,
+    duration_ms INTEGER,
+    extra_json TEXT,
+    FOREIGN KEY (session_id) REFERENCES behavior_session(id) ON DELETE SET NULL,
+    FOREIGN KEY (file_id) REFERENCES file_entry(id) ON DELETE SET NULL,
+    FOREIGN KEY (file_reference_id) REFERENCES file_reference(id) ON DELETE SET NULL,
+    FOREIGN KEY (recommendation_set_id) REFERENCES recommendation_set(id) ON DELETE SET NULL
+);
+
+CREATE TABLE explicit_need_signal (
+    id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT,
+    behavior_event_id TEXT,
+    signal_type TEXT NOT NULL,
+    signal_value TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    consumed_by_recommendation_set_id TEXT,
+    FOREIGN KEY (session_id) REFERENCES behavior_session(id) ON DELETE SET NULL,
+    FOREIGN KEY (behavior_event_id) REFERENCES behavior_event(id) ON DELETE SET NULL,
+    FOREIGN KEY (consumed_by_recommendation_set_id) REFERENCES recommendation_set(id) ON DELETE SET NULL
+);
+
+CREATE TABLE recommendation_candidate_snapshot (
+    recommendation_set_id TEXT NOT NULL,
+    file_id TEXT NOT NULL,
+    rank INTEGER NOT NULL,
+    score REAL NOT NULL,
+    reasons_json TEXT,
+    features_json TEXT,
+    selection_type TEXT,
+    propensity REAL,
+    selected_at_ms INTEGER,
+    PRIMARY KEY (recommendation_set_id, file_id),
+    FOREIGN KEY (recommendation_set_id) REFERENCES recommendation_set(id) ON DELETE CASCADE,
+    FOREIGN KEY (file_id) REFERENCES file_entry(id) ON DELETE CASCADE
+);
+
+CREATE TABLE recommendation_feedback (
+    id TEXT NOT NULL PRIMARY KEY,
+    recommendation_set_id TEXT NOT NULL,
+    file_id TEXT NOT NULL,
+    feedback_type TEXT NOT NULL,
+    reward_value REAL,
+    rank_at_feedback INTEGER,
+    created_at_ms INTEGER NOT NULL,
+    behavior_event_id TEXT,
+    FOREIGN KEY (recommendation_set_id) REFERENCES recommendation_set(id) ON DELETE CASCADE,
+    FOREIGN KEY (file_id) REFERENCES file_entry(id) ON DELETE CASCADE,
+    FOREIGN KEY (behavior_event_id) REFERENCES behavior_event(id) ON DELETE SET NULL
+);
+
+selectAllAppMetadata:
+SELECT * FROM app_metadata;
+
+upsertAppMetadata:
+INSERT OR REPLACE INTO app_metadata(key, value)
+VALUES (?, ?);
+
+deleteAppMetadata:
+DELETE FROM app_metadata
+WHERE key = ?;
+
+selectActiveFileEntries:
+SELECT * FROM file_entry
+WHERE deleted_at_ms IS NULL
+ORDER BY updated_at_ms DESC;
+
+selectFileEntryById:
+SELECT * FROM file_entry
+WHERE id = ?;
+
+insertFileEntry:
+INSERT INTO file_entry(
+    id,
+    display_name,
+    extension,
+    mime_type,
+    taggo_file_category,
+    size_bytes,
+    created_at_ms,
+    updated_at_ms,
+    last_content_opened_at_ms,
+    content_open_count,
+    thumbnail_state,
+    thumbnail_reference_value,
+    deleted_at_ms
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateFileEntry:
+UPDATE file_entry
+SET
+    display_name = ?,
+    extension = ?,
+    mime_type = ?,
+    taggo_file_category = ?,
+    size_bytes = ?,
+    updated_at_ms = ?,
+    last_content_opened_at_ms = ?,
+    content_open_count = ?,
+    thumbnail_state = ?,
+    thumbnail_reference_value = ?,
+    deleted_at_ms = ?
+WHERE id = ?;
+
+softDeleteFileEntry:
+UPDATE file_entry
+SET deleted_at_ms = ?, updated_at_ms = ?
+WHERE id = ?;
+
+selectReferencesByFileId:
+SELECT * FROM file_reference
+WHERE file_id = ?
+ORDER BY is_primary DESC, updated_at_ms DESC;
+
+selectPrimaryReferenceByFileId:
+SELECT * FROM file_reference
+WHERE file_id = ? AND is_primary = 1
+ORDER BY updated_at_ms DESC
+LIMIT 1;
+
+insertFileReference:
+INSERT INTO file_reference(
+    id,
+    file_id,
+    reference_type,
+    reference_value,
+    reference_available,
+    platform,
+    created_at_ms,
+    updated_at_ms,
+    last_verified_at_ms,
+    is_primary
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateFileReferenceAvailability:
+UPDATE file_reference
+SET reference_available = ?, last_verified_at_ms = ?, updated_at_ms = ?
+WHERE id = ?;
+
+deleteReferencesByFileId:
+DELETE FROM file_reference
+WHERE file_id = ?;
+
+selectActiveTags:
+SELECT * FROM tag
+WHERE deleted_at_ms IS NULL
+ORDER BY updated_at_ms DESC;
+
+selectTagByNormalizedName:
+SELECT * FROM tag
+WHERE normalized_name = ? AND deleted_at_ms IS NULL
+LIMIT 1;
+
+insertTag:
+INSERT INTO tag(
+    id,
+    name,
+    normalized_name,
+    created_at_ms,
+    updated_at_ms,
+    deleted_at_ms
+)
+VALUES (?, ?, ?, ?, ?, ?);
+
+softDeleteTag:
+UPDATE tag
+SET deleted_at_ms = ?, updated_at_ms = ?
+WHERE id = ?;
+
+selectTagsForFile:
+SELECT tag.*
+FROM tag
+JOIN file_tag ON tag.id = file_tag.tag_id
+WHERE file_tag.file_id = ? AND tag.deleted_at_ms IS NULL
+ORDER BY tag.name ASC;
+
+selectFilesForTag:
+SELECT file_entry.*
+FROM file_entry
+JOIN file_tag ON file_entry.id = file_tag.file_id
+WHERE file_tag.tag_id = ? AND file_entry.deleted_at_ms IS NULL
+ORDER BY file_entry.updated_at_ms DESC;
+
+insertFileTag:
+INSERT OR IGNORE INTO file_tag(
+    file_id,
+    tag_id,
+    created_at_ms
+)
+VALUES (?, ?, ?);
+
+deleteFileTag:
+DELETE FROM file_tag
+WHERE file_id = ? AND tag_id = ?;
+
+deleteFileTagsForFile:
+DELETE FROM file_tag
+WHERE file_id = ?;
+
+selectRecentSearches:
+SELECT * FROM recent_search
+ORDER BY last_used_at_ms DESC;
+
+upsertRecentSearch:
+INSERT OR REPLACE INTO recent_search(
+    id,
+    raw_query,
+    normalized_query,
+    created_at_ms,
+    last_used_at_ms,
+    use_count
+)
+VALUES (?, ?, ?, ?, ?, ?);
+
+deleteRecentSearch:
+DELETE FROM recent_search
+WHERE id = ?;
+
+insertBehaviorSession:
+INSERT INTO behavior_session(
+    id,
+    started_at_ms,
+    ended_at_ms,
+    platform,
+    app_version,
+    database_version,
+    recommendation_model_version
+)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+endBehaviorSession:
+UPDATE behavior_session
+SET ended_at_ms = ?
+WHERE id = ?;
+
+selectBehaviorSessionById:
+SELECT * FROM behavior_session
+WHERE id = ?;
+
+insertBehaviorEvent:
+INSERT INTO behavior_event(
+    id,
+    session_id,
+    occurred_at_ms,
+    event_type,
+    screen_name,
+    entry_point,
+    file_id,
+    file_reference_id,
+    search_query,
+    recommendation_set_id,
+    recommendation_rank,
+    duration_ms,
+    extra_json
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectBehaviorEventsForSession:
+SELECT * FROM behavior_event
+WHERE session_id = ?
+ORDER BY occurred_at_ms ASC;
+
+insertExplicitNeedSignal:
+INSERT INTO explicit_need_signal(
+    id,
+    session_id,
+    behavior_event_id,
+    signal_type,
+    signal_value,
+    created_at_ms,
+    consumed_by_recommendation_set_id
+)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+selectExplicitNeedSignalsForSession:
+SELECT * FROM explicit_need_signal
+WHERE session_id = ?
+ORDER BY created_at_ms ASC;
+
+insertRecommendationContext:
+INSERT INTO recommendation_context(
+    id,
+    created_at_ms,
+    context_type,
+    session_id,
+    trigger_file_id,
+    search_query,
+    local_hour,
+    day_of_week,
+    latitude,
+    longitude,
+    location_precision
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectRecommendationContextById:
+SELECT * FROM recommendation_context
+WHERE id = ?;
+
+insertRecommendationSet:
+INSERT INTO recommendation_set(
+    id,
+    context_id,
+    generated_at_ms,
+    set_type,
+    model_version,
+    policy_name,
+    policy_version
+)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+selectRecommendationSetById:
+SELECT * FROM recommendation_set
+WHERE id = ?;
+
+insertRecommendationCandidateSnapshot:
+INSERT INTO recommendation_candidate_snapshot(
+    recommendation_set_id,
+    file_id,
+    rank,
+    score,
+    reasons_json,
+    features_json,
+    selection_type,
+    propensity,
+    selected_at_ms
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectCandidatesForRecommendationSet:
+SELECT * FROM recommendation_candidate_snapshot
+WHERE recommendation_set_id = ?
+ORDER BY rank ASC;
+
+markRecommendationCandidateSelected:
+UPDATE recommendation_candidate_snapshot
+SET selected_at_ms = ?
+WHERE recommendation_set_id = ? AND file_id = ?;
+
+insertRecommendationFeedback:
+INSERT INTO recommendation_feedback(
+    id,
+    recommendation_set_id,
+    file_id,
+    feedback_type,
+    reward_value,
+    rank_at_feedback,
+    created_at_ms,
+    behavior_event_id
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+selectFeedbackForRecommendationSet:
+SELECT * FROM recommendation_feedback
+WHERE recommendation_set_id = ?
+ORDER BY created_at_ms ASC;
