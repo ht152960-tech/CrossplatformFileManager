@@ -1,48 +1,70 @@
+﻿-- 表职责：保存数据库级别的元数据键值对。
 CREATE TABLE app_metadata (
     key TEXT NOT NULL PRIMARY KEY,
     value TEXT NOT NULL
 );
 
+-- 表职责：保存文件实体的核心事实记录，包括分类、打开行为和缩略图状态。
 CREATE TABLE file_entry (
     id TEXT NOT NULL PRIMARY KEY,
     display_name TEXT NOT NULL,
     extension TEXT,
     mime_type TEXT,
+    -- Taggo 自己归类后的文件类别，例如 image / video / audio / document / archive / other。
+    -- 这里不是 MIME 类型，也不是平台返回的原始类型。
     taggo_file_category TEXT NOT NULL,
     size_bytes INTEGER,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL,
+    -- 最后一次真正打开文件内容的时间。
+    -- 进入详情页 view_detail 不会更新这个字段。
     last_content_opened_at_ms INTEGER,
+    -- 真正打开文件内容的次数。
+    -- 进入详情页不算打开内容。
     content_open_count INTEGER NOT NULL DEFAULT 0,
+    -- 文件缩略图的生成/可用状态，例如 none / pending / ready / failed。
     thumbnail_state TEXT NOT NULL DEFAULT 'none',
+    -- 缩略图来源引用值，通常对应平台侧路径、URI 或缓存键。
     thumbnail_reference_value TEXT,
+    -- 软删除时间戳；非空表示该文件在逻辑上已删除。
     deleted_at_ms INTEGER
 );
 
+-- 表职责：保存文件可访问引用的事实记录，包括主引用、平台来源和可用性。
 CREATE TABLE file_reference (
     id TEXT NOT NULL PRIMARY KEY,
     file_id TEXT NOT NULL,
+    -- 引用的类型，例如本地路径、URI、文档提供方引用等。
     reference_type TEXT NOT NULL,
+    -- 引用的具体值，例如路径、URI 或其他平台侧标识。
     reference_value TEXT NOT NULL,
+    -- 引用当前是否可用；1 表示可用，0 表示不可用。
     reference_available INTEGER NOT NULL DEFAULT 1,
+    -- 引用来自哪个平台或来源环境。
     platform TEXT,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL,
+    -- 最近一次验证该引用可用性的时间。
     last_verified_at_ms INTEGER,
+    -- 是否为该文件的主引用。
     is_primary INTEGER NOT NULL DEFAULT 1,
     FOREIGN KEY (file_id) REFERENCES file_entry(id) ON DELETE CASCADE
 );
 
+-- 表职责：保存标签定义及其规范化名称，用于去重和软删除。
 CREATE TABLE tag (
     id TEXT NOT NULL PRIMARY KEY,
     name TEXT NOT NULL,
+    -- 标签规范化后的唯一名称，作为去重与匹配的事实键。
     normalized_name TEXT NOT NULL,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL,
+    -- 标签软删除时间戳；非空表示该标签不再参与活跃查询。
     deleted_at_ms INTEGER,
     UNIQUE(normalized_name)
 );
 
+-- 表职责：保存文件与标签之间的多对多关联事实。
 CREATE TABLE file_tag (
     file_id TEXT NOT NULL,
     tag_id TEXT NOT NULL,
@@ -52,66 +74,98 @@ CREATE TABLE file_tag (
     FOREIGN KEY (tag_id) REFERENCES tag(id) ON DELETE CASCADE
 );
 
+-- 表职责：保存最近搜索词的归一化聚合结果与使用频次。
 CREATE TABLE recent_search (
     id TEXT NOT NULL PRIMARY KEY,
+    -- 用户原始输入的搜索词。
     raw_query TEXT NOT NULL,
+    -- 归一化后的搜索词，用于聚合和去重。
     normalized_query TEXT NOT NULL,
     created_at_ms INTEGER NOT NULL,
     last_used_at_ms INTEGER NOT NULL,
+    -- 该搜索词被使用的次数。
     use_count INTEGER NOT NULL DEFAULT 1,
     UNIQUE(normalized_query)
 );
 
+-- 表职责：保存一次行为会话的生命周期与运行环境信息。
 CREATE TABLE behavior_session (
     id TEXT NOT NULL PRIMARY KEY,
     started_at_ms INTEGER NOT NULL,
     ended_at_ms INTEGER,
+    -- 记录会话发生的平台，例如 android / desktop / web。
     platform TEXT NOT NULL,
     app_version TEXT,
+    -- 会话写入时所用数据库版本。
     database_version INTEGER NOT NULL,
+    -- 会话写入时所用推荐模型版本。
     recommendation_model_version INTEGER NOT NULL
 );
 
+-- 表职责：保存推荐上下文快照，用于解释当时为何生成某组推荐。
 CREATE TABLE recommendation_context (
     id TEXT NOT NULL PRIMARY KEY,
     created_at_ms INTEGER NOT NULL,
+    -- 上下文类型，例如主页触发、文件触发、搜索触发等。
     context_type TEXT NOT NULL,
     session_id TEXT,
+    -- 触发推荐的文件 ID。
     trigger_file_id TEXT,
     search_query TEXT,
+    -- 触发时的本地小时。
     local_hour INTEGER,
+    -- 触发时的星期几。
     day_of_week INTEGER,
+    -- 触发时记录的纬度。
     latitude REAL,
+    -- 触发时记录的经度。
     longitude REAL,
+    -- 地理位置精度描述，例如 coarse / fine / unknown。
     location_precision TEXT,
     FOREIGN KEY (session_id) REFERENCES behavior_session(id) ON DELETE SET NULL,
     FOREIGN KEY (trigger_file_id) REFERENCES file_entry(id) ON DELETE SET NULL
 );
 
+-- 表职责：保存一次推荐结果集的元数据和生成策略信息。
 CREATE TABLE recommendation_set (
     id TEXT NOT NULL PRIMARY KEY,
     context_id TEXT,
     generated_at_ms INTEGER NOT NULL,
+    -- 推荐结果集类型，例如首页推荐、详情页推荐、搜索后推荐。
     set_type TEXT NOT NULL,
+    -- 生成该结果集时使用的模型版本。
     model_version INTEGER NOT NULL,
+    -- 生成策略名称。
     policy_name TEXT,
+    -- 生成策略版本。
     policy_version TEXT,
     FOREIGN KEY (context_id) REFERENCES recommendation_context(id) ON DELETE SET NULL
 );
 
+-- 表职责：保存单次用户行为事件事实，用于区分浏览、打开、搜索和推荐点击等操作。
 CREATE TABLE behavior_event (
     id TEXT NOT NULL PRIMARY KEY,
     session_id TEXT,
     occurred_at_ms INTEGER NOT NULL,
+    -- 事件类型；view_detail 和 open_content 必须区分。
     event_type TEXT NOT NULL,
+    -- 事件发生的界面名称。
     screen_name TEXT,
+    -- 事件入口点，例如搜索结果、推荐卡片、文件列表等。
     entry_point TEXT,
+    -- 关联的文件 ID。
     file_id TEXT,
+    -- 关联的文件引用 ID。
     file_reference_id TEXT,
+    -- 当事件由搜索触发时记录搜索词。
     search_query TEXT,
+    -- 关联的推荐结果集 ID。
     recommendation_set_id TEXT,
+    -- 在推荐结果集中的排序名次。
     recommendation_rank INTEGER,
+    -- 事件持续时长，单位毫秒。
     duration_ms INTEGER,
+    -- 扩展事实的 JSON 快照。
     extra_json TEXT,
     FOREIGN KEY (session_id) REFERENCES behavior_session(id) ON DELETE SET NULL,
     FOREIGN KEY (file_id) REFERENCES file_entry(id) ON DELETE SET NULL,
@@ -119,42 +173,61 @@ CREATE TABLE behavior_event (
     FOREIGN KEY (recommendation_set_id) REFERENCES recommendation_set(id) ON DELETE SET NULL
 );
 
+-- 表职责：保存用户明确表达的需求信号，供推荐解释与学习使用。
 CREATE TABLE explicit_need_signal (
     id TEXT NOT NULL PRIMARY KEY,
     session_id TEXT,
     behavior_event_id TEXT,
+    -- 明确需求的类型，例如搜索词、正式标签点击、手动内容打开等。
     signal_type TEXT NOT NULL,
+    -- 明确需求的具体值。
+    -- 这里记录用户明确表达的需求，例如搜索词、正式标签点击、手动内容打开。
+    -- 本表不存算法 strength，权重由推荐算法解释。
     signal_value TEXT NOT NULL,
     created_at_ms INTEGER NOT NULL,
+    -- 该需求信号被哪个推荐结果集消费。
     consumed_by_recommendation_set_id TEXT,
     FOREIGN KEY (session_id) REFERENCES behavior_session(id) ON DELETE SET NULL,
     FOREIGN KEY (behavior_event_id) REFERENCES behavior_event(id) ON DELETE SET NULL,
     FOREIGN KEY (consumed_by_recommendation_set_id) REFERENCES recommendation_set(id) ON DELETE SET NULL
 );
 
+-- 表职责：保存一次推荐结果集中每个候选文件的决策快照。
 CREATE TABLE recommendation_candidate_snapshot (
     recommendation_set_id TEXT NOT NULL,
     file_id TEXT NOT NULL,
+    -- 候选在当时结果集中的排序名次。
     rank INTEGER NOT NULL,
+    -- 这是当时推荐模型输出的分数，不是文件本身属性。
     score REAL NOT NULL,
+    -- 当时推荐理由快照。
     reasons_json TEXT,
+    -- 当时用于推荐决策的特征快照，为未来 bandit / 离线复盘预留。
     features_json TEXT,
+    -- 候选选择方式，例如 explore / exploit / fallback / rule_based。
     selection_type TEXT,
+    -- 候选被展示或选择的概率，为 bandit 离线评估预留。
     propensity REAL,
+    -- 候选被实际选中的时间。
     selected_at_ms INTEGER,
     PRIMARY KEY (recommendation_set_id, file_id),
     FOREIGN KEY (recommendation_set_id) REFERENCES recommendation_set(id) ON DELETE CASCADE,
     FOREIGN KEY (file_id) REFERENCES file_entry(id) ON DELETE CASCADE
 );
 
+-- 表职责：保存推荐结果的反馈事实，用于解释正负反馈与后续学习。
 CREATE TABLE recommendation_feedback (
     id TEXT NOT NULL PRIMARY KEY,
     recommendation_set_id TEXT NOT NULL,
     file_id TEXT NOT NULL,
+    -- 反馈类型，例如 click / open / dismiss / skip / reward。
     feedback_type TEXT NOT NULL,
+    -- 这是推荐反馈解释值，为 bandit / 推荐学习服务，不是文件本身事实。
     reward_value REAL,
+    -- 在反馈发生时该文件的推荐排序名次。
     rank_at_feedback INTEGER,
     created_at_ms INTEGER NOT NULL,
+    -- 关联到触发该反馈的行为事件。
     behavior_event_id TEXT,
     FOREIGN KEY (recommendation_set_id) REFERENCES recommendation_set(id) ON DELETE CASCADE,
     FOREIGN KEY (file_id) REFERENCES file_entry(id) ON DELETE CASCADE,
