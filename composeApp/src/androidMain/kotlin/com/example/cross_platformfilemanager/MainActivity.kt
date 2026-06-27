@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
+import com.example.cross_platformfilemanager.data.db.AndroidTaggoDatabaseProvider
 
 /**
  * Android 端入口 Activity。
@@ -47,8 +48,10 @@ class MainActivity : ComponentActivity() {
         )
         AndroidBrowserReferencePickerHolder.register(browserReferencePicker)
 
+        val fileImportService =
+            AndroidTaggoDatabaseProvider.getFileImportService(applicationContext)
         setContent {
-            App()
+            App(fileImportService = fileImportService)
         }
     }
 

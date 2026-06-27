@@ -3,6 +3,7 @@ package com.example.cross_platformfilemanager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.example.cross_platformfilemanager.data.adapter.TaggoFileImportInput
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -344,9 +345,37 @@ class FileManagerAppState(
         draftNotes = defaultDraftNotes
     }
 
-    fun addDraftReference(): FileReference {
+    fun createDraftReferenceId(): String = "ref-${nowMillis()}"
+
+    fun createDraftFileImportInput(referenceId: String): TaggoFileImportInput {
+        val displayName = draftTitle.trim().ifBlank { "Untitled file" }
+        val extension = displayName
+            .substringAfterLast('.', missingDelimiterValue = "")
+            .trim()
+            .takeIf { it.isNotBlank() }
+        val referenceValue = draftSource.trim().ifBlank { "/local/path/$referenceId" }
+        val tags = draftTags
+            .split(",")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        return TaggoFileImportInput(
+            oldId = referenceId,
+            displayName = displayName,
+            extension = extension,
+            mimeType = null,
+            referenceValue = referenceValue,
+            sizeBytes = draftFileSizeBytes,
+            tags = tags,
+        )
+    }
+
+    fun addDraftReference(
+        referenceId: String = createDraftReferenceId(),
+    ): FileReference {
         val createdAtMillis = nowMillis()
-        val id = "ref-$createdAtMillis"
+        val id = referenceId
         val source = draftSource.trim().ifBlank { "/local/path/$id" }
         val tags = draftTags
             .split(",")

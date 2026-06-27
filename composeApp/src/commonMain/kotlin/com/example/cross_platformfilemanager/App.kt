@@ -124,6 +124,8 @@ import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Star
+import com.example.cross_platformfilemanager.data.service.TaggoFileImportService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
@@ -504,7 +506,7 @@ private fun MediumNavigationSidebar(
  * 这里负责创建跨页面共享的状态对象、恢复快照、接入启动门面，
  * 并把主要页面之间的导航和通用操作入口组织起来。
  */
-fun App() {
+fun App(fileImportService: TaggoFileImportService? = null) {
     val snapshotStore = remember { createAppSnapshotStore() }
     val browserReferencePicker = remember { createBrowserReferencePicker() }
     val browserReferenceResolver = remember { createBrowserReferenceResolver() }
@@ -536,6 +538,7 @@ fun App() {
     var referenceEditorTargetId by remember { mutableStateOf<String?>(null) }
     var draftFileSizeText by remember { mutableStateOf("") }
     var manualAddErrorMessage by remember { mutableStateOf<String?>(null) }
+    var fileImportInProgress by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showSideMenu by remember { mutableStateOf(false) }
     var snapshotReady by remember { mutableStateOf(false) }
@@ -734,6 +737,36 @@ fun App() {
         enterSearchPage()
     }
 
+    fun addCurrentDraftReference(onSuccess: (FileReference) -> Unit) {
+        if (fileImportInProgress) return
+        val referenceId = appState.createDraftReferenceId()
+        val input = appState.createDraftFileImportInput(referenceId)
+        val importService = fileImportService
+        if (importService == null) {
+            onSuccess(appState.addDraftReference(referenceId))
+            return
+        }
+
+        fileImportInProgress = true
+        coroutineScope.launch {
+            try {
+                importService.importFile(input)
+                onSuccess(appState.addDraftReference(referenceId))
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                manualAddErrorMessage = if (appState.locale == AppLocale.ZhCn) {
+                    "保存文件失败，请重试"
+                } else {
+                    "Could not save the file. Please try again."
+                }
+                showManualAddDialog = true
+            } finally {
+                fileImportInProgress = false
+            }
+        }
+    }
+
     fun addPickedReference(draft: BrowserReferenceDraft) {
         val tagValidationMessage = formalTagsLengthValidationMessage(appState.draftTags)
         if (tagValidationMessage != null) {
@@ -742,13 +775,14 @@ fun App() {
             return
         }
         appState.applyBrowserDraft(draft)
-        val saved = appState.addDraftReference()
-        coroutineScope.launch {
+        addCurrentDraftReference { saved ->
             appState.generateThumbnailForReference(saved.id)
+            clearDraftFields(appState)
+            draftFileSizeText = ""
+            manualAddErrorMessage = null
+            showManualAddDialog = false
+            currentPage = AppPage.Home
         }
-        clearDraftFields(appState)
-        draftFileSizeText = ""
-        currentPage = AppPage.Home
     }
 
     fun openTagSearch(tag: String) {
@@ -1143,11 +1177,18 @@ fun App() {
                                                     manualAddErrorMessage = tagValidationMessage
                                                     shouldCloseDialog = false
                                                 } else {
-                                                    val saved = appState.addDraftReference()
-                                                    coroutineScope.launch {
+                                                    shouldCloseDialog = false
+                                                    addCurrentDraftReference { saved ->
                                                         appState.generateThumbnailForReference(saved.id)
+                                                        currentPage = AppPage.Home
+                                                        clearDraftFields(appState)
+                                                        draftFileSizeText = ""
+                                                        manualAddNotice = null
+                                                        manualAddErrorMessage = null
+                                                        showManualAddDialog = false
+                                                        referenceEditorMode = ReferenceEditorMode.Add
+                                                        referenceEditorTargetId = null
                                                     }
-                                                    currentPage = AppPage.Home
                                                 }
                                             }
 
