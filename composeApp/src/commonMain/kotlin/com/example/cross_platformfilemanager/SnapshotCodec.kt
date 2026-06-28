@@ -6,7 +6,9 @@ import kotlinx.serialization.json.Json
 /**
  * 应用快照 JSON 编解码器。
  *
- * 推荐日志和推荐引擎状态也通过这里持久化，因此这是推荐学习结果跨会话保留的关键边界。
+ * 这里只负责 UI 临时状态快照的编码/解码。
+ * 文件、标签、最近搜索和推荐学习状态不再通过 JSON snapshot 持久化；
+ * 这些业务事实源现在由 SQLDelight DB 提供。
  */
 internal object SnapshotCodec {
     private val json = Json {

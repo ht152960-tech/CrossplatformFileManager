@@ -2,7 +2,6 @@ package com.example.cross_platformfilemanager
 
 import kotlin.time.Clock
 import kotlin.math.roundToInt
-import kotlin.math.roundToLong
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -123,28 +122,6 @@ internal fun displayTextForUi(value: String, fullCjkFontReady: Boolean): String 
     val repaired = displayText(value)
     return repaired
 }
-
-/**
- * 从备注文本中反推文件体积。
- *
- * 这是对早期导入格式的兼容补救，避免旧数据缺少独立的 `fileSizeBytes` 字段。
- */
-internal fun guessFileSizeFromNotes(notes: String): Long? {
-    val match = fileSizeFromNotesPattern.find(notes) ?: return null
-    val amount = match.groupValues.getOrNull(1)?.toDoubleOrNull() ?: return null
-    val unit = match.groupValues.getOrNull(2)?.uppercase() ?: return null
-    val multiplier = when (unit) {
-        "B" -> 1.0
-        "KB" -> 1024.0
-        "MB" -> 1024.0 * 1024.0
-        "GB" -> 1024.0 * 1024.0 * 1024.0
-        else -> return null
-    }
-    return (amount * multiplier).roundToLong().coerceAtLeast(0L)
-}
-
-private val fileSizeFromNotesPattern =
-    Regex("""(?:^|\|\s*)Size:\s*([\d.]+)\s*(B|KB|MB|GB)""", RegexOption.IGNORE_CASE)
 
 private val mojibakeMarkers = setOf(
     '鍒', '鍏', '鍚', '鍙', '鍗', '鍜', '鍨', '鍦', '鍫', '鏂',

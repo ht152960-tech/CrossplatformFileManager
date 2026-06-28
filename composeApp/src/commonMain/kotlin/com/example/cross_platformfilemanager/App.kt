@@ -110,7 +110,6 @@ import taggo.composeapp.generated.resources.taggo_hero_trash
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
-import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.AutoAwesome
@@ -124,7 +123,7 @@ import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Star
-import com.example.cross_platformfilemanager.data.service.TaggoFileImportService
+import com.example.cross_platformfilemanager.runtime.TaggoFileRuntimeStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -506,14 +505,15 @@ private fun MediumNavigationSidebar(
  * 这里负责创建跨页面共享的状态对象、恢复快照、接入启动门面，
  * 并把主要页面之间的导航和通用操作入口组织起来。
  */
-fun App(fileImportService: TaggoFileImportService? = null) {
+fun App(runtimeStore: TaggoFileRuntimeStore = TaggoFileRuntimeStore()) {
     val snapshotStore = remember { createAppSnapshotStore() }
     val browserReferencePicker = remember { createBrowserReferencePicker() }
     val browserReferenceResolver = remember { createBrowserReferenceResolver() }
     val thumbnailGenerator = remember { createThumbnailGenerator() }
     val uiFontFamily = rememberAppFontFamily()
-    val appState = remember(browserReferenceResolver, thumbnailGenerator) {
+    val appState = remember(runtimeStore, browserReferenceResolver, thumbnailGenerator) {
         FileManagerAppState(
+            runtimeStore = runtimeStore,
             browserReferenceResolver = browserReferenceResolver,
             thumbnailGenerator = thumbnailGenerator,
         )
@@ -560,6 +560,7 @@ fun App(fileImportService: TaggoFileImportService? = null) {
         reportStartupTrace("snapshot load start +${startedAt - appStartMillis}ms")
         try {
             snapshotStore?.load()?.let(appState::restoreSnapshot)
+            appState.loadRuntime()
             if (browserReferenceResolver != null) {
                 appState.refreshBrowserReferences()
             }
@@ -740,17 +741,9 @@ fun App(fileImportService: TaggoFileImportService? = null) {
     fun addCurrentDraftReference(onSuccess: (FileReference) -> Unit) {
         if (fileImportInProgress) return
         val referenceId = appState.createDraftReferenceId()
-        val input = appState.createDraftFileImportInput(referenceId)
-        val importService = fileImportService
-        if (importService == null) {
-            onSuccess(appState.addDraftReference(referenceId))
-            return
-        }
-
         fileImportInProgress = true
         coroutineScope.launch {
             try {
-                importService.importFile(input)
                 onSuccess(appState.addDraftReference(referenceId))
             } catch (error: CancellationException) {
                 throw error
@@ -823,10 +816,8 @@ fun App(fileImportService: TaggoFileImportService? = null) {
         appState.draftTitle = reference.title
         appState.draftSource = reference.source
         appState.draftType = reference.fileType
-        appState.draftFileSizeBytes = reference.fileSizeBytes ?: guessFileSizeFromNotes(reference.notes)
-        appState.draftCoverArtSource = reference.coverArtSource.orEmpty()
+        appState.draftFileSizeBytes = reference.fileSizeBytes
         appState.draftTags = reference.tags.joinToString(", ")
-        appState.draftNotes = reference.notes
         draftFileSizeText = appState.draftFileSizeBytes?.toString().orEmpty()
         referenceEditorMode = ReferenceEditorMode.Replace
         referenceEditorTargetId = reference.id
@@ -843,8 +834,6 @@ fun App(fileImportService: TaggoFileImportService? = null) {
         source = appState.draftSource,
         fileType = appState.draftType,
         fileSizeBytes = appState.draftFileSizeBytes,
-        coverArtSource = appState.draftCoverArtSource.ifBlank { null },
-        notes = appState.draftNotes,
     )
 
     TaggoBackHandler(enabled = currentPage == AppPage.Detail || currentPage == AppPage.Search) {
@@ -1698,8 +1687,6 @@ private object MediumHomeMetrics {
     val HeaderTitleGap = 2.dp
     val HeaderTitleWidth = 166.dp
     val HeaderSearchGap = 28.dp
-    val AccountSize = 32.dp
-    val AccountIconSize = 18.dp
     val SearchHeight = 32.dp
     val SearchWidthCompact = 250.dp
     val SearchWidthRegular = 290.dp
@@ -2260,10 +2247,6 @@ private fun MediumHomeHeader(
                 modifier = Modifier.width(searchWidth),
             )
             Spacer(modifier = Modifier.weight(1f))
-            MediumAccountButton(
-                locale = locale,
-                onClick = onOpenMenu,
-            )
         }
     }
 }
@@ -2339,40 +2322,6 @@ private fun MediumHomeSearchField(
             }
         },
     )
-}
-
-@Composable
-private fun MediumAccountButton(
-    locale: AppLocale,
-    onClick: () -> Unit,
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(TaggoGlobalRadius.Badge),
-        color = TaggoGlobalColors.PanelBackgroundSoft,
-        contentColor = TaggoGlobalColors.TextPrimary,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        modifier = Modifier.size(MediumHomeMetrics.AccountSize),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .border(
-                    width = 1.dp,
-                    color = TaggoGlobalColors.BorderStrong,
-                    shape = RoundedCornerShape(TaggoGlobalRadius.Badge),
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.AccountCircle,
-                contentDescription = if (locale == AppLocale.ZhCn) "\u8d26\u53f7" else "Account",
-                tint = TaggoGlobalColors.TextPrimary,
-                modifier = Modifier.size(MediumHomeMetrics.AccountIconSize),
-            )
-        }
-    }
 }
 
 @Composable
@@ -2750,8 +2699,6 @@ private object CompactHomeMetrics {
     val BrandLogoSize = 22.dp
     val SearchIconSize = 17.dp
     val SearchHeight = 46.dp
-    val AccountSize = 46.dp
-    val AccountIconSize = 27.dp
     val PageTitleFontSize = 18.sp
     val PageTitleGap = 6.dp
     val TitleUnderlineWidth = 32.dp
@@ -2849,10 +2796,6 @@ private fun CompactHomeTopBar(
             modifier = Modifier.weight(1f),
         )
 
-        CompactAccountButton(
-            locale = locale,
-            onClick = onOpenMenu,
-        )
     }
 }
 
@@ -2908,38 +2851,6 @@ private fun CompactSearchEntry(
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun CompactAccountButton(
-    locale: AppLocale,
-    onClick: () -> Unit,
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(TaggoGlobalRadius.Badge),
-        color = TaggoGlobalColors.PanelBackgroundSoft.copy(alpha = TaggoGlobalAlpha.Strong),
-        contentColor = TaggoGlobalColors.TextPrimary,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        modifier = Modifier
-            .size(CompactHomeMetrics.AccountSize),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .border(1.dp, TaggoGlobalColors.BorderStrong, RoundedCornerShape(TaggoGlobalRadius.Badge)),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.AccountCircle,
-                contentDescription = if (locale == AppLocale.ZhCn) "\u8d26\u53f7" else "Account",
-                tint = TaggoGlobalColors.TextPrimary,
-                modifier = Modifier.size(CompactHomeMetrics.AccountIconSize),
             )
         }
     }
@@ -3590,7 +3501,7 @@ private fun DashboardRecentFileRow(
         val meta = remember(reference, fullCjkFontReady) {
             buildList {
                 add(displayTextForUi(reference.fileType, fullCjkFontReady).ifBlank { "file" })
-                add(formatFileSize(reference.fileSizeBytes ?: guessFileSizeFromNotes(reference.notes)))
+                add(formatFileSize(reference.fileSizeBytes))
             }.joinToString(" · ")
         }
         TaggoListItemSurface(
@@ -5558,21 +5469,12 @@ private fun DetailPage(
                 BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                     val fileNameValue = displayTextForUi(reference.title, fullCjkFontReady)
                     val fileTypeValue = displayTextForUi(reference.fileType, fullCjkFontReady).ifBlank { "file" }
-                    val coverArtSourceValue = displayTextForUi(reference.coverArtSource.orEmpty(), fullCjkFontReady)
                     val fileNameFitsInline = rememberCompactDetailFieldFitsInline(
                         value = fileNameValue,
                         availableWidth = maxWidth,
                         fullCjkFontReady = fullCjkFontReady,
                         widthFraction = 0.42f,
                     )
-                    val coverArtFitsInline = reference.coverArtSource?.isNotBlank() == true &&
-                        rememberCompactDetailFieldFitsInline(
-                            value = coverArtSourceValue,
-                            availableWidth = maxWidth,
-                            fullCjkFontReady = fullCjkFontReady,
-                            valueFontFamily = fullCjkFontFamily,
-                            widthFraction = 0.42f,
-                        )
 
                     Column(
                         verticalArrangement = Arrangement.spacedBy(TaggoTheme.spacing.md),
@@ -5595,26 +5497,12 @@ private fun DetailPage(
                         )
                         CompactDetailShortField(
                             label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u5927\u5c0f" else "File size",
-                            value = formatFileSize(reference.fileSizeBytes ?: guessFileSizeFromNotes(reference.notes)),
+                            value = formatFileSize(reference.fileSizeBytes),
                         )
                         CompactDetailShortField(
                             label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u7c7b\u578b" else "File type",
                             value = fileTypeValue,
                         )
-                        if (reference.coverArtSource?.isNotBlank() == true) {
-                            if (coverArtFitsInline) {
-                                CompactDetailShortField(
-                                    label = if (locale == AppLocale.ZhCn) "\u5c01\u9762\u6765\u6e90" else "Cover art source",
-                                    value = coverArtSourceValue,
-                                )
-                            } else {
-                                CompactDetailLongField(
-                                    label = if (locale == AppLocale.ZhCn) "\u5c01\u9762\u6765\u6e90" else "Cover art source",
-                                    value = coverArtSourceValue,
-                                    valueFontFamily = fullCjkFontFamily,
-                                )
-                            }
-                        }
                         CompactDetailLongField(
                             label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u8def\u5f84" else "File path",
                             value = summarizeReferenceSource(reference, locale, fullCjkFontReady).ifBlank {
@@ -5667,7 +5555,7 @@ private fun DetailPage(
                     )
                     InfoRow(
                         label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u5927\u5c0f" else "File size",
-                        value = formatFileSize(reference.fileSizeBytes ?: guessFileSizeFromNotes(reference.notes)),
+                        value = formatFileSize(reference.fileSizeBytes),
                     )
                     InfoRow(
                         label = if (locale == AppLocale.ZhCn) "\u6587\u4ef6\u8def\u5f84" else "File path",
@@ -5676,13 +5564,6 @@ private fun DetailPage(
                         },
                         valueFontFamily = fullCjkFontFamily,
                     )
-                    if (reference.coverArtSource?.isNotBlank() == true) {
-                        InfoRow(
-                            label = if (locale == AppLocale.ZhCn) "\u5c01\u9762\u6765\u6e90" else "Cover art source",
-                            value = displayTextForUi(reference.coverArtSource.orEmpty(), fullCjkFontReady),
-                            valueFontFamily = fullCjkFontFamily,
-                        )
-                    }
                     if (shouldShowThumbnailStatusForDetail(reference)) {
                         InfoRow(
                             label = if (locale == AppLocale.ZhCn) "\u7f29\u7565\u56fe\u7f13\u5b58" else "Thumbnail cache",
@@ -6712,7 +6593,7 @@ private fun FileTileCard(
     val metaLine = remember(reference, fullCjkFontReady) {
         buildList {
             add(formatRelativeTime(reference.lastOpenedAtMillis))
-            add(formatFileSize(reference.fileSizeBytes ?: guessFileSizeFromNotes(reference.notes)))
+            add(formatFileSize(reference.fileSizeBytes))
         }.joinToString(separator = " • ")
     }
     Card(
@@ -7487,15 +7368,6 @@ private fun ManualAddDialog(
                     textStyle = fullCjkTextStyle,
                     colors = taggoOutlinedTextFieldColors(),
                 )
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = appState.draftCoverArtSource,
-                    onValueChange = { appState.draftCoverArtSource = it },
-                    label = { Text(if (locale == AppLocale.ZhCn) "\u5c01\u9762\u6765\u6e90" else "Cover art source") },
-                    singleLine = true,
-                    textStyle = fullCjkTextStyle,
-                    colors = taggoOutlinedTextFieldColors(),
-                )
                 if (!isReplaceMode) {
                     OutlinedTextField(
                         modifier = Modifier.fillMaxWidth(),
@@ -7517,15 +7389,6 @@ private fun ManualAddDialog(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = appState.draftNotes,
-                    onValueChange = { appState.draftNotes = it },
-                    label = { Text(appState.notes) },
-                    minLines = 2,
-                    textStyle = fullCjkTextStyle,
-                    colors = taggoOutlinedTextFieldColors(),
-                )
             }
         },
         confirmButton = {
@@ -7646,8 +7509,8 @@ private fun compareByName(direction: SortDirection): Comparator<FileReference> =
 private fun compareByFileSize(direction: SortDirection): Comparator<FileReference> =
     Comparator { left, right ->
         compareNullableLong(
-            left = left.fileSizeBytes ?: guessFileSizeFromNotes(left.notes),
-            right = right.fileSizeBytes ?: guessFileSizeFromNotes(right.notes),
+            left = left.fileSizeBytes,
+            right = right.fileSizeBytes,
             direction = direction,
         ).takeIf { it != 0 }
             ?: compareByCreatedAt(SortDirection.Descending).compare(left, right)
@@ -7842,8 +7705,8 @@ private fun webDraftWeaklyMatches(
         return false
     }
 
-    val existingSize = existing.fileSizeBytes ?: guessFileSizeFromNotes(existing.notes)
-    val replacementSize = replacement.fileSizeBytes ?: guessFileSizeFromNotes(replacement.notes)
+    val existingSize = existing.fileSizeBytes
+    val replacementSize = replacement.fileSizeBytes
     if (existingSize != null && replacementSize != null && existingSize != replacementSize) {
         return false
     }
@@ -7862,9 +7725,7 @@ private fun clearDraftFields(appState: FileManagerAppState) {
     appState.draftSource = ""
     appState.draftType = ""
     appState.draftFileSizeBytes = null
-    appState.draftCoverArtSource = ""
     appState.draftTags = ""
-    appState.draftNotes = ""
 }
 
 @Composable

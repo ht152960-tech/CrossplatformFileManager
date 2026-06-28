@@ -36,22 +36,11 @@ private fun File.toReferenceDraft(): BrowserReferenceDraft {
     val fileName = name.ifBlank { "Untitled file" }
     val fileType = inferFileType(fileName)
     val sizeBytes = takeIf { exists() && isFile }?.length()?.takeIf { it >= 0L }
-    val notes = buildList {
-        add("Selected from desktop file picker.")
-        if (sizeBytes != null) {
-            add("Size: $sizeBytes bytes")
-        }
-        if (lastModified() > 0L) {
-            add("Modified: ${lastModified()}")
-        }
-    }.joinToString(" | ")
-
     return BrowserReferenceDraft(
         title = fileName,
         source = absolutePath,
         fileType = fileType,
         fileSizeBytes = sizeBytes,
-        notes = notes,
     )
 }
 

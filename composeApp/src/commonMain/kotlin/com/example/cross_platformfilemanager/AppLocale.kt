@@ -65,7 +65,6 @@ data class UiStrings(
     val tagEditorEmpty: String,
     val addTag: String,
     val removeTag: String,
-    val notes: String,
     val quickAddHint: String,
     val addReference: String,
     val searchTitle: String,
@@ -106,9 +105,6 @@ data class UiStrings(
     val filteredByQueryLabel: String,
     val filteredByTagLabel: String,
     val filteredByTypeLabel: String,
-    val filteredByFavoritesLabel: String,
-    val favorite: String,
-    val unfavorite: String,
     val duplicateSourceNotice: String,
 )
 
@@ -169,7 +165,6 @@ object AppStrings {
         tagEditorEmpty = "\u6682\u65e0\u6807\u7b7e\uff0c\u53ef\u4ee5\u73b0\u5728\u6dfb\u52a0\u3002",
         addTag = "\u6dfb\u52a0\u6807\u7b7e",
         removeTag = "\u5220\u9664\u6807\u7b7e",
-        notes = "\u5907\u6ce8",
         quickAddHint = "\u5148\u7528\u8def\u5f84\u6216\u5f15\u7528\u5b57\u7b26\u4e32\u5360\u4f4d\uff0c\u540e\u7eed\u53ef\u66ff\u6362\u6210\u771f\u6b63\u7684\u672c\u5730\u6587\u4ef6\u8bbf\u95ee\u3002",
         addReference = "\u6dfb\u52a0\u5f15\u7528",
         searchTitle = "\u641c\u7d22\u6587\u4ef6",
@@ -210,9 +205,6 @@ object AppStrings {
         filteredByQueryLabel = "\u641c\u7d22\uff1a%s",
         filteredByTagLabel = "\u5f53\u524d\u7b5b\u9009\u6807\u7b7e\uff1a%s",
         filteredByTypeLabel = "\u7c7b\u578b\uff1a%s",
-        filteredByFavoritesLabel = "\u4ec5\u770b\u6536\u85cf",
-        favorite = "\u6536\u85cf",
-        unfavorite = "\u53d6\u6d88\u6536\u85cf",
         duplicateSourceNotice = "\u8be5\u6765\u6e90\u5df2\u5b58\u5728\uff0c\u4f46\u4fdd\u5b58\u65f6\u4ecd\u4f1a\u4f5c\u4e3a\u65b0\u7684\u5f15\u7528\u5355\u72ec\u4fdd\u5b58\uff0c\u4e0d\u4f1a\u81ea\u52a8\u5408\u5e76\u3002",
     )
 
@@ -261,12 +253,11 @@ object AppStrings {
         tagEditorEmpty = "No tags yet. Add one now.",
         addTag = "Add tag",
         removeTag = "Remove tag",
-        notes = "Notes",
         quickAddHint = "Start with a simple path or reference string. We can replace it with real file access later.",
         addReference = "Add reference",
         searchTitle = "Search files",
         searchSubtitle = "Enter a keyword, press search, or tap a tag to filter.",
-        searchPlaceholder = "Search tags, file names, paths, or notes",
+        searchPlaceholder = "Search tags, file names, or paths",
         resultsCountLabel = "%d matches",
         fileTypeFiltersTitle = "File type filters",
         allFileTypes = "All types",
@@ -302,9 +293,6 @@ object AppStrings {
         filteredByQueryLabel = "Search: %s",
         filteredByTagLabel = "Filtered by tag: %s",
         filteredByTypeLabel = "Type: %s",
-        filteredByFavoritesLabel = "Favorites only",
-        favorite = "Favorite",
-        unfavorite = "Unfavorite",
         duplicateSourceNotice = "This source already exists, but saving will still create a separate new reference instead of merging it.",
     )
 }

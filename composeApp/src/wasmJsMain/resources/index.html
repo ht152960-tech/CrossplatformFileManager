@@ -117,12 +117,12 @@
             return runtimeDraftStore.get(id) || null;
         }
 
-        function encodeDraft(title, source, fileType, notes) {
+        function encodeDraft(title, source, fileType, fileSizeBytes) {
             return [
                 `${title.length}:${title}`,
                 `${source.length}:${source}`,
                 `${fileType.length}:${fileType}`,
-                `${notes.length}:${notes}`,
+                `${String(fileSizeBytes ?? "").length}:${fileSizeBytes ?? ""}`,
             ].join("");
         }
 
@@ -146,41 +146,6 @@
                 return name.substring(dot + 1).toUpperCase();
             }
             return "FILE";
-        }
-
-        function formatFileSize(bytes) {
-            if (!Number.isFinite(bytes) || bytes < 0) {
-                return "unknown size";
-            }
-            if (bytes < 1024) {
-                return `${bytes} B`;
-            }
-            if (bytes < 1024 * 1024) {
-                return `${(bytes / 1024).toFixed(1)} KB`;
-            }
-            return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-        }
-
-        function formatModifiedTime(timestamp) {
-            if (!Number.isFinite(timestamp) || timestamp <= 0) {
-                return "unknown time";
-            }
-            try {
-                return new Date(timestamp).toLocaleString();
-            } catch (error) {
-                return "unknown time";
-            }
-        }
-
-        function buildDraftNotes(baseNotes, file) {
-            const pieces = [baseNotes];
-            if (file && typeof file.size === "number") {
-                pieces.push(`Size: ${formatFileSize(file.size)}`);
-            }
-            if (file && typeof file.lastModified === "number") {
-                pieces.push(`Modified: ${formatModifiedTime(file.lastModified)}`);
-            }
-            return pieces.filter(Boolean).join(" | ");
         }
 
         function extractBrowserReferenceId(source) {
@@ -635,7 +600,6 @@
                     const title = file.name || "Untitled file";
                     const source = `browser-file:${id}`;
                     const fileType = guessFileType(file);
-                    const notes = buildDraftNotes("Selected from browser file picker.", file);
                     logThumbnail("pickReference.input.selected", {
                         fileName: file.name,
                         fileType: file.type,
@@ -647,9 +611,9 @@
                         title: title,
                         source: source,
                         fileType: fileType,
-                        notes: notes,
+                        fileSizeBytes: file.size,
                     });
-                    resolve(encodeDraft(title, source, fileType, notes));
+                    resolve(encodeDraft(title, source, fileType, file.size));
                 });
                 document.body.appendChild(input);
                 input.click();
@@ -669,7 +633,6 @@
                     const title = file.name || "Untitled file";
                     const source = `browser-handle:${id}`;
                     const fileType = guessFileType(file);
-                    const notes = buildDraftNotes("Selected from browser file picker.", file);
                     logThumbnail("pickReference.handle.selected", {
                         fileName: file.name,
                         fileType: file.type,
@@ -681,9 +644,9 @@
                         title: title,
                         source: source,
                         fileType: fileType,
-                        notes: notes,
+                        fileSizeBytes: file.size,
                     });
-                    return encodeDraft(title, source, fileType, notes);
+                    return encodeDraft(title, source, fileType, file.size);
                 } catch (error) {
                     return null;
                 }
@@ -710,7 +673,7 @@
                     storedDraft.title || "Untitled file",
                     storedDraft.source || source,
                     storedDraft.fileType || "FILE",
-                    storedDraft.notes || "Selected from browser file picker."
+                    storedDraft.fileSizeBytes ?? null
                 );
             }
             return null;

@@ -79,7 +79,6 @@ internal fun FileCoverArtFrame(
 ) {
     val readyThumbnailPainter = rememberThumbnailPainter(reference.thumbnailPath)
         ?.takeIf { reference.thumbnailStatus == ThumbnailStatus.READY }
-    val hasCoverArt = reference.coverArtSource?.isNotBlank() == true
     val fileTypeCategory = FileTypeClassifier.classify(reference)
     Box(
         modifier = modifier
@@ -106,26 +105,6 @@ internal fun FileCoverArtFrame(
                         ),
                     ),
             )
-        } else if (hasCoverArt) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = "Cover art",
-                    color = iconStyle.tint,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp,
-                )
-                Text(
-                    text = displayTextForUi(reference.coverArtSource.orEmpty(), fullCjkFontReady),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 10.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    fontFamily = fullCjkFontFamily,
-                )
-            }
         } else {
             Icon(
                 painter = painterResource(iconStyle.icon),

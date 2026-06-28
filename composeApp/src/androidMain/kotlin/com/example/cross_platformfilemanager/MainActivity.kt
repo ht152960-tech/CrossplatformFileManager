@@ -48,10 +48,9 @@ class MainActivity : ComponentActivity() {
         )
         AndroidBrowserReferencePickerHolder.register(browserReferencePicker)
 
-        val fileImportService =
-            AndroidTaggoDatabaseProvider.getFileImportService(applicationContext)
+        val runtimeStore = AndroidTaggoDatabaseProvider.getRuntimeStore(applicationContext)
         setContent {
-            App(fileImportService = fileImportService)
+            App(runtimeStore = runtimeStore)
         }
     }
 

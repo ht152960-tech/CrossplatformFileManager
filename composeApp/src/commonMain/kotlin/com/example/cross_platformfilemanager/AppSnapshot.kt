@@ -3,24 +3,17 @@ package com.example.cross_platformfilemanager
 import kotlinx.serialization.Serializable
 
 /**
- * 应用工作区快照。
+ * 非业务界面状态快照。
  *
- * 除了普通文件列表、查询条件和最近搜索外，
- * 这里还把推荐日志与推荐引擎状态一起纳入快照，
- * 这样恢复工作区时，推荐算法可以延续之前的学习结果。
+ * 文件、标签和最近搜索只从 SQLDelight 数据库恢复，不进入 JSON 快照。
  */
 @Serializable
 data class AppSnapshot(
-    val schemaVersion: Int = 10,
+    val schemaVersion: Int = 11,
     val locale: AppLocale,
     val query: String,
     val searchTags: List<SearchTag> = emptyList(),
     val selectedTag: String?,
     val selectedFileType: String?,
-    val favoritesOnly: Boolean,
     val activeReferenceId: String?,
-    val references: List<FileReference>,
-    val recentSearches: List<String>,
-    val recommendationLogs: List<RecommendationLog>,
-    val recommendationState: RecommendationEngineSnapshot? = null,
 )

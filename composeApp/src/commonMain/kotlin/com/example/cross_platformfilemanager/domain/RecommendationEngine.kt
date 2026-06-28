@@ -141,7 +141,6 @@ class RecommendationEngine(
         references.forEach { reference ->
             val title = normalize(reference.title)
             val source = normalize(reference.source)
-            val notes = normalize(reference.notes)
             val combinedTags = reference.tags.map { normalize(it) }
 
             var score = 0.0
@@ -162,10 +161,6 @@ class RecommendationEngine(
                 if (source.contains(token)) {
                     score += 0.25
                     reasons += "source match"
-                }
-                if (notes.contains(token)) {
-                    score += 0.20
-                    reasons += "notes match"
                 }
                 if (combinedTags.any { it.contains(token) }) {
                     score += 0.65

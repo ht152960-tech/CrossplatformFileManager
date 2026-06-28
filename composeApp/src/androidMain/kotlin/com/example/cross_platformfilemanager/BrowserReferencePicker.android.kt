@@ -123,7 +123,6 @@ internal class AndroidBrowserReferencePicker(
             source = toString(),
             fileType = inferFileType(displayName, mimeType),
             fileSizeBytes = metadata.sizeBytes,
-            notes = "Selected from Android system file picker. MIME type: $mimeType",
         )
     }
 
