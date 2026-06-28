@@ -70,27 +70,27 @@ class FileManagerAppState(
     val recommendations: List<Suggestion>
         get() = recommendationEngine.suggest(
             query = query,
-            references = runtimeStore.files,
-            recentSearches = runtimeStore.recentSearches,
+            references = runtimeStore.files.toList(),
+            recentSearches = runtimeStore.recentSearches.toList(),
             selectedTag = selectedTag,
         )
 
     val searchResults: List<SearchResult>
-        get() = searchRuntimeFiles(runtimeStore.files, searchTags)
+        get() = searchRuntimeFiles(runtimeStore.files.toList(), searchTags)
 
     val topTags: List<String> get() = allTags.take(10)
     val allTags: List<String>
-        get() = runtimeStore.files
+        get() = runtimeStore.files.toList()
             .flatMap { it.tags }
             .groupingBy { it }
             .eachCount()
             .entries
             .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
             .map { it.key }
-    val recentSearches: List<String> get() = runtimeStore.recentSearches
+    val recentSearches: List<String> get() = runtimeStore.recentSearches.toList()
     val recentReferences: List<TaggoRuntimeFile>
-        get() = runtimeStore.files.sortedByDescending { it.lastContentOpenedAtMs ?: 0L }.take(5)
-    val allReferences: List<TaggoRuntimeFile> get() = runtimeStore.files
+        get() = runtimeStore.files.toList().sortedByDescending { it.lastContentOpenedAtMs ?: 0L }.take(5)
+    val allReferences: List<TaggoRuntimeFile> get() = runtimeStore.files.toList()
 
     override val recommendedReferences: List<FileReference>
         get() = recommendationEngine.recommend(
@@ -122,7 +122,7 @@ class FileManagerAppState(
     suspend fun loadRuntime() {
         runtimeStore.load()
         if (activeReferenceId == null || runtimeStore.getFile(activeReferenceId.orEmpty()) == null) {
-            activeReferenceId = runtimeStore.files.firstOrNull()?.id
+            activeReferenceId = runtimeStore.files.toList().firstOrNull()?.id
         }
         snapshotVersion++
     }
@@ -151,7 +151,7 @@ class FileManagerAppState(
 
     fun resetWorkspace() {
         resetWorkspaceFields()
-        activeReferenceId = runtimeStore.files.firstOrNull()?.id
+        activeReferenceId = runtimeStore.files.toList().firstOrNull()?.id
         snapshotVersion++
     }
 
@@ -164,7 +164,7 @@ class FileManagerAppState(
     fun clearLocalData() {
         recommendationEngine.clear()
         resetWorkspaceFields()
-        activeReferenceId = runtimeStore.files.firstOrNull()?.id
+        activeReferenceId = runtimeStore.files.toList().firstOrNull()?.id
         snapshotVersion++
     }
 
@@ -286,7 +286,8 @@ class FileManagerAppState(
 
     suspend fun refreshBrowserReferences(): Int {
         var refreshed = 0
-        runtimeStore.files.filter { it.sourceKind == FileSourceKind.BrowserHandle }.forEach { file ->
+        val filesSnapshot = runtimeStore.files.toList()
+        filesSnapshot.filter { it.sourceKind == FileSourceKind.BrowserHandle }.forEach { file ->
             val resolved = browserReferenceResolver?.resolveReference(file) ?: return@forEach
             replaceReference(file.id, resolved)
             refreshed++
@@ -301,7 +302,7 @@ class FileManagerAppState(
         stateScope.launch {
             runtimeStore.softDeleteFile(referenceId)
             if (activeReferenceId == referenceId) {
-                activeReferenceId = runtimeStore.files.firstOrNull()?.id
+                activeReferenceId = runtimeStore.files.toList().firstOrNull()?.id
             }
             snapshotVersion++
         }
@@ -320,7 +321,8 @@ class FileManagerAppState(
     }
 
     fun deleteTagEverywhere(tag: String): Int {
-        val expected = runtimeStore.files.count { file -> file.tags.any { normalize(it) == normalize(tag) } }
+        val filesSnapshot = runtimeStore.files.toList()
+        val expected = filesSnapshot.count { file -> file.tags.any { normalize(it) == normalize(tag) } }
         stateScope.launch {
             runtimeStore.removeTagEverywhere(tag)
             snapshotVersion++
@@ -397,7 +399,7 @@ class FileManagerAppState(
 
     private fun recommendationCandidates(): List<FileReference> {
         val now = nowMillis()
-        return runtimeStore.files.filter { isEligibleForRecommendation(it, now) }
+        return runtimeStore.files.toList().filter { isEligibleForRecommendation(it, now) }
     }
 
     private fun parseTags(value: String): List<String> =

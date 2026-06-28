@@ -1,4 +1,4 @@
-﻿package com.example.cross_platformfilemanager
+package com.example.cross_platformfilemanager
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
@@ -40,6 +40,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -505,7 +506,13 @@ private fun MediumNavigationSidebar(
  * 这里负责创建跨页面共享的状态对象、恢复快照、接入启动门面，
  * 并把主要页面之间的导航和通用操作入口组织起来。
  */
-fun App(runtimeStore: TaggoFileRuntimeStore = TaggoFileRuntimeStore()) {
+fun App(
+    runtimeStore: TaggoFileRuntimeStore = TaggoFileRuntimeStore(),
+    initialCrashReport: String? = null,
+    onClearCrashReport: (() -> Unit)? = null,
+    onCopyCrashReport: ((String) -> Unit)? = null,
+    onShareCrashReport: ((String) -> Unit)? = null,
+) {
     val snapshotStore = remember { createAppSnapshotStore() }
     val browserReferencePicker = remember { createBrowserReferencePicker() }
     val browserReferenceResolver = remember { createBrowserReferenceResolver() }
@@ -524,6 +531,7 @@ fun App(runtimeStore: TaggoFileRuntimeStore = TaggoFileRuntimeStore()) {
     val fontLoadState = rememberAppFontLoadState()
     val fullCjkFontLoadState = rememberFullCjkFontLoadState()
     val appStartMillis = remember { nowMillis() }
+    val crashReportText = initialCrashReport?.takeIf { it.isNotBlank() }
 
     var currentPage by remember { mutableStateOf(AppPage.Home) }
     var selectedNavigationPage by remember { mutableStateOf(AppPage.Home) }
@@ -545,6 +553,7 @@ fun App(runtimeStore: TaggoFileRuntimeStore = TaggoFileRuntimeStore()) {
     var snapshotSaveFailureEventId by remember { mutableStateOf(0) }
     var snapshotSaveFailureShownEventId by remember { mutableStateOf(0) }
     var searchFeedbackMessage by remember { mutableStateOf<String?>(null) }
+    var showCrashReportDialog by remember(crashReportText) { mutableStateOf(crashReportText != null) }
     val refreshedReadyThumbnailIds = remember { mutableSetOf<String>() }
     val failedRetryThumbnailIds = remember { mutableSetOf<String>() }
 
@@ -1242,6 +1251,75 @@ fun App(runtimeStore: TaggoFileRuntimeStore = TaggoFileRuntimeStore()) {
                                     dismissButton = {
                                         TextButton(onClick = { showDeleteConfirm = false }) {
                                             Text(if (displayLocale == AppLocale.ZhCn) "\u53d6\u6d88" else "Cancel")
+                                        }
+                                    },
+                                )
+                            }
+
+                            if (showCrashReportDialog && crashReportText != null) {
+                                AlertDialog(
+                                    onDismissRequest = { showCrashReportDialog = false },
+                                    containerColor = TaggoTheme.colors.surfaceElevated,
+                                    title = {
+                                        Text(
+                                            text = if (displayLocale == AppLocale.ZhCn) "检测到上次崩溃" else "Previous crash detected",
+                                            color = TaggoGlobalColors.TextPrimary,
+                                        )
+                                    },
+                                    text = {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = 420.dp)
+                                                .verticalScroll(rememberScrollState()),
+                                            verticalArrangement = Arrangement.spacedBy(TaggoGlobalSpacing.Sm),
+                                        ) {
+                                            Text(
+                                                text = if (displayLocale == AppLocale.ZhCn) {
+                                                    "下面是上次启动前记录的完整崩溃信息。你可以先复制保存，再决定是否清除。"
+                                                } else {
+                                                    "This is the full crash report captured before the last launch. You can copy it first, then clear it if needed."
+                                                },
+                                                color = TaggoGlobalColors.TextSecondary,
+                                            )
+                                            SelectionContainer {
+                                                Text(
+                                                    text = crashReportText,
+                                                    color = TaggoGlobalColors.TextPrimary,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontSize = TaggoGlobalTypography.BodySmall,
+                                                )
+                                            }
+                                        }
+                                    },
+                                    confirmButton = {
+                                        FlowRow(horizontalArrangement = Arrangement.spacedBy(TaggoGlobalSpacing.Xs)) {
+                                            TextButton(
+                                                onClick = {
+                                                    onCopyCrashReport?.invoke(crashReportText)
+                                                },
+                                                enabled = onCopyCrashReport != null,
+                                            ) {
+                                                Text(if (displayLocale == AppLocale.ZhCn) "复制全部" else "Copy all")
+                                            }
+                                            if (onShareCrashReport != null) {
+                                                TextButton(onClick = { onShareCrashReport.invoke(crashReportText) }) {
+                                                    Text(if (displayLocale == AppLocale.ZhCn) "分享" else "Share")
+                                                }
+                                            }
+                                            TextButton(
+                                                onClick = {
+                                                    onClearCrashReport?.invoke()
+                                                    showCrashReportDialog = false
+                                                },
+                                            ) {
+                                                Text(if (displayLocale == AppLocale.ZhCn) "清除" else "Clear")
+                                            }
+                                        }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = { showCrashReportDialog = false }) {
+                                            Text(if (displayLocale == AppLocale.ZhCn) "关闭" else "Close")
                                         }
                                     },
                                 )

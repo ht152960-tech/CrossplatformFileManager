@@ -25,6 +25,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        AndroidCrashReporter.install(applicationContext)
         registerAndroidApplicationContext(applicationContext)
         if (filePickerState.clearStalePendingAfterProcessRestore()) {
             showFilePickerStateExpiredToast()
@@ -49,8 +50,15 @@ class MainActivity : ComponentActivity() {
         AndroidBrowserReferencePickerHolder.register(browserReferencePicker)
 
         val runtimeStore = AndroidTaggoDatabaseProvider.getRuntimeStore(applicationContext)
+        val lastCrash = AndroidCrashReporter.readLastCrash(applicationContext)
         setContent {
-            App(runtimeStore = runtimeStore)
+            App(
+                runtimeStore = runtimeStore,
+                initialCrashReport = lastCrash,
+                onClearCrashReport = { AndroidCrashReporter.clearLastCrash(applicationContext) },
+                onCopyCrashReport = { crashText -> AndroidCrashReporter.copyCrashToClipboard(applicationContext, crashText) },
+                onShareCrashReport = { crashText -> AndroidCrashReporter.shareCrash(applicationContext, crashText) },
+            )
         }
     }
 
