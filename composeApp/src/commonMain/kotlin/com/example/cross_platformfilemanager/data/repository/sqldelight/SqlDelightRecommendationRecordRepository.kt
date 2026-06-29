@@ -12,6 +12,7 @@ class SqlDelightRecommendationRecordRepository(
     private val database: TaggoDatabase,
 ) : RecommendationRecordRepository {
     private val queries = database.taggoDatabaseQueries
+    private val historyQueries = database.recommendationHistoryQueriesQueries
 
     override suspend fun addRecommendationContext(context: TaggoRecommendationContext) {
         queries.insertRecommendationContext(
@@ -93,6 +94,14 @@ class SqlDelightRecommendationRecordRepository(
         recommendationSetId: String,
     ): List<TaggoRecommendationFeedback> =
         queries.selectFeedbackForRecommendationSet(recommendationSetId)
+            .executeAsList()
+            .map { it.toModel() }
+
+    override suspend fun getFeedbackInRange(
+        fromMs: Long,
+        toMs: Long,
+    ): List<TaggoRecommendationFeedback> =
+        historyQueries.selectRecommendationFeedbackInRange(fromMs, toMs)
             .executeAsList()
             .map { it.toModel() }
 }

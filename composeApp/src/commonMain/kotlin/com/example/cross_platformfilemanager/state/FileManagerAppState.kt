@@ -4,6 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.example.cross_platformfilemanager.data.adapter.TaggoFileImportInput
+import com.example.cross_platformfilemanager.domain.recommendation.RecommendationRequest
+import com.example.cross_platformfilemanager.domain.recommendation.RecommendationRequestContext
 import com.example.cross_platformfilemanager.runtime.TaggoBehaviorRuntime
 import com.example.cross_platformfilemanager.runtime.TaggoFileRuntimeStore
 import com.example.cross_platformfilemanager.runtime.RecommendationSnapshotInput
@@ -33,6 +35,7 @@ class FileManagerAppState(
     private val generatingThumbnailIds = mutableSetOf<String>()
     private var lastViewedDetailId: String? = null
     private var lastContentOpenedReferenceId: String? = null
+    private val recommendationRequestContext = RecommendationRequestContext()
     private val recommendationSnapshotMutex = Mutex()
     private var lastRecommendationSignature: String? = null
     private var currentRecommendationSetId: String? = null
@@ -192,6 +195,15 @@ class FileManagerAppState(
             candidates = selection.third,
         )
     }
+
+    fun currentRecommendationRequest(
+        nowMs: Long = nowMillis(),
+        limit: Int = 10,
+    ): RecommendationRequest = recommendationRequestContext.createRequest(
+        nowMs = nowMs,
+        limit = limit,
+    )
+
     fun exportSnapshot(): AppSnapshot = AppSnapshot(
         locale = preferredLocale,
         query = query,
@@ -361,6 +373,7 @@ class FileManagerAppState(
             entryPoint = entryPoint,
             screenName = screenName,
         )
+        recommendationRequestContext.recordOpenContent(referenceId)
         lastContentOpenedReferenceId = target.id
         activeReferenceId = target.id
         snapshotVersion++

@@ -102,6 +102,12 @@ class TaggoDatabaseRepositorySmokeTest {
             listOf("event_1"),
             repositories.behavior.getEventsForSession("session_1").map { it.id },
         )
+        assertEquals(
+            listOf("event_1"),
+            repositories.behavior
+                .getEventsByTypeInRange("open_content", 1_000, 1_500)
+                .map { it.id },
+        )
 
         repositories.behavior.recordExplicitNeedSignal(
             TaggoExplicitNeedSignal(
@@ -210,6 +216,10 @@ class TaggoDatabaseRepositorySmokeTest {
             assertEquals(
                 listOf("feedback_1"),
                 repositories.recommendations.getFeedbackForSet("set_1").map { it.id },
+            )
+            assertEquals(
+                listOf("feedback_1"),
+                repositories.recommendations.getFeedbackInRange(1_500, 1_700).map { it.id },
             )
         }
 

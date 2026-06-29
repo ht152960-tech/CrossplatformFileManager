@@ -11,6 +11,7 @@ class SqlDelightBehaviorRepository(
     private val database: TaggoDatabase,
 ) : BehaviorRepository {
     private val queries = database.taggoDatabaseQueries
+    private val historyQueries = database.recommendationHistoryQueriesQueries
 
     override suspend fun startSession(session: TaggoBehaviorSession) {
         queries.insertBehaviorSession(
@@ -51,6 +52,15 @@ class SqlDelightBehaviorRepository(
 
     override suspend fun getEventsForSession(sessionId: String): List<TaggoBehaviorEvent> =
         queries.selectBehaviorEventsForSession(sessionId).executeAsList().map { it.toModel() }
+
+    override suspend fun getEventsByTypeInRange(
+        eventType: String,
+        fromMs: Long,
+        toMs: Long,
+    ): List<TaggoBehaviorEvent> =
+        historyQueries.selectBehaviorEventsByTypeInRange(eventType, fromMs, toMs)
+            .executeAsList()
+            .map { it.toModel() }
 
     override suspend fun recordExplicitNeedSignal(signal: TaggoExplicitNeedSignal) {
         queries.insertExplicitNeedSignal(

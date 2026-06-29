@@ -76,6 +76,12 @@ interface BehaviorRepository {
 
     suspend fun getEventsForSession(sessionId: String): List<TaggoBehaviorEvent>
 
+    suspend fun getEventsByTypeInRange(
+        eventType: String,
+        fromMs: Long,
+        toMs: Long,
+    ): List<TaggoBehaviorEvent> = emptyList()
+
     suspend fun recordExplicitNeedSignal(signal: TaggoExplicitNeedSignal)
 
     suspend fun getExplicitNeedSignalsForSession(sessionId: String): List<TaggoExplicitNeedSignal>
@@ -99,4 +105,9 @@ interface RecommendationRecordRepository {
     suspend fun addRecommendationFeedback(feedback: TaggoRecommendationFeedback)
 
     suspend fun getFeedbackForSet(recommendationSetId: String): List<TaggoRecommendationFeedback>
+
+    suspend fun getFeedbackInRange(
+        fromMs: Long,
+        toMs: Long,
+    ): List<TaggoRecommendationFeedback> = emptyList()
 }

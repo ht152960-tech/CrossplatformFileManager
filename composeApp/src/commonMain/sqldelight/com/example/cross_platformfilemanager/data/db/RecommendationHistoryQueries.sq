@@ -1,0 +1,14 @@
+selectBehaviorEventsByTypeInRange:
+SELECT *
+FROM behavior_event
+WHERE event_type = :eventType
+    AND occurred_at_ms >= :fromMs
+    AND occurred_at_ms <= :toMs
+ORDER BY occurred_at_ms ASC;
+
+selectRecommendationFeedbackInRange:
+SELECT *
+FROM recommendation_feedback
+WHERE created_at_ms >= :fromMs
+    AND created_at_ms <= :toMs
+ORDER BY created_at_ms ASC;
