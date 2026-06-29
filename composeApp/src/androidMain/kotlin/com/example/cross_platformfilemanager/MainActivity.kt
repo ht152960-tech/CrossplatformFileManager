@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
             App(
                 runtimeStore = appComponents.runtimeStore,
                 behaviorRuntime = appComponents.behaviorRuntime,
+                recommendationRuntime = appComponents.recommendationRuntime,
                 initialCrashReport = lastCrash,
                 onClearCrashReport = { AndroidCrashReporter.clearLastCrash(applicationContext) },
                 onCopyCrashReport = { crashText -> AndroidCrashReporter.copyCrashToClipboard(applicationContext, crashText) },

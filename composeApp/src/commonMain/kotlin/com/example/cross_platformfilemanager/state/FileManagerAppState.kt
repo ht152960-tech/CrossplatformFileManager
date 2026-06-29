@@ -6,12 +6,18 @@ import androidx.compose.runtime.setValue
 import com.example.cross_platformfilemanager.data.adapter.TaggoFileImportInput
 import com.example.cross_platformfilemanager.runtime.TaggoBehaviorRuntime
 import com.example.cross_platformfilemanager.runtime.TaggoFileRuntimeStore
+import com.example.cross_platformfilemanager.runtime.RecommendationSnapshotInput
+import com.example.cross_platformfilemanager.runtime.TaggoRecommendationRuntime
 import com.example.cross_platformfilemanager.runtime.TaggoRuntimeFile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 
 class FileManagerAppState(
     val runtimeStore: TaggoFileRuntimeStore = TaggoFileRuntimeStore(),
@@ -19,6 +25,7 @@ class FileManagerAppState(
     private val browserReferenceResolver: BrowserReferenceResolver? = null,
     private val thumbnailGenerator: ThumbnailGenerator? = null,
     private val behaviorRuntime: TaggoBehaviorRuntime? = null,
+    private val recommendationRuntime: TaggoRecommendationRuntime? = null,
 ) : RecommendationReadOnlyState {
     val searchTags = androidx.compose.runtime.mutableStateListOf<SearchTag>()
     val startupDefaultLocale = AppLocale.ZhCn
@@ -26,6 +33,10 @@ class FileManagerAppState(
     private val generatingThumbnailIds = mutableSetOf<String>()
     private var lastViewedDetailId: String? = null
     private var lastContentOpenedReferenceId: String? = null
+    private val recommendationSnapshotMutex = Mutex()
+    private var lastRecommendationSignature: String? = null
+    private var currentRecommendationSetId: String? = null
+    private var currentRecommendationCandidates: List<RecommendationSnapshotInput> = emptyList()
 
     var preferredLocale by mutableStateOf(startupDefaultLocale)
     var locale by mutableStateOf(startupDefaultLocale)
@@ -131,6 +142,56 @@ class FileManagerAppState(
         snapshotVersion++
     }
 
+    suspend fun recordHomeRecommendationSnapshot(recommendations: List<ScoredRecommendation>) {
+        val runtime = recommendationRuntime ?: return
+        val candidates = recommendations.mapIndexed { index, recommendation ->
+            RecommendationSnapshotInput(
+                fileId = recommendation.file.id,
+                rank = index + 1,
+                score = recommendation.finalScore,
+                reasonsJson = recommendation.reasonsJson(),
+            )
+        }
+        val signature = candidates.joinToString("|") { it.fileId }
+        recommendationSnapshotMutex.withLock {
+            if (signature == lastRecommendationSignature) return
+            if (candidates.isEmpty()) {
+                lastRecommendationSignature = signature
+                currentRecommendationSetId = null
+                currentRecommendationCandidates = emptyList()
+                return
+            }
+            currentRecommendationSetId = null
+            currentRecommendationCandidates = emptyList()
+            val recorded = runtime.recordRecommendationSet(
+                surface = "home_recommendations",
+                trigger = "home_render",
+                candidates = candidates,
+            ) ?: return
+            lastRecommendationSignature = signature
+            currentRecommendationSetId = recorded.setId
+            currentRecommendationCandidates = candidates
+        }
+    }
+
+    suspend fun recordRecommendationOpenResult(
+        fileId: String,
+        openedSuccessfully: Boolean,
+    ) {
+        val runtime = recommendationRuntime ?: return
+        val selection = recommendationSnapshotMutex.withLock {
+            val setId = currentRecommendationSetId ?: return
+            val candidate = currentRecommendationCandidates.firstOrNull { it.fileId == fileId } ?: return
+            Triple(setId, candidate.rank, currentRecommendationCandidates)
+        }
+        runtime.recordSelectedFromRecommendation(
+            recommendationSetId = selection.first,
+            selectedFileId = fileId,
+            selectedRank = selection.second,
+            openedSuccessfully = openedSuccessfully,
+            candidates = selection.third,
+        )
+    }
     fun exportSnapshot(): AppSnapshot = AppSnapshot(
         locale = preferredLocale,
         query = query,
@@ -497,3 +558,8 @@ private fun searchRuntimeFiles(
             .thenByDescending { it.reference.createdAtMs },
     )
 }
+private fun ScoredRecommendation.reasonsJson(): String = buildJsonArray {
+    if (intervalScore > 0.0) add("interval_pattern")
+    if (transitionScore > 0.0) add("successor_relation")
+    if (recencyScore > 0.0) add("recent_open")
+}.toString()

@@ -126,6 +126,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Star
 import com.example.cross_platformfilemanager.runtime.TaggoBehaviorRuntime
 import com.example.cross_platformfilemanager.runtime.TaggoFileRuntimeStore
+import com.example.cross_platformfilemanager.runtime.TaggoRecommendationRuntime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -517,6 +518,7 @@ private fun MediumNavigationSidebar(
 fun App(
     runtimeStore: TaggoFileRuntimeStore = TaggoFileRuntimeStore(),
     behaviorRuntime: TaggoBehaviorRuntime? = null,
+    recommendationRuntime: TaggoRecommendationRuntime? = null,
     initialCrashReport: String? = null,
     onClearCrashReport: (() -> Unit)? = null,
     onCopyCrashReport: ((String) -> Unit)? = null,
@@ -527,12 +529,19 @@ fun App(
     val browserReferenceResolver = remember { createBrowserReferenceResolver() }
     val thumbnailGenerator = remember { createThumbnailGenerator() }
     val uiFontFamily = rememberAppFontFamily()
-    val appState = remember(runtimeStore, browserReferenceResolver, thumbnailGenerator, behaviorRuntime) {
+    val appState = remember(
+        runtimeStore,
+        browserReferenceResolver,
+        thumbnailGenerator,
+        behaviorRuntime,
+        recommendationRuntime,
+    ) {
         FileManagerAppState(
             runtimeStore = runtimeStore,
             browserReferenceResolver = browserReferenceResolver,
             thumbnailGenerator = thumbnailGenerator,
             behaviorRuntime = behaviorRuntime,
+            recommendationRuntime = recommendationRuntime,
         )
     }
     val coroutineScope = rememberCoroutineScope()
@@ -664,7 +673,7 @@ fun App(
         currentPage = AppPage.Detail
     }
 
-    fun openFileDirectly(reference: FileReference) {
+    fun openFileDirectly(reference: FileReference, fromRecommendation: Boolean = false) {
         coroutineScope.launch {
             val needsRefresh =
                 reference.sourceKind == FileSourceKind.BrowserHandle &&
@@ -680,6 +689,9 @@ fun App(
                     fileReferenceId = openableReference.primaryReferenceId,
                     screenName = currentPage.screenName(),
                 )
+                if (fromRecommendation) {
+                    appState.recordRecommendationOpenResult(openableReference.id, openedSuccessfully = true)
+                }
             } else {
                 val failureMessage = openResult.message?.let { localizeWebOpenMessage(it, appState.locale) }
                     ?: openFileFailureMessage(openableReference, appState.locale)
@@ -689,6 +701,9 @@ fun App(
                     errorMessage = failureMessage,
                     screenName = currentPage.screenName(),
                 )
+                if (fromRecommendation) {
+                    appState.recordRecommendationOpenResult(openableReference.id, openedSuccessfully = false)
+                }
                 snapshotSnackbarHostState.showSnackbar(
                     message = failureMessage,
                     actionLabel = if (appState.locale == AppLocale.ZhCn) "知道了" else "OK",
@@ -1039,7 +1054,8 @@ fun App(
                                             onOpenMenu = { showSideMenu = true },
                                             onSearch = ::startSearchFromHome,
                                             onOpenReference = ::openReference,
-                                            onOpenFile = ::openFileDirectly,
+                                            onOpenFile = { openFileDirectly(it) },
+                                            onOpenRecommendedFile = { openFileDirectly(it, fromRecommendation = true) },
                                             onOpenTags = { currentPage = AppPage.Tags },
                                             onOpenAllFiles = {
                                                 allFilesTypeFilter = AllFilesTypeFilter.All
@@ -1398,6 +1414,7 @@ private fun HomePage(
     onSearch: () -> Unit,
     onOpenReference: (FileReference) -> Unit,
     onOpenFile: (FileReference) -> Unit,
+    onOpenRecommendedFile: (FileReference) -> Unit,
     onOpenTags: () -> Unit,
     onOpenAllFiles: () -> Unit,
     onOpenTypeFilter: (AllFilesTypeFilter) -> Unit,
@@ -1423,6 +1440,21 @@ private fun HomePage(
         contentAlignment = Alignment.TopCenter,
     ) {
         val showExpandedDashboard = expandedLayout && maxHeight > MediumHomeMetrics.MaxDashboardHeight
+        val snapshotRecommendations = when {
+            compactLayout -> scoredRecommendedReferences.take(5)
+            showExpandedDashboard -> recommendedReferences.map { reference ->
+                scoredRecommendedReferences.firstOrNull { it.file.id == reference.id }
+                    ?: ScoredRecommendation(reference, 0.0, 0.0, 0.0, 0.0)
+            }
+            scoredRecommendedReferences.isNotEmpty() -> scoredRecommendedReferences
+            else -> appState.recentAddedReferences.map { reference ->
+                ScoredRecommendation(reference, 0.0, 0.0, 0.0, 0.0)
+            }
+        }
+        val recommendationSignature = snapshotRecommendations.joinToString("|") { it.file.id }
+        LaunchedEffect(recommendationSignature) {
+            appState.recordHomeRecommendationSnapshot(snapshotRecommendations)
+        }
 
         Box(
             modifier = Modifier
@@ -1507,6 +1539,7 @@ private fun HomePage(
                         scoredRecommendedReferences = scoredRecommendedReferences.take(10),
                         onOpenReference = onOpenReference,
                         onOpenFile = onOpenFile,
+                        onOpenRecommendedFile = onOpenRecommendedFile,
                         onOpenTags = onOpenTags,
                         onOpenAllFiles = onOpenAllFiles,
                         onOpenTypeFilter = onOpenTypeFilter,
@@ -1526,6 +1559,7 @@ private fun HomePage(
                         onSearch = onSearch,
                         onOpenReference = onOpenReference,
                         onOpenFile = onOpenFile,
+                        onOpenRecommendedFile = onOpenRecommendedFile,
                         onOpenTags = onOpenTags,
                         onOpenAllFiles = onOpenAllFiles,
                         onOpenTypeFilter = onOpenTypeFilter,
@@ -1885,6 +1919,7 @@ private fun HomeMediumDashboard(
     onSearch: () -> Unit,
     onOpenReference: (FileReference) -> Unit,
     onOpenFile: (FileReference) -> Unit,
+    onOpenRecommendedFile: (FileReference) -> Unit,
     onOpenTags: () -> Unit,
     onOpenAllFiles: () -> Unit,
     onOpenTypeFilter: (AllFilesTypeFilter) -> Unit,
@@ -1957,7 +1992,7 @@ private fun HomeMediumDashboard(
                         locale = locale,
                         fullCjkFontReady = fullCjkFontReady,
                         fullCjkFontFamily = fullCjkFontFamily,
-                        onOpenFile = onOpenFile,
+                        onOpenFile = onOpenRecommendedFile,
                         onOpenReference = onOpenReference,
                         modifier = Modifier
                             .weight(1f),
@@ -3015,6 +3050,7 @@ private fun HomeCompactDashboard(
     scoredRecommendedReferences: List<ScoredRecommendation>,
     onOpenReference: (FileReference) -> Unit,
     onOpenFile: (FileReference) -> Unit,
+    onOpenRecommendedFile: (FileReference) -> Unit,
     onOpenTags: () -> Unit,
     onOpenAllFiles: () -> Unit,
     onOpenTypeFilter: (AllFilesTypeFilter) -> Unit,
@@ -3222,7 +3258,7 @@ private fun HomeCompactDashboard(
                             fullCjkFontReady = fullCjkFontReady,
                             fullCjkFontFamily = fullCjkFontFamily,
                             locale = locale,
-                            onOpenFile = { onOpenFile(recommendation.file) },
+                            onOpenFile = { onOpenRecommendedFile(recommendation.file) },
                             onViewDetails = { onOpenReference(recommendation.file) },
                         )
                     }

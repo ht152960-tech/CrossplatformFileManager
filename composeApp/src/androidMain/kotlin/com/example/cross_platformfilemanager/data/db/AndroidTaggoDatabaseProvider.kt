@@ -6,10 +6,12 @@ import com.example.cross_platformfilemanager.data.adapter.SystemTaggoClock
 import com.example.cross_platformfilemanager.data.service.TaggoFileImportService
 import com.example.cross_platformfilemanager.runtime.TaggoBehaviorRuntime
 import com.example.cross_platformfilemanager.runtime.TaggoFileRuntimeStore
+import com.example.cross_platformfilemanager.runtime.TaggoRecommendationRuntime
 
 data class AndroidTaggoAppComponents(
     val runtimeStore: TaggoFileRuntimeStore,
     val behaviorRuntime: TaggoBehaviorRuntime,
+    val recommendationRuntime: TaggoRecommendationRuntime,
 )
 
 object AndroidTaggoDatabaseProvider {
@@ -34,6 +36,12 @@ object AndroidTaggoDatabaseProvider {
             databaseVersion = 1L,
             recommendationModelVersion = 1L,
         )
+        val recommendationRuntime = TaggoRecommendationRuntime(
+            recommendationRecordRepository = repositories.recommendations,
+            idGenerator = DefaultTaggoIdGenerator,
+            clock = SystemTaggoClock,
+            recommendationModelVersion = 1L,
+        )
         val importService = TaggoFileImportService(
             fileEntries = repositories.fileEntries,
             tags = repositories.tags,
@@ -51,6 +59,7 @@ object AndroidTaggoDatabaseProvider {
         return AndroidTaggoAppComponents(
             runtimeStore = runtimeStore,
             behaviorRuntime = behaviorRuntime,
+            recommendationRuntime = recommendationRuntime,
         )
     }
 }
