@@ -11,12 +11,14 @@ import com.example.cross_platformfilemanager.data.db.TaggoDatabaseRepositories
 import com.example.cross_platformfilemanager.data.model.TaggoRecentSearch
 import com.example.cross_platformfilemanager.data.model.TaggoTag
 import com.example.cross_platformfilemanager.data.service.TaggoFileImportService
+import kotlin.coroutines.cancellation.CancellationException
 
 class TaggoFileRuntimeStore(
     private val repositories: TaggoDatabaseRepositories? = null,
     private val importService: TaggoFileImportService? = null,
     private val idGenerator: TaggoIdGenerator = DefaultTaggoIdGenerator,
     private val clock: TaggoClock = SystemTaggoClock,
+    private val behaviorRuntime: TaggoBehaviorRuntime? = null,
 ) {
     val files = mutableStateListOf<TaggoRuntimeFile>()
     val recentSearches = mutableStateListOf<String>()
@@ -66,7 +68,11 @@ class TaggoFileRuntimeStore(
         }
         val mapping = service.importFile(input)
         load()
-        return requireNotNull(files.firstOrNull { it.id == mapping.fileEntry.id })
+        val saved = requireNotNull(files.firstOrNull { it.id == mapping.fileEntry.id })
+        recordBehaviorEvent {
+            recordFileAdded(saved.id)
+        }
+        return saved
     }
 
     suspend fun softDeleteFile(fileId: String) {
@@ -74,6 +80,9 @@ class TaggoFileRuntimeStore(
         val timestamp = clock.nowMs()
         databaseRepositories.fileEntries.softDeleteFileEntry(fileId, timestamp, timestamp)
         load()
+        recordBehaviorEvent {
+            recordFileDeleted(fileId)
+        }
     }
 
     suspend fun updateFile(file: TaggoRuntimeFile) {
@@ -126,6 +135,9 @@ class TaggoFileRuntimeStore(
             ).also { databaseRepositories.tags.addTag(it) }
         databaseRepositories.tags.attachTagToFile(fileId, tag.id, timestamp)
         load()
+        recordBehaviorEvent {
+            recordTagAdded(fileId, tag.name)
+        }
         return true
     }
 
@@ -135,6 +147,9 @@ class TaggoFileRuntimeStore(
             ?: return false
         databaseRepositories.tags.detachTagFromFile(fileId, tag.id)
         load()
+        recordBehaviorEvent {
+            recordTagRemoved(fileId, tag.name)
+        }
         return true
     }
 
@@ -169,9 +184,23 @@ class TaggoFileRuntimeStore(
             ),
         )
         load()
+        recordBehaviorEvent {
+            recordSearchSubmit(query, screenName = "search")
+        }
     }
 
     fun getFile(fileId: String): TaggoRuntimeFile? = files.firstOrNull { it.id == fileId }
+
+    private suspend fun recordBehaviorEvent(block: suspend TaggoBehaviorRuntime.() -> Unit) {
+        val runtime = behaviorRuntime ?: return
+        try {
+            runtime.block()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            // 行为日志写入失败不能影响主业务流程。
+        }
+    }
 
     private fun <T> MutableList<T>.replaceWith(values: List<T>) {
         clear()

@@ -21,6 +21,7 @@ import com.example.cross_platformfilemanager.data.db.AndroidTaggoDatabaseProvide
 class MainActivity : ComponentActivity() {
     private val filePickerState: AndroidFilePickerViewModel by viewModels()
     private lateinit var browserReferencePicker: AndroidBrowserReferencePicker
+    private lateinit var appComponents: com.example.cross_platformfilemanager.data.db.AndroidTaggoAppComponents
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -49,11 +50,12 @@ class MainActivity : ComponentActivity() {
         )
         AndroidBrowserReferencePickerHolder.register(browserReferencePicker)
 
-        val runtimeStore = AndroidTaggoDatabaseProvider.getRuntimeStore(applicationContext)
+        appComponents = AndroidTaggoDatabaseProvider.getAppComponents(applicationContext)
         val lastCrash = AndroidCrashReporter.readLastCrash(applicationContext)
         setContent {
             App(
-                runtimeStore = runtimeStore,
+                runtimeStore = appComponents.runtimeStore,
+                behaviorRuntime = appComponents.behaviorRuntime,
                 initialCrashReport = lastCrash,
                 onClearCrashReport = { AndroidCrashReporter.clearLastCrash(applicationContext) },
                 onCopyCrashReport = { crashText -> AndroidCrashReporter.copyCrashToClipboard(applicationContext, crashText) },

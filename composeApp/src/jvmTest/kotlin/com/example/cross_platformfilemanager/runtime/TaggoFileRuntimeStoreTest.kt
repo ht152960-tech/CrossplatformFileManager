@@ -51,6 +51,20 @@ class TaggoFileRuntimeStoreTest {
         assertEquals(2, stored.useCount)
     }
 
+    @Test
+    fun successfulStoreOperationsRecordBehaviorEvents() = withStore { store, repositories ->
+        store.addFile(importInput(tags = emptyList()))
+        store.addTag("file_1", "Important")
+        store.removeTag("file_1", "Important")
+        store.recordSearch("Quarterly report")
+        store.softDeleteFile("file_1")
+
+        val events = repositories.behavior.getEventsForSession("session_1")
+        assertEquals(
+            listOf("session_start", "file_add", "tag_add", "tag_remove", "search_submit", "file_delete"),
+            events.map { it.eventType },
+        )
+    }
     private fun withStore(
         block: suspend (TaggoFileRuntimeStore, com.example.cross_platformfilemanager.data.db.TaggoDatabaseRepositories) -> Unit,
     ) {
@@ -67,7 +81,16 @@ class TaggoFileRuntimeStoreTest {
                 clock = clock,
                 platform = "jvm-test",
             )
-            val store = TaggoFileRuntimeStore(repositories, service, ids, clock)
+            val behaviorRuntime = TaggoBehaviorRuntime(
+                behaviorRepository = repositories.behavior,
+                idGenerator = ids,
+                clock = clock,
+                platform = "jvm-test",
+                appVersion = "test",
+                databaseVersion = 1L,
+                recommendationModelVersion = 1L,
+            )
+            val store = TaggoFileRuntimeStore(repositories, service, ids, clock, behaviorRuntime)
             runBlocking { block(store, repositories) }
         } finally {
             driver.close()

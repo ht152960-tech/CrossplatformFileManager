@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.example.cross_platformfilemanager.data.adapter.TaggoFileImportInput
+import com.example.cross_platformfilemanager.runtime.TaggoBehaviorRuntime
 import com.example.cross_platformfilemanager.runtime.TaggoFileRuntimeStore
 import com.example.cross_platformfilemanager.runtime.TaggoRuntimeFile
 import kotlinx.coroutines.CancellationException
@@ -17,11 +18,14 @@ class FileManagerAppState(
     private val recommendationEngine: RecommendationEngine = RecommendationEngine(),
     private val browserReferenceResolver: BrowserReferenceResolver? = null,
     private val thumbnailGenerator: ThumbnailGenerator? = null,
+    private val behaviorRuntime: TaggoBehaviorRuntime? = null,
 ) : RecommendationReadOnlyState {
     val searchTags = androidx.compose.runtime.mutableStateListOf<SearchTag>()
     val startupDefaultLocale = AppLocale.ZhCn
     private val stateScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val generatingThumbnailIds = mutableSetOf<String>()
+    private var lastViewedDetailId: String? = null
+    private var lastContentOpenedReferenceId: String? = null
 
     var preferredLocale by mutableStateOf(startupDefaultLocale)
     var locale by mutableStateOf(startupDefaultLocale)
@@ -268,14 +272,71 @@ class FileManagerAppState(
         }
     }
 
-    fun openReference(referenceId: String) {
+    fun openReference(
+        referenceId: String,
+        screenName: String? = "detail",
+        entryPoint: String? = null,
+    ) {
         val target = runtimeStore.getFile(referenceId) ?: return
-        val previousReferenceId = activeReferenceId
-        val openedAt = nowMillis()
-        stateScope.launch { runtimeStore.recordContentOpen(referenceId, openedAt) }
-        recommendationEngine.recordFileOpen(referenceId, openedAt, previousReferenceId)
+        recordViewDetail(referenceId, entryPoint = entryPoint, screenName = screenName)
         activeReferenceId = target.id
         snapshotVersion++
+    }
+
+    suspend fun recordContentOpen(
+        referenceId: String,
+        fileReferenceId: String? = null,
+        entryPoint: String? = null,
+        screenName: String? = null,
+    ) {
+        val target = runtimeStore.getFile(referenceId) ?: return
+        val previousReferenceId = lastContentOpenedReferenceId
+        val openedAt = nowMillis()
+        runtimeStore.recordContentOpen(referenceId, openedAt)
+        recommendationEngine.recordFileOpen(referenceId, openedAt, previousReferenceId)
+        behaviorRuntime?.recordOpenContent(
+            fileId = referenceId,
+            fileReferenceId = fileReferenceId ?: target.primaryReferenceId,
+            entryPoint = entryPoint,
+            screenName = screenName,
+        )
+        lastContentOpenedReferenceId = target.id
+        activeReferenceId = target.id
+        snapshotVersion++
+    }
+
+    fun recordViewDetail(
+        referenceId: String,
+        entryPoint: String? = null,
+        screenName: String? = null,
+    ) {
+        if (lastViewedDetailId == referenceId) return
+        lastViewedDetailId = referenceId
+        stateScope.launch {
+            behaviorRuntime?.recordViewDetail(
+                fileId = referenceId,
+                entryPoint = entryPoint,
+                screenName = screenName ?: "detail",
+            )
+        }
+    }
+
+    fun recordOpenFailed(
+        referenceId: String?,
+        fileReferenceId: String? = null,
+        errorMessage: String? = null,
+        entryPoint: String? = null,
+        screenName: String? = null,
+    ) {
+        stateScope.launch {
+            behaviorRuntime?.recordOpenFailed(
+                fileId = referenceId,
+                fileReferenceId = fileReferenceId,
+                errorMessage = errorMessage,
+                entryPoint = entryPoint,
+                screenName = screenName,
+            )
+        }
     }
 
     suspend fun refreshReference(referenceId: String) {

@@ -124,6 +124,7 @@ import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Star
+import com.example.cross_platformfilemanager.runtime.TaggoBehaviorRuntime
 import com.example.cross_platformfilemanager.runtime.TaggoFileRuntimeStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -177,6 +178,13 @@ private enum class AppPage {
     AllFiles,
     Detail,
     Search,
+}
+private fun AppPage.screenName(): String = when (this) {
+    AppPage.Home -> "home"
+    AppPage.Tags -> "tags"
+    AppPage.AllFiles -> "all_files"
+    AppPage.Detail -> "detail"
+    AppPage.Search -> "search"
 }
 
 private enum class ReferenceEditorMode {
@@ -508,6 +516,7 @@ private fun MediumNavigationSidebar(
  */
 fun App(
     runtimeStore: TaggoFileRuntimeStore = TaggoFileRuntimeStore(),
+    behaviorRuntime: TaggoBehaviorRuntime? = null,
     initialCrashReport: String? = null,
     onClearCrashReport: (() -> Unit)? = null,
     onCopyCrashReport: ((String) -> Unit)? = null,
@@ -518,11 +527,12 @@ fun App(
     val browserReferenceResolver = remember { createBrowserReferenceResolver() }
     val thumbnailGenerator = remember { createThumbnailGenerator() }
     val uiFontFamily = rememberAppFontFamily()
-    val appState = remember(runtimeStore, browserReferenceResolver, thumbnailGenerator) {
+    val appState = remember(runtimeStore, browserReferenceResolver, thumbnailGenerator, behaviorRuntime) {
         FileManagerAppState(
             runtimeStore = runtimeStore,
             browserReferenceResolver = browserReferenceResolver,
             thumbnailGenerator = thumbnailGenerator,
+            behaviorRuntime = behaviorRuntime,
         )
     }
     val coroutineScope = rememberCoroutineScope()
@@ -560,6 +570,10 @@ fun App(
     LaunchedEffect(Unit) {
         reportStartupTimeline("App first composition")
         reportStartupTrace("App composition entered")
+    }
+
+    LaunchedEffect(behaviorRuntime) {
+        behaviorRuntime?.startSessionIfNeeded()
     }
 
     LaunchedEffect(snapshotStore, browserReferenceResolver) {
@@ -661,12 +675,23 @@ fun App(
             val openableReference = appState.activeReference?.takeIf { it.id == reference.id } ?: reference
             val openResult = openReferenceExternallyWithResult(openableReference)
             if (openResult.opened) {
-                appState.openReference(openableReference.id)
+                appState.recordContentOpen(
+                    openableReference.id,
+                    fileReferenceId = openableReference.primaryReferenceId,
+                    screenName = currentPage.screenName(),
+                )
             } else {
+                val failureMessage = openResult.message?.let { localizeWebOpenMessage(it, appState.locale) }
+                    ?: openFileFailureMessage(openableReference, appState.locale)
+                appState.recordOpenFailed(
+                    referenceId = openableReference.id,
+                    fileReferenceId = openableReference.primaryReferenceId,
+                    errorMessage = failureMessage,
+                    screenName = currentPage.screenName(),
+                )
                 snapshotSnackbarHostState.showSnackbar(
-                    message = openResult.message?.let { localizeWebOpenMessage(it, appState.locale) }
-                        ?: openFileFailureMessage(openableReference, appState.locale),
-                    actionLabel = if (appState.locale == AppLocale.ZhCn) "\u77e5\u9053\u4e86" else "OK",
+                    message = failureMessage,
+                    actionLabel = if (appState.locale == AppLocale.ZhCn) "知道了" else "OK",
                     duration = SnackbarDuration.Short,
                 )
             }
@@ -5436,7 +5461,7 @@ private fun DetailPage(
     }
 
     LaunchedEffect(reference.id, reference.source, reference.sourceKind) {
-        // 鏂囦欢鏉ユ簮涓€鏃﹀彉鍖栵紝灏辨妸涓婁竴娆＄殑鎵撳紑澶辫触鎻愮ず娓呮帀锛岄伩鍏嶆棫鐘舵€佽瀵肩敤鎴枫€?        openFileMessage = null
+        openFileMessage = null
         tagFeedbackMessage = null
         tagFeedbackIsWarning = false
     }
@@ -5446,18 +5471,32 @@ private fun DetailPage(
             suspend fun replaceAndOpen(draft: BrowserReferenceDraft) {
                 val replaced = appState.replaceReference(reference.id, draft) ?: return
                 appState.generateThumbnailForReference(replaced.id)
-                appState.openReference(replaced.id)
                 val refreshed = appState.activeReference?.takeIf { it.id == replaced.id } ?: replaced
                 val openResult = openReferenceExternallyWithResult(refreshed)
                 val localizedMessage = openResult.message?.let { localizeWebOpenMessage(it, locale) }
-                openFileMessage = if (openResult.opened) {
-                    null
-                } else if (localizedMessage != null) {
-                    localizedMessage
-                } else if (canUseWebReopenFlow) {
-                    webFileReselectionMessage(locale)
+                if (openResult.opened) {
+                    appState.recordContentOpen(
+                        replaced.id,
+                        fileReferenceId = replaced.primaryReferenceId,
+                        entryPoint = "detail_cover",
+                        screenName = "detail",
+                    )
+                    openFileMessage = null
                 } else {
-                    openFileFailureMessage(refreshed, locale)
+                    val failureMessage = localizedMessage
+                        ?: if (canUseWebReopenFlow) {
+                            webFileReselectionMessage(locale)
+                        } else {
+                            openFileFailureMessage(refreshed, locale)
+                        }
+                    appState.recordOpenFailed(
+                        referenceId = replaced.id,
+                        fileReferenceId = replaced.primaryReferenceId,
+                        errorMessage = failureMessage,
+                        entryPoint = "detail_cover",
+                        screenName = "detail",
+                    )
+                    openFileMessage = failureMessage
                 }
             }
 
@@ -5468,11 +5507,24 @@ private fun DetailPage(
                     val resolvedReference = appState.activeReference?.takeIf { it.id == reference.id } ?: reference
                     val refreshOpenResult = openReferenceExternallyWithResult(resolvedReference)
                     if (refreshOpenResult.opened) {
+                        appState.recordContentOpen(
+                            resolvedReference.id,
+                            fileReferenceId = resolvedReference.primaryReferenceId,
+                            entryPoint = "browser_reselect",
+                            screenName = "detail",
+                        )
                         openFileMessage = null
                         return@launch
                     }
                     val localizedRefreshMessage = refreshOpenResult.message?.let { localizeWebOpenMessage(it, locale) }
                     if (localizedRefreshMessage != null) {
+                        appState.recordOpenFailed(
+                            referenceId = resolvedReference.id,
+                            fileReferenceId = resolvedReference.primaryReferenceId,
+                            errorMessage = localizedRefreshMessage,
+                            entryPoint = "browser_reselect",
+                            screenName = "detail",
+                        )
                         openFileMessage = localizedRefreshMessage
                         return@launch
                     }
@@ -5503,17 +5555,27 @@ private fun DetailPage(
             val openableReference = appState.activeReference?.takeIf { it.id == resolvedReference.id } ?: resolvedReference
             val openResult = openReferenceExternallyWithResult(openableReference)
             if (openResult.opened) {
-                if (!(needsRefresh && openableReference.source.startsWith("browser-", ignoreCase = true))) {
-                    appState.openReference(openableReference.id)
-                }
+                appState.recordContentOpen(
+                    openableReference.id,
+                    fileReferenceId = openableReference.primaryReferenceId,
+                    entryPoint = if (needsRefresh) "browser_refresh" else "detail_open",
+                    screenName = "detail",
+                )
                 openFileMessage = null
             } else {
-                openFileMessage = openResult.message?.let { localizeWebOpenMessage(it, locale) }
+                val failureMessage = openResult.message?.let { localizeWebOpenMessage(it, locale) }
                     ?: openFileFailureMessage(openableReference, locale)
+                appState.recordOpenFailed(
+                    referenceId = openableReference.id,
+                    fileReferenceId = openableReference.primaryReferenceId,
+                    errorMessage = failureMessage,
+                    entryPoint = if (needsRefresh) "browser_refresh" else "detail_open",
+                    screenName = "detail",
+                )
+                openFileMessage = failureMessage
             }
         }
     }
-
     Column(
         modifier = if (compactLayout) {
             Modifier.padding(horizontal = TaggoCompactTokens.PageHorizontalInsetExtra)
@@ -5973,14 +6035,27 @@ private fun DetailPage(
                         coroutineScope.launch {
                             val replaced = appState.replaceReference(reference.id, replacement) ?: return@launch
                             appState.generateThumbnailForReference(replaced.id)
-                            appState.openReference(replaced.id)
                             val refreshed = appState.activeReference?.takeIf { it.id == replaced.id } ?: replaced
                             val openResult = openReferenceExternallyWithResult(refreshed)
-                            openFileMessage = if (openResult.opened) {
-                                null
+                            if (openResult.opened) {
+                                appState.recordContentOpen(
+                                    replaced.id,
+                                    fileReferenceId = replaced.primaryReferenceId,
+                                    entryPoint = "replacement_confirm",
+                                    screenName = "detail",
+                                )
+                                openFileMessage = null
                             } else {
-                                openResult.message?.let { localizeWebOpenMessage(it, locale) }
+                                val failureMessage = openResult.message?.let { localizeWebOpenMessage(it, locale) }
                                     ?: webFileReselectionMessage(locale)
+                                appState.recordOpenFailed(
+                                    referenceId = replaced.id,
+                                    fileReferenceId = replaced.primaryReferenceId,
+                                    errorMessage = failureMessage,
+                                    entryPoint = "replacement_confirm",
+                                    screenName = "detail",
+                                )
+                                openFileMessage = failureMessage
                             }
                         }
                     },
