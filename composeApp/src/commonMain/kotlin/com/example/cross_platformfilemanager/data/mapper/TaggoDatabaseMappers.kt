@@ -1,4 +1,4 @@
-package com.example.cross_platformfilemanager.data.mapper
+﻿package com.example.cross_platformfilemanager.data.mapper
 
 import com.example.cross_platformfilemanager.data.db.Behavior_event
 import com.example.cross_platformfilemanager.data.db.Behavior_session
@@ -9,6 +9,7 @@ import com.example.cross_platformfilemanager.data.db.Recent_search
 import com.example.cross_platformfilemanager.data.db.Recommendation_candidate_snapshot
 import com.example.cross_platformfilemanager.data.db.Recommendation_context
 import com.example.cross_platformfilemanager.data.db.Recommendation_feedback
+import com.example.cross_platformfilemanager.data.db.Recommendation_policy_state
 import com.example.cross_platformfilemanager.data.db.Recommendation_set
 import com.example.cross_platformfilemanager.data.db.Tag
 import com.example.cross_platformfilemanager.data.model.TaggoBehaviorEvent
@@ -20,6 +21,7 @@ import com.example.cross_platformfilemanager.data.model.TaggoRecentSearch
 import com.example.cross_platformfilemanager.data.model.TaggoRecommendationCandidateSnapshot
 import com.example.cross_platformfilemanager.data.model.TaggoRecommendationContext
 import com.example.cross_platformfilemanager.data.model.TaggoRecommendationFeedback
+import com.example.cross_platformfilemanager.data.model.TaggoRecommendationPolicyState
 import com.example.cross_platformfilemanager.data.model.TaggoRecommendationSet
 import com.example.cross_platformfilemanager.data.model.TaggoTag
 
@@ -154,3 +156,14 @@ internal fun Recommendation_feedback.toModel() = TaggoRecommendationFeedback(
 )
 
 internal fun Boolean.toDatabaseLong(): Long = if (this) 1L else 0L
+internal fun Recommendation_policy_state.toModel() = TaggoRecommendationPolicyState(
+    id = id,
+    policyName = policy_name,
+    recommendationMode = recommendation_mode,
+    modelVersion = model_version,
+    weightsJson = weights_json,
+    learningConfigJson = learning_config_json,
+    updateCount = update_count,
+    createdAtMs = created_at_ms,
+    lastUpdatedAtMs = last_updated_at_ms,
+)

@@ -7,6 +7,8 @@ data class RecommendationHistory(
     val openEvents: List<RecommendationOpenEvent>,
     val searchEvents: List<RecommendationSearchEvent>,
     val feedbackEvents: List<RecommendationFeedbackEvent>,
+    val detailEvents: List<RecommendationIntentEvent> = emptyList(),
+    val failedOpenEvents: List<RecommendationIntentEvent> = emptyList(),
 )
 
 data class RecommendationOpenEvent(
@@ -31,6 +33,12 @@ data class RecommendationFeedbackEvent(
     val rank: Int?,
 )
 
+data class RecommendationIntentEvent(
+    val fileId: String,
+    val occurredAtMs: Long,
+    val sessionId: String?,
+    val entryPoint: String?,
+)
 class RecommendationHistoryReader(
     private val behaviorRepository: BehaviorRepository,
     private val recommendationRecordRepository: RecommendationRecordRepository,
@@ -42,6 +50,8 @@ class RecommendationHistoryReader(
         openEvents = loadOpenHistory(nowMs, lookbackDays),
         searchEvents = loadRecentSearchHistory(nowMs, lookbackDays),
         feedbackEvents = loadFeedbackHistory(nowMs, lookbackDays),
+        detailEvents = loadIntentHistory(EVENT_VIEW_DETAIL, nowMs, lookbackDays),
+        failedOpenEvents = loadIntentHistory(EVENT_OPEN_FAILED, nowMs, lookbackDays),
     )
 
     suspend fun loadOpenHistory(
@@ -98,6 +108,25 @@ class RecommendationHistoryReader(
             }
     }
 
+
+    private suspend fun loadIntentHistory(
+        eventType: String,
+        nowMs: Long,
+        lookbackDays: Int,
+    ): List<RecommendationIntentEvent> {
+        val range = historyRange(nowMs, lookbackDays)
+        return behaviorRepository
+            .getEventsByTypeInRange(eventType, range.fromMs, range.toMs)
+            .mapNotNull { event ->
+                val fileId = event.fileId?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                RecommendationIntentEvent(
+                    fileId = fileId,
+                    occurredAtMs = event.occurredAtMs,
+                    sessionId = event.sessionId,
+                    entryPoint = event.entryPoint,
+                )
+            }
+    }
     private fun historyRange(nowMs: Long, lookbackDays: Int): HistoryRange {
         val safeDays = lookbackDays.coerceAtLeast(0).toLong()
             .coerceAtMost(Long.MAX_VALUE / DAY_MILLIS)
@@ -116,6 +145,8 @@ class RecommendationHistoryReader(
     private companion object {
         const val EVENT_OPEN_CONTENT = "open_content"
         const val EVENT_SEARCH_SUBMIT = "search_submit"
+        const val EVENT_VIEW_DETAIL = "view_detail"
+        const val EVENT_OPEN_FAILED = "open_failed"
         const val DEFAULT_HISTORY_LOOKBACK_DAYS = 90
         const val DEFAULT_SEARCH_LOOKBACK_DAYS = 30
         const val DAY_MILLIS = 86_400_000L

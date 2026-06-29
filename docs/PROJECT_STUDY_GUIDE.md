@@ -206,7 +206,7 @@
 
 ### 入口在什么地方
 
-- [RecommendationEngine.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/domain/RecommendationEngine.kt)
+- [TaggoRecommendationService.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/domain/recommendation/TaggoRecommendationService.kt)
 - [FileManagerAppState.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/state/FileManagerAppState.kt)
 
 ### 推荐数据从哪里来
@@ -221,13 +221,13 @@
 ### 推荐怎么产生
 
 1. `FileManagerAppState.recommendedReferences` 调用推荐引擎。
-2. `RecommendationEngine.recommend()` 计算每个候选文件的分数。
+2. `TaggoRecommendationService.recommendHome()` 读取历史和当前 policy 并计算候选分数。
 3. 分数来源主要是：
-   - `filePatternStore.intervalScore()`
-   - `transitionStore.transitionScore()`
-   - `recencyScore()`
-   - `weightStore` 里的权重
-4. 最后经过去重和多样性控制。
+   - 动态打开时间间隔
+   - 最近打开与打开频率
+   - 推荐反馈与弱行为信号
+   - 当前 policy 里的权重
+4. 排序后返回 `min(fileCount, limit)` 个候选，不做 source/id 去重或类型多样性重排。
 
 ### 文件打开如何影响推荐
 
@@ -274,7 +274,7 @@
 1. [composeApp/build.gradle.kts](../composeApp/build.gradle.kts)
 2. [App.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/App.kt)
 3. [FileManagerAppState.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/state/FileManagerAppState.kt)
-4. [RecommendationEngine.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/domain/RecommendationEngine.kt)
+4. [TaggoRecommendationService.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/domain/recommendation/TaggoRecommendationService.kt)
 5. [RecommendationModels.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/RecommendationModels.kt)
 6. [SearchModels.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/SearchModels.kt)
 7. [AppSnapshot.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/AppSnapshot.kt)
@@ -294,7 +294,7 @@
 如果你以后要改功能，可以先找这些文件：
 
 - 改首页、搜索页、详情页：看 [App.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/App.kt)
-- 改推荐算法：看 [RecommendationEngine.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/domain/RecommendationEngine.kt)
+- 改推荐算法：看 [TaggoRecommendationService.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/domain/recommendation/TaggoRecommendationService.kt)
 - 改数据存取：看 [FileManagerAppState.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/state/FileManagerAppState.kt) 和 repository 相关文件
 - 改快照恢复：看 [AppSnapshot.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/AppSnapshot.kt) 和 [SnapshotCodec.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/SnapshotCodec.kt)
 - 改启动页或字体加载：看 [StartupScreens.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/StartupScreens.kt) 和 [StartupFontLoadState.kt](../composeApp/src/commonMain/kotlin/com/example/cross_platformfilemanager/StartupFontLoadState.kt)
@@ -304,4 +304,4 @@
 
 这个项目的核心是：
 
-**`App()` 负责把启动、页面、状态和推荐算法串起来，`FileManagerAppState` 负责保存业务状态，`RecommendationEngine` 负责把文件打开历史转成推荐结果。**
+**`App()` 负责把启动、页面、状态和推荐算法串起来，`FileManagerAppState` 负责保存业务状态，`TaggoRecommendationService` 负责把文件与行为历史转成推荐结果。**

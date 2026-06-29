@@ -33,6 +33,8 @@ class TaggoRecommendationRuntime(
         surface: String,
         trigger: String,
         candidates: List<RecommendationSnapshotInput>,
+        policyName: String = trigger,
+        policyVersion: String? = null,
     ): RecordedRecommendationSet? = safeCall {
         val generatedAtMs = clock.nowMs()
         val contextId = idGenerator.nextRecommendationContextId()
@@ -59,8 +61,8 @@ class TaggoRecommendationRuntime(
                 generatedAtMs = generatedAtMs,
                 setType = surface,
                 modelVersion = recommendationModelVersion,
-                policyName = trigger,
-                policyVersion = null,
+                policyName = policyName,
+                policyVersion = policyVersion,
             ),
         )
         candidates.forEachIndexed { index, candidate ->

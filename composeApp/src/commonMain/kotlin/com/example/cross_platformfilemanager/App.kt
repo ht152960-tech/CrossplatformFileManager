@@ -1,4 +1,4 @@
-package com.example.cross_platformfilemanager
+﻿package com.example.cross_platformfilemanager
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
@@ -127,6 +127,7 @@ import androidx.compose.material.icons.outlined.Star
 import com.example.cross_platformfilemanager.runtime.TaggoBehaviorRuntime
 import com.example.cross_platformfilemanager.runtime.TaggoFileRuntimeStore
 import com.example.cross_platformfilemanager.runtime.TaggoRecommendationRuntime
+import com.example.cross_platformfilemanager.domain.recommendation.TaggoRecommendationService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -519,6 +520,7 @@ fun App(
     runtimeStore: TaggoFileRuntimeStore = TaggoFileRuntimeStore(),
     behaviorRuntime: TaggoBehaviorRuntime? = null,
     recommendationRuntime: TaggoRecommendationRuntime? = null,
+    recommendationService: TaggoRecommendationService? = null,
     initialCrashReport: String? = null,
     onClearCrashReport: (() -> Unit)? = null,
     onCopyCrashReport: ((String) -> Unit)? = null,
@@ -535,6 +537,7 @@ fun App(
         thumbnailGenerator,
         behaviorRuntime,
         recommendationRuntime,
+        recommendationService,
     ) {
         FileManagerAppState(
             runtimeStore = runtimeStore,
@@ -542,6 +545,7 @@ fun App(
             thumbnailGenerator = thumbnailGenerator,
             behaviorRuntime = behaviorRuntime,
             recommendationRuntime = recommendationRuntime,
+            recommendationService = recommendationService,
         )
     }
     val coroutineScope = rememberCoroutineScope()
@@ -673,7 +677,10 @@ fun App(
         currentPage = AppPage.Detail
     }
 
-    fun openFileDirectly(reference: FileReference, fromRecommendation: Boolean = false) {
+    fun openFileDirectly(
+        reference: FileReference,
+        recommendationBinding: HomeRecommendationFeedbackBinding? = null,
+    ) {
         coroutineScope.launch {
             val needsRefresh =
                 reference.sourceKind == FileSourceKind.BrowserHandle &&
@@ -689,9 +696,7 @@ fun App(
                     fileReferenceId = openableReference.primaryReferenceId,
                     screenName = currentPage.screenName(),
                 )
-                if (fromRecommendation) {
-                    appState.recordRecommendationOpenResult(openableReference.id, openedSuccessfully = true)
-                }
+                appState.recordRecommendationOpenResult(recommendationBinding, openedSuccessfully = true)
             } else {
                 val failureMessage = openResult.message?.let { localizeWebOpenMessage(it, appState.locale) }
                     ?: openFileFailureMessage(openableReference, appState.locale)
@@ -701,9 +706,7 @@ fun App(
                     errorMessage = failureMessage,
                     screenName = currentPage.screenName(),
                 )
-                if (fromRecommendation) {
-                    appState.recordRecommendationOpenResult(openableReference.id, openedSuccessfully = false)
-                }
+                appState.recordRecommendationOpenResult(recommendationBinding, openedSuccessfully = false)
                 snapshotSnackbarHostState.showSnackbar(
                     message = failureMessage,
                     actionLabel = if (appState.locale == AppLocale.ZhCn) "知道了" else "OK",
@@ -1055,7 +1058,7 @@ fun App(
                                             onSearch = ::startSearchFromHome,
                                             onOpenReference = ::openReference,
                                             onOpenFile = { openFileDirectly(it) },
-                                            onOpenRecommendedFile = { openFileDirectly(it, fromRecommendation = true) },
+                                            onOpenRecommendedFile = { file, binding -> openFileDirectly(file, binding) },
                                             onOpenTags = { currentPage = AppPage.Tags },
                                             onOpenAllFiles = {
                                                 allFilesTypeFilter = AllFilesTypeFilter.All
@@ -1414,7 +1417,7 @@ private fun HomePage(
     onSearch: () -> Unit,
     onOpenReference: (FileReference) -> Unit,
     onOpenFile: (FileReference) -> Unit,
-    onOpenRecommendedFile: (FileReference) -> Unit,
+    onOpenRecommendedFile: (FileReference, HomeRecommendationFeedbackBinding?) -> Unit,
     onOpenTags: () -> Unit,
     onOpenAllFiles: () -> Unit,
     onOpenTypeFilter: (AllFilesTypeFilter) -> Unit,
@@ -1427,6 +1430,10 @@ private fun HomePage(
     // 首页推荐面板只消费只读推荐结果，不在 UI 层直接拼装推荐算法输入。
     val recommendedReferences = resolveRecommendedReferences(appState)
     val scoredRecommendedReferences = appState.scoredRecommendedReferences
+    val recommendationBindings = appState.homeRecommendationBindings
+    val openBoundRecommendation: (FileReference) -> Unit = { reference ->
+        onOpenRecommendedFile(reference, recommendationBindings[reference.id])
+    }
     val windowSizeClass = LocalTaggoWindowSizeClass.current
     val compactLayout = windowSizeClass == TaggoWindowSizeClass.Compact
     val expandedLayout = windowSizeClass == TaggoWindowSizeClass.Expanded
@@ -1440,21 +1447,6 @@ private fun HomePage(
         contentAlignment = Alignment.TopCenter,
     ) {
         val showExpandedDashboard = expandedLayout && maxHeight > MediumHomeMetrics.MaxDashboardHeight
-        val snapshotRecommendations = when {
-            compactLayout -> scoredRecommendedReferences.take(5)
-            showExpandedDashboard -> recommendedReferences.map { reference ->
-                scoredRecommendedReferences.firstOrNull { it.file.id == reference.id }
-                    ?: ScoredRecommendation(reference, 0.0, 0.0, 0.0, 0.0)
-            }
-            scoredRecommendedReferences.isNotEmpty() -> scoredRecommendedReferences
-            else -> appState.recentAddedReferences.map { reference ->
-                ScoredRecommendation(reference, 0.0, 0.0, 0.0, 0.0)
-            }
-        }
-        val recommendationSignature = snapshotRecommendations.joinToString("|") { it.file.id }
-        LaunchedEffect(recommendationSignature) {
-            appState.recordHomeRecommendationSnapshot(snapshotRecommendations)
-        }
 
         Box(
             modifier = Modifier
@@ -1525,6 +1517,7 @@ private fun HomePage(
                         onSearchDraftChange = onSearchDraftChange,
                         onSearch = onSearch,
                         onOpenReference = onOpenReference,
+                        onOpenRecommendedFile = openBoundRecommendation,
                         onOpenTags = onOpenTags,
                         onOpenAllFiles = onOpenAllFiles,
                         onOpenTypeFilter = onOpenTypeFilter,
@@ -1539,7 +1532,7 @@ private fun HomePage(
                         scoredRecommendedReferences = scoredRecommendedReferences.take(10),
                         onOpenReference = onOpenReference,
                         onOpenFile = onOpenFile,
-                        onOpenRecommendedFile = onOpenRecommendedFile,
+                        onOpenRecommendedFile = openBoundRecommendation,
                         onOpenTags = onOpenTags,
                         onOpenAllFiles = onOpenAllFiles,
                         onOpenTypeFilter = onOpenTypeFilter,
@@ -1559,7 +1552,7 @@ private fun HomePage(
                         onSearch = onSearch,
                         onOpenReference = onOpenReference,
                         onOpenFile = onOpenFile,
-                        onOpenRecommendedFile = onOpenRecommendedFile,
+                        onOpenRecommendedFile = openBoundRecommendation,
                         onOpenTags = onOpenTags,
                         onOpenAllFiles = onOpenAllFiles,
                         onOpenTypeFilter = onOpenTypeFilter,
@@ -1584,6 +1577,7 @@ private fun HomeExpandedDashboard(
     onSearchDraftChange: (String) -> Unit,
     onSearch: () -> Unit,
     onOpenReference: (FileReference) -> Unit,
+    onOpenRecommendedFile: (FileReference) -> Unit,
     onOpenTags: () -> Unit,
     onOpenAllFiles: () -> Unit,
     onOpenTypeFilter: (AllFilesTypeFilter) -> Unit,
@@ -1760,7 +1754,9 @@ private fun HomeExpandedDashboard(
                     )
                 },
             ) {
-                if (recommendedReferences.isEmpty()) {
+                if (appState.showHomeRecommendationSkeleton) {
+                    RecommendationSkeletonRows(appState.allReferences.size.coerceAtMost(3))
+                } else if (recommendedReferences.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.CenterStart,
@@ -1782,7 +1778,7 @@ private fun HomeExpandedDashboard(
                             locale = locale,
                             fullCjkFontReady = fullCjkFontReady,
                             fullCjkFontFamily = fullCjkFontFamily,
-                            onOpen = onOpenReference,
+                            onOpen = onOpenRecommendedFile,
                         )
                     }
                 }
@@ -1945,19 +1941,7 @@ private fun HomeMediumDashboard(
                 maxWidth <= 800.dp -> MediumHomeMetrics.SupportColumnWidthRegular
                 else -> MediumHomeMetrics.SupportColumnWidthLarge
             }
-            val mediumRecommendedForUi = if (scoredRecommendedReferences.isNotEmpty()) {
-                scoredRecommendedReferences
-            } else {
-                appState.recentAddedReferences.map { reference ->
-                    ScoredRecommendation(
-                        file = reference,
-                        intervalScore = 0.0,
-                        transitionScore = 0.0,
-                        recencyScore = 0.0,
-                        finalScore = 0.0,
-                    )
-                }
-            }
+            val mediumRecommendedForUi = scoredRecommendedReferences
             val pageScrollState = rememberScrollState()
 
             Column(
@@ -1989,6 +1973,8 @@ private fun HomeMediumDashboard(
                 ) {
                     MediumSmartRecommendationCard(
                         recommendations = mediumRecommendedForUi,
+                        showSkeleton = appState.showHomeRecommendationSkeleton,
+                        skeletonCount = appState.allReferences.size.coerceAtMost(3),
                         locale = locale,
                         fullCjkFontReady = fullCjkFontReady,
                         fullCjkFontFamily = fullCjkFontFamily,
@@ -2251,6 +2237,8 @@ private fun MediumFileTypesCard(
 @Composable
 private fun MediumSmartRecommendationCard(
     recommendations: List<ScoredRecommendation>,
+    showSkeleton: Boolean,
+    skeletonCount: Int,
     locale: AppLocale,
     fullCjkFontReady: Boolean,
     fullCjkFontFamily: FontFamily,
@@ -2311,7 +2299,9 @@ private fun MediumSmartRecommendationCard(
 
             Spacer(modifier = Modifier.height(MediumHomeMetrics.RecommendationListTopSpacing))
 
-            if (recommendations.isEmpty()) {
+            if (showSkeleton) {
+                RecommendationSkeletonRows(skeletonCount)
+            } else if (recommendations.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.CenterStart,
@@ -2341,6 +2331,24 @@ private fun MediumSmartRecommendationCard(
             }
     }
 }
+}
+
+@Composable
+private fun RecommendationSkeletonRows(count: Int) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MediumHomeMetrics.RecommendationRowGap),
+    ) {
+        repeat(count.coerceAtLeast(1)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(MediumHomeMetrics.RecommendationRowHeight)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(TaggoGlobalColors.Border.copy(alpha = 0.18f)),
+            )
+        }
+    }
 }
 
 @Composable
@@ -3239,7 +3247,9 @@ private fun HomeCompactDashboard(
             compactTitleFontSize = CompactHomeMetrics.CardTitleFontSize,
 
         ) {
-            if (scoredRecommendedReferences.isEmpty()) {
+            if (appState.showHomeRecommendationSkeleton) {
+                RecommendationSkeletonRows(appState.allReferences.size.coerceAtMost(3))
+            } else if (scoredRecommendedReferences.isEmpty()) {
                 TaggoEmptyState(
                     title = if (locale == AppLocale.ZhCn) "\u6682\u65e0\u63a8\u8350" else "No recommendations",
                     description = if (locale == AppLocale.ZhCn) "\u79ef\u7d2f\u6253\u5f00\u8bb0\u5f55\u540e\u4f1a\u751f\u6210\u3002" else "Open history will create signals.",

@@ -1,4 +1,4 @@
-﻿-- 表职责：保存数据库级别的元数据键值对。
+-- 表职责：保存数据库级别的元数据键值对。
 CREATE TABLE app_metadata (
     key TEXT NOT NULL PRIMARY KEY,
     value TEXT NOT NULL
@@ -234,6 +234,18 @@ CREATE TABLE recommendation_feedback (
     FOREIGN KEY (behavior_event_id) REFERENCES behavior_event(id) ON DELETE SET NULL
 );
 
+CREATE TABLE recommendation_policy_state (
+    id TEXT NOT NULL PRIMARY KEY,
+    policy_name TEXT NOT NULL,
+    recommendation_mode TEXT NOT NULL,
+    model_version INTEGER NOT NULL,
+    weights_json TEXT NOT NULL,
+    learning_config_json TEXT NOT NULL,
+    update_count INTEGER NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    last_updated_at_ms INTEGER NOT NULL,
+    UNIQUE(policy_name, recommendation_mode, model_version)
+);
 selectAllAppMetadata:
 SELECT * FROM app_metadata;
 
@@ -541,3 +553,32 @@ selectFeedbackForRecommendationSet:
 SELECT * FROM recommendation_feedback
 WHERE recommendation_set_id = ?
 ORDER BY created_at_ms ASC;
+selectRecommendationPolicy:
+SELECT * FROM recommendation_policy_state
+WHERE policy_name = ?
+    AND recommendation_mode = ?
+    AND model_version = ?;
+
+insertRecommendationPolicy:
+INSERT INTO recommendation_policy_state(
+    id,
+    policy_name,
+    recommendation_mode,
+    model_version,
+    weights_json,
+    learning_config_json,
+    update_count,
+    created_at_ms,
+    last_updated_at_ms
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateRecommendationPolicy:
+UPDATE recommendation_policy_state
+SET weights_json = ?,
+    learning_config_json = ?,
+    update_count = ?,
+    last_updated_at_ms = ?
+WHERE policy_name = ?
+    AND recommendation_mode = ?
+    AND model_version = ?;

@@ -1,4 +1,4 @@
-package com.example.cross_platformfilemanager
+﻿package com.example.cross_platformfilemanager
 
 import android.app.Activity
 import android.content.pm.ApplicationInfo
@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity() {
                 runtimeStore = appComponents.runtimeStore,
                 behaviorRuntime = appComponents.behaviorRuntime,
                 recommendationRuntime = appComponents.recommendationRuntime,
+                recommendationService = appComponents.recommendationService,
                 initialCrashReport = lastCrash,
                 onClearCrashReport = { AndroidCrashReporter.clearLastCrash(applicationContext) },
                 onCopyCrashReport = { crashText -> AndroidCrashReporter.copyCrashToClipboard(applicationContext, crashText) },

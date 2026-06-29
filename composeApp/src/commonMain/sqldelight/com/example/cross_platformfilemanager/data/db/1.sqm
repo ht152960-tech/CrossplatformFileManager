@@ -1,0 +1,12 @@
+CREATE TABLE recommendation_policy_state (
+    id TEXT NOT NULL PRIMARY KEY,
+    policy_name TEXT NOT NULL,
+    recommendation_mode TEXT NOT NULL,
+    model_version INTEGER NOT NULL,
+    weights_json TEXT NOT NULL,
+    learning_config_json TEXT NOT NULL,
+    update_count INTEGER NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    last_updated_at_ms INTEGER NOT NULL,
+    UNIQUE(policy_name, recommendation_mode, model_version)
+);

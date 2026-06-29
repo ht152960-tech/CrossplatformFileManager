@@ -1,4 +1,4 @@
-﻿package com.example.cross_platformfilemanager.data.model
+package com.example.cross_platformfilemanager.data.model
 
 /**
  * 文件条目的数据库领域模型。
@@ -171,4 +171,15 @@ data class TaggoRecommendationFeedback(
     val rankAtFeedback: Long?,
     val createdAtMs: Long,
     val behaviorEventId: String?,
+)
+data class TaggoRecommendationPolicyState(
+    val id: String,
+    val policyName: String,
+    val recommendationMode: String,
+    val modelVersion: Long,
+    val weightsJson: String,
+    val learningConfigJson: String,
+    val updateCount: Long,
+    val createdAtMs: Long,
+    val lastUpdatedAtMs: Long,
 )

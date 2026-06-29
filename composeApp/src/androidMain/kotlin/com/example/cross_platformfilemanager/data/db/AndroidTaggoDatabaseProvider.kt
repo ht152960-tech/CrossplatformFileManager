@@ -1,9 +1,12 @@
-package com.example.cross_platformfilemanager.data.db
+﻿package com.example.cross_platformfilemanager.data.db
 
 import android.content.Context
 import com.example.cross_platformfilemanager.data.adapter.DefaultTaggoIdGenerator
 import com.example.cross_platformfilemanager.data.adapter.SystemTaggoClock
 import com.example.cross_platformfilemanager.data.service.TaggoFileImportService
+import com.example.cross_platformfilemanager.domain.recommendation.RecommendationHistoryReader
+import com.example.cross_platformfilemanager.domain.recommendation.RecommendationPolicyStore
+import com.example.cross_platformfilemanager.domain.recommendation.TaggoRecommendationService
 import com.example.cross_platformfilemanager.runtime.TaggoBehaviorRuntime
 import com.example.cross_platformfilemanager.runtime.TaggoFileRuntimeStore
 import com.example.cross_platformfilemanager.runtime.TaggoRecommendationRuntime
@@ -12,6 +15,7 @@ data class AndroidTaggoAppComponents(
     val runtimeStore: TaggoFileRuntimeStore,
     val behaviorRuntime: TaggoBehaviorRuntime,
     val recommendationRuntime: TaggoRecommendationRuntime,
+    val recommendationService: TaggoRecommendationService,
 )
 
 object AndroidTaggoDatabaseProvider {
@@ -42,6 +46,16 @@ object AndroidTaggoDatabaseProvider {
             clock = SystemTaggoClock,
             recommendationModelVersion = 1L,
         )
+        val recommendationService = TaggoRecommendationService(
+            historyReader = RecommendationHistoryReader(
+                behaviorRepository = repositories.behavior,
+                recommendationRecordRepository = repositories.recommendations,
+            ),
+            policyStore = RecommendationPolicyStore(
+                repository = repositories.recommendationPolicy,
+                clock = SystemTaggoClock,
+            ),
+        )
         val importService = TaggoFileImportService(
             fileEntries = repositories.fileEntries,
             tags = repositories.tags,
@@ -60,6 +74,7 @@ object AndroidTaggoDatabaseProvider {
             runtimeStore = runtimeStore,
             behaviorRuntime = behaviorRuntime,
             recommendationRuntime = recommendationRuntime,
+            recommendationService = recommendationService,
         )
     }
 }

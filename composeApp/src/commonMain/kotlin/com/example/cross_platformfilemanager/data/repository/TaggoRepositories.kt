@@ -1,4 +1,4 @@
-﻿package com.example.cross_platformfilemanager.data.repository
+package com.example.cross_platformfilemanager.data.repository
 
 import com.example.cross_platformfilemanager.data.model.TaggoBehaviorEvent
 import com.example.cross_platformfilemanager.data.model.TaggoBehaviorSession
@@ -9,6 +9,7 @@ import com.example.cross_platformfilemanager.data.model.TaggoRecentSearch
 import com.example.cross_platformfilemanager.data.model.TaggoRecommendationCandidateSnapshot
 import com.example.cross_platformfilemanager.data.model.TaggoRecommendationContext
 import com.example.cross_platformfilemanager.data.model.TaggoRecommendationFeedback
+import com.example.cross_platformfilemanager.data.model.TaggoRecommendationPolicyState
 import com.example.cross_platformfilemanager.data.model.TaggoRecommendationSet
 import com.example.cross_platformfilemanager.data.model.TaggoTag
 
@@ -110,4 +111,15 @@ interface RecommendationRecordRepository {
         fromMs: Long,
         toMs: Long,
     ): List<TaggoRecommendationFeedback> = emptyList()
+}
+interface RecommendationPolicyRepository {
+    suspend fun loadPolicy(
+        policyName: String,
+        recommendationMode: String,
+        modelVersion: Long,
+    ): TaggoRecommendationPolicyState?
+
+    suspend fun insertPolicy(state: TaggoRecommendationPolicyState)
+
+    suspend fun updatePolicy(state: TaggoRecommendationPolicyState)
 }

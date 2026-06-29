@@ -1,4 +1,4 @@
-package com.example.cross_platformfilemanager
+﻿package com.example.cross_platformfilemanager
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -6,6 +6,8 @@ import androidx.compose.runtime.setValue
 import com.example.cross_platformfilemanager.data.adapter.TaggoFileImportInput
 import com.example.cross_platformfilemanager.domain.recommendation.RecommendationRequest
 import com.example.cross_platformfilemanager.domain.recommendation.RecommendationRequestContext
+import com.example.cross_platformfilemanager.domain.recommendation.RankedHomeRecommendation
+import com.example.cross_platformfilemanager.domain.recommendation.TaggoRecommendationService
 import com.example.cross_platformfilemanager.runtime.TaggoBehaviorRuntime
 import com.example.cross_platformfilemanager.runtime.TaggoFileRuntimeStore
 import com.example.cross_platformfilemanager.runtime.RecommendationSnapshotInput
@@ -16,30 +18,46 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
+data class HomeRecommendationFeedbackBinding(
+    val recommendationSetId: String,
+    val selected: RecommendationSnapshotInput,
+    val candidates: List<RecommendationSnapshotInput>,
+)
+
+private data class HomeRecommendationBatch(
+    val ranked: List<RankedHomeRecommendation> = emptyList(),
+    val recommendationSetId: String? = null,
+    val candidates: List<RecommendationSnapshotInput> = emptyList(),
+)
 class FileManagerAppState(
     val runtimeStore: TaggoFileRuntimeStore = TaggoFileRuntimeStore(),
-    private val recommendationEngine: RecommendationEngine = RecommendationEngine(),
+    private val searchSuggestionEngine: SearchSuggestionEngine = SearchSuggestionEngine(),
     private val browserReferenceResolver: BrowserReferenceResolver? = null,
     private val thumbnailGenerator: ThumbnailGenerator? = null,
     private val behaviorRuntime: TaggoBehaviorRuntime? = null,
     private val recommendationRuntime: TaggoRecommendationRuntime? = null,
+    private val recommendationService: TaggoRecommendationService? = null,
 ) : RecommendationReadOnlyState {
     val searchTags = androidx.compose.runtime.mutableStateListOf<SearchTag>()
     val startupDefaultLocale = AppLocale.ZhCn
     private val stateScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val generatingThumbnailIds = mutableSetOf<String>()
     private var lastViewedDetailId: String? = null
-    private var lastContentOpenedReferenceId: String? = null
     private val recommendationRequestContext = RecommendationRequestContext()
-    private val recommendationSnapshotMutex = Mutex()
-    private var lastRecommendationSignature: String? = null
-    private var currentRecommendationSetId: String? = null
-    private var currentRecommendationCandidates: List<RecommendationSnapshotInput> = emptyList()
+    private val recommendationRefreshMutex = Mutex()
+    private var homeRecommendationBatch by mutableStateOf(HomeRecommendationBatch())
+    var isHomeRecommendationRefreshing by mutableStateOf(false)
+        private set
+    var hasLoadedHomeRecommendations by mutableStateOf(false)
+        private set
 
     var preferredLocale by mutableStateOf(startupDefaultLocale)
     var locale by mutableStateOf(startupDefaultLocale)
@@ -86,7 +104,7 @@ class FileManagerAppState(
     val emptyResultsBody: String get() = strings.emptyResultsBody
 
     val recommendations: List<Suggestion>
-        get() = recommendationEngine.suggest(
+        get() = searchSuggestionEngine.suggest(
             query = query,
             references = runtimeStore.files.toList(),
             recentSearches = runtimeStore.recentSearches.toList(),
@@ -111,20 +129,30 @@ class FileManagerAppState(
     val allReferences: List<TaggoRuntimeFile> get() = runtimeStore.files.toList()
 
     override val recommendedReferences: List<FileReference>
-        get() = recommendationEngine.recommend(
-            references = recommendationCandidates(),
-            previousFileId = activeReferenceId,
-            nowMillis = nowMillis(),
-            limit = 10,
-        ).map { it.file }
+        get() = homeRecommendationBatch.ranked.map { it.file }
 
     override val scoredRecommendedReferences: List<ScoredRecommendation>
-        get() = recommendationEngine.recommend(
-            references = recommendationCandidates(),
-            previousFileId = activeReferenceId,
-            nowMillis = nowMillis(),
-            limit = 10,
-        )
+        get() = homeRecommendationBatch.ranked.map { ranked ->
+            ScoredRecommendation(
+                file = ranked.file,
+                intervalScore = ranked.result.scoreParts.periodicScore,
+                transitionScore = 0.0,
+                recencyScore = ranked.result.scoreParts.recencyScore,
+                finalScore = ranked.result.finalScore,
+            )
+        }
+
+    val homeRecommendationBindings: Map<String, HomeRecommendationFeedbackBinding>
+        get() {
+            val batch = homeRecommendationBatch
+            val setId = batch.recommendationSetId ?: return emptyMap()
+            return batch.candidates.associate { candidate ->
+                candidate.fileId to HomeRecommendationFeedbackBinding(setId, candidate, batch.candidates)
+            }
+        }
+
+    val showHomeRecommendationSkeleton: Boolean
+        get() = !hasLoadedHomeRecommendations && runtimeStore.files.isNotEmpty()
 
     val recentAddedReferences: List<TaggoRuntimeFile>
         get() {
@@ -143,59 +171,81 @@ class FileManagerAppState(
             activeReferenceId = runtimeStore.files.toList().firstOrNull()?.id
         }
         snapshotVersion++
+        refreshHomeRecommendations()
     }
 
-    suspend fun recordHomeRecommendationSnapshot(recommendations: List<ScoredRecommendation>) {
-        val runtime = recommendationRuntime ?: return
-        val candidates = recommendations.mapIndexed { index, recommendation ->
-            RecommendationSnapshotInput(
-                fileId = recommendation.file.id,
-                rank = index + 1,
-                score = recommendation.finalScore,
-                reasonsJson = recommendation.reasonsJson(),
-            )
-        }
-        val signature = candidates.joinToString("|") { it.fileId }
-        recommendationSnapshotMutex.withLock {
-            if (signature == lastRecommendationSignature) return
-            if (candidates.isEmpty()) {
-                lastRecommendationSignature = signature
-                currentRecommendationSetId = null
-                currentRecommendationCandidates = emptyList()
-                return
+    fun refreshHomeRecommendations() {
+        if (recommendationService == null) return
+        stateScope.launch { refreshHomeRecommendationsNow() }
+    }
+
+    private suspend fun refreshHomeRecommendationsNow() {
+        val service = recommendationService ?: return
+        recommendationRefreshMutex.withLock {
+            isHomeRecommendationRefreshing = true
+            try {
+                val filesSnapshot = runtimeStore.files.toList()
+                if (filesSnapshot.isEmpty()) {
+                    homeRecommendationBatch = HomeRecommendationBatch()
+                    hasLoadedHomeRecommendations = true
+                    return
+                }
+                val now = nowMillis()
+                val computation = withContext(Dispatchers.Default) {
+                    service.recommendHome(filesSnapshot, now, MAX_HOME_RECOMMENDATIONS)
+                }
+                val candidates = computation.recommendations.mapIndexed { index, ranked ->
+                    RecommendationSnapshotInput(
+                        fileId = ranked.file.id,
+                        rank = index + 1,
+                        score = ranked.result.finalScore,
+                        reasonsJson = ranked.result.reasons.toReasonsJson(),
+                        featuresJson = ranked.result.featuresJson,
+                    )
+                }
+                val recorded = withContext(Dispatchers.Default) {
+                    recommendationRuntime?.recordRecommendationSet(
+                        surface = "home_recommendations",
+                        trigger = "home_refresh",
+                        candidates = candidates,
+                        policyName = computation.policy.policyName,
+                        policyVersion = computation.policy.updateCount.toString(),
+                    )
+                }
+                homeRecommendationBatch = HomeRecommendationBatch(
+                    ranked = computation.recommendations,
+                    recommendationSetId = recorded?.setId,
+                    candidates = candidates,
+                )
+                hasLoadedHomeRecommendations = true
+            } finally {
+                isHomeRecommendationRefreshing = false
             }
-            currentRecommendationSetId = null
-            currentRecommendationCandidates = emptyList()
-            val recorded = runtime.recordRecommendationSet(
-                surface = "home_recommendations",
-                trigger = "home_render",
-                candidates = candidates,
-            ) ?: return
-            lastRecommendationSignature = signature
-            currentRecommendationSetId = recorded.setId
-            currentRecommendationCandidates = candidates
         }
     }
 
     suspend fun recordRecommendationOpenResult(
-        fileId: String,
+        binding: HomeRecommendationFeedbackBinding?,
         openedSuccessfully: Boolean,
     ) {
-        val runtime = recommendationRuntime ?: return
-        val selection = recommendationSnapshotMutex.withLock {
-            val setId = currentRecommendationSetId ?: return
-            val candidate = currentRecommendationCandidates.firstOrNull { it.fileId == fileId } ?: return
-            Triple(setId, candidate.rank, currentRecommendationCandidates)
-        }
-        runtime.recordSelectedFromRecommendation(
-            recommendationSetId = selection.first,
-            selectedFileId = fileId,
-            selectedRank = selection.second,
+        val snapshot = binding ?: return
+        recommendationRuntime?.recordSelectedFromRecommendation(
+            recommendationSetId = snapshot.recommendationSetId,
+            selectedFileId = snapshot.selected.fileId,
+            selectedRank = snapshot.selected.rank,
             openedSuccessfully = openedSuccessfully,
-            candidates = selection.third,
+            candidates = snapshot.candidates,
         )
+        if (!openedSuccessfully) return
+        val skippedFeatures = snapshot.candidates
+            .filter { it.rank < snapshot.selected.rank }
+            .mapNotNull { it.featuresJson }
+        recommendationService?.updatePolicyFromFeedback(
+            selectedFeaturesJson = snapshot.selected.featuresJson,
+            skippedBeforeFeaturesJson = skippedFeatures,
+        )
+        refreshHomeRecommendations()
     }
-
     fun currentRecommendationRequest(
         nowMs: Long = nowMillis(),
         limit: Int = 10,
@@ -239,7 +289,8 @@ class FileManagerAppState(
     }
 
     fun clearLocalData() {
-        recommendationEngine.clear()
+        homeRecommendationBatch = HomeRecommendationBatch()
+        hasLoadedHomeRecommendations = false
         resetWorkspaceFields()
         activeReferenceId = runtimeStore.files.toList().firstOrNull()?.id
         snapshotVersion++
@@ -282,6 +333,7 @@ class FileManagerAppState(
         val saved = runtimeStore.addFile(createDraftFileImportInput(referenceId))
         activeReferenceId = saved.id
         snapshotVersion++
+        refreshHomeRecommendations()
         return saved
     }
 
@@ -363,10 +415,8 @@ class FileManagerAppState(
         screenName: String? = null,
     ) {
         val target = runtimeStore.getFile(referenceId) ?: return
-        val previousReferenceId = lastContentOpenedReferenceId
         val openedAt = nowMillis()
         runtimeStore.recordContentOpen(referenceId, openedAt)
-        recommendationEngine.recordFileOpen(referenceId, openedAt, previousReferenceId)
         behaviorRuntime?.recordOpenContent(
             fileId = referenceId,
             fileReferenceId = fileReferenceId ?: target.primaryReferenceId,
@@ -374,9 +424,14 @@ class FileManagerAppState(
             screenName = screenName,
         )
         recommendationRequestContext.recordOpenContent(referenceId)
-        lastContentOpenedReferenceId = target.id
+        recommendationService?.updatePolicyFromManualSearchOpen(
+            fileId = referenceId,
+            files = runtimeStore.files.toList(),
+            nowMs = openedAt,
+        )
         activeReferenceId = target.id
         snapshotVersion++
+        refreshHomeRecommendations()
     }
 
     fun recordViewDetail(
@@ -440,6 +495,7 @@ class FileManagerAppState(
                 activeReferenceId = runtimeStore.files.toList().firstOrNull()?.id
             }
             snapshotVersion++
+            refreshHomeRecommendations()
         }
     }
 
@@ -532,11 +588,6 @@ class FileManagerAppState(
         snapshotVersion++
     }
 
-    private fun recommendationCandidates(): List<FileReference> {
-        val now = nowMillis()
-        return runtimeStore.files.toList().filter { isEligibleForRecommendation(it, now) }
-    }
-
     private fun parseTags(value: String): List<String> =
         value.split(",").map { it.trim() }.filter { it.isNotBlank() }.distinct()
 
@@ -571,8 +622,15 @@ private fun searchRuntimeFiles(
             .thenByDescending { it.reference.createdAtMs },
     )
 }
-private fun ScoredRecommendation.reasonsJson(): String = buildJsonArray {
-    if (intervalScore > 0.0) add("interval_pattern")
-    if (transitionScore > 0.0) add("successor_relation")
-    if (recencyScore > 0.0) add("recent_open")
+private fun List<com.example.cross_platformfilemanager.domain.recommendation.RecommendationReason>.toReasonsJson(): String = buildJsonArray {
+    forEach { reason ->
+        add(buildJsonObject {
+            put("code", reason.code)
+            put("message", reason.message)
+            reason.contribution?.let { put("contribution", it) }
+            reason.confidence?.let { put("confidence", it) }
+        })
+    }
 }.toString()
+
+private const val MAX_HOME_RECOMMENDATIONS = 10
