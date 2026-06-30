@@ -17,15 +17,18 @@ class HomeRecommendationFeatureExtractor(
         history: RecommendationHistory,
         nowMs: Long,
         config: RecommendationLearningConfig,
+        feedbackMode: RecommendationMode = RecommendationMode.HOME_INITIAL,
     ): Map<String, ExtractedHomeFeatures> {
         val opensByFile = history.openEvents.groupBy { it.fileId }
         val detailsByFile = history.detailEvents.groupingBy { it.fileId }.eachCount()
         val failuresByFile = history.failedOpenEvents.groupingBy { it.fileId }.eachCount()
         val positivesByFile = history.feedbackEvents
+            .filter { it.mode == feedbackMode || (feedbackMode == RecommendationMode.HOME_INITIAL && it.mode == null) }
             .filter { it.feedbackType == "positive_open" }
             .groupingBy { it.fileId }
             .eachCount()
         val penaltiesByFile = history.feedbackEvents
+            .filter { it.mode == feedbackMode || (feedbackMode == RecommendationMode.HOME_INITIAL && it.mode == null) }
             .filter { it.feedbackType == "skipped_before_selected_file" }
             .groupingBy { it.fileId }
             .eachCount()

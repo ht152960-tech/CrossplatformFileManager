@@ -5,6 +5,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class RecommendationFeatureVector(
     val periodic: Double = 0.0,
+    val sequencePath: Double = 0.0,
+    val directSuccessor: Double = 0.0,
     val manualSearchOpen: Double = 0.0,
     val recency: Double = 0.0,
     val frequency: Double = 0.0,
@@ -18,6 +20,8 @@ data class RecommendationFeatureVector(
 ) {
     fun normalized() = RecommendationFeatureVector(
         periodic = periodic.unit(),
+        sequencePath = sequencePath.unit(),
+        directSuccessor = directSuccessor.unit(),
         manualSearchOpen = manualSearchOpen.unit(),
         recency = recency.unit(),
         frequency = frequency.unit(),
@@ -32,6 +36,8 @@ data class RecommendationFeatureVector(
 
     fun values(): Map<String, Double> = linkedMapOf(
         "periodic" to periodic,
+        "sequencePath" to sequencePath,
+        "directSuccessor" to directSuccessor,
         "manualSearchOpen" to manualSearchOpen,
         "recency" to recency,
         "frequency" to frequency,
@@ -48,12 +54,20 @@ data class RecommendationFeatureVector(
 }
 
 @Serializable
+data class RecommendationPathContext(
+    val triggerFileId: String? = null,
+    val recentOpenFileIds: List<String> = emptyList(),
+    val matchedOrder: Int = 0,
+)
+
+@Serializable
 data class RecommendationFeatureSnapshot(
     val mode: String,
     val features: Map<String, Double>,
     val weights: Map<String, Double>,
     val contributions: Map<String, Double>,
     val confidence: Map<String, Double> = emptyMap(),
+    val pathContext: RecommendationPathContext? = null,
 )
 
 data class PeriodicSignal(

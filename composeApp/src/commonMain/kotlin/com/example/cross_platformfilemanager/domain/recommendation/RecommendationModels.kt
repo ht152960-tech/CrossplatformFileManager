@@ -11,6 +11,7 @@ data class RecommendationRequest(
     val limit: Int,
     val triggerFileId: String? = null,
     val sessionId: String? = null,
+    val recentOpenFileIds: List<String> = emptyList(),
 )
 
 data class RecommendationResult(

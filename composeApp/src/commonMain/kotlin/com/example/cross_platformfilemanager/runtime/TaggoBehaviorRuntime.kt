@@ -23,6 +23,9 @@ class TaggoBehaviorRuntime(
     private var currentSessionStartedAtMs: Long? = null
     private var currentSessionEndedAtMs: Long? = null
 
+    val sessionId: String?
+        get() = currentSessionId
+
     suspend fun startSessionIfNeeded() {
         if (currentSessionId != null) return
         val startedAtMs = clock.nowMs()

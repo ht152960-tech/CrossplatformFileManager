@@ -1,9 +1,10 @@
-﻿package com.example.cross_platformfilemanager
+package com.example.cross_platformfilemanager
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.example.cross_platformfilemanager.data.adapter.TaggoFileImportInput
+import com.example.cross_platformfilemanager.domain.recommendation.RecommendationMode
 import com.example.cross_platformfilemanager.domain.recommendation.RecommendationRequest
 import com.example.cross_platformfilemanager.domain.recommendation.RecommendationRequestContext
 import com.example.cross_platformfilemanager.domain.recommendation.RankedHomeRecommendation
@@ -28,6 +29,7 @@ import kotlinx.serialization.json.put
 
 data class HomeRecommendationFeedbackBinding(
     val recommendationSetId: String,
+    val mode: RecommendationMode,
     val selected: RecommendationSnapshotInput,
     val candidates: List<RecommendationSnapshotInput>,
 )
@@ -36,6 +38,7 @@ private data class HomeRecommendationBatch(
     val ranked: List<RankedHomeRecommendation> = emptyList(),
     val recommendationSetId: String? = null,
     val candidates: List<RecommendationSnapshotInput> = emptyList(),
+    val request: RecommendationRequest? = null,
 )
 class FileManagerAppState(
     val runtimeStore: TaggoFileRuntimeStore = TaggoFileRuntimeStore(),
@@ -136,7 +139,7 @@ class FileManagerAppState(
             ScoredRecommendation(
                 file = ranked.file,
                 intervalScore = ranked.result.scoreParts.periodicScore,
-                transitionScore = 0.0,
+                transitionScore = ranked.result.scoreParts.sequencePathScore + ranked.result.scoreParts.successorScore,
                 recencyScore = ranked.result.scoreParts.recencyScore,
                 finalScore = ranked.result.finalScore,
             )
@@ -147,7 +150,12 @@ class FileManagerAppState(
             val batch = homeRecommendationBatch
             val setId = batch.recommendationSetId ?: return emptyMap()
             return batch.candidates.associate { candidate ->
-                candidate.fileId to HomeRecommendationFeedbackBinding(setId, candidate, batch.candidates)
+                candidate.fileId to HomeRecommendationFeedbackBinding(
+                    recommendationSetId = setId,
+                    mode = batch.request?.mode ?: RecommendationMode.HOME_INITIAL,
+                    selected = candidate,
+                    candidates = batch.candidates,
+                )
             }
         }
 
@@ -191,8 +199,13 @@ class FileManagerAppState(
                     return
                 }
                 val now = nowMillis()
+                val request = recommendationRequestContext.createRequest(
+                    nowMs = now,
+                    limit = MAX_HOME_RECOMMENDATIONS,
+                    sessionId = behaviorRuntime?.sessionId,
+                )
                 val computation = withContext(Dispatchers.Default) {
-                    service.recommendHome(filesSnapshot, now, MAX_HOME_RECOMMENDATIONS)
+                    service.recommend(filesSnapshot, request)
                 }
                 val candidates = computation.recommendations.mapIndexed { index, ranked ->
                     RecommendationSnapshotInput(
@@ -206,16 +219,24 @@ class FileManagerAppState(
                 val recorded = withContext(Dispatchers.Default) {
                     recommendationRuntime?.recordRecommendationSet(
                         surface = "home_recommendations",
-                        trigger = "home_refresh",
+                        trigger = if (request.mode == RecommendationMode.AFTER_OPEN) {
+                            "after_open_refresh"
+                        } else {
+                            "home_refresh"
+                        },
                         candidates = candidates,
                         policyName = computation.policy.policyName,
                         policyVersion = computation.policy.updateCount.toString(),
+                        mode = request.mode,
+                        sessionId = request.sessionId,
+                        triggerFileId = request.triggerFileId,
                     )
                 }
                 homeRecommendationBatch = HomeRecommendationBatch(
                     ranked = computation.recommendations,
                     recommendationSetId = recorded?.setId,
                     candidates = candidates,
+                    request = computation.request,
                 )
                 hasLoadedHomeRecommendations = true
             } finally {
@@ -241,6 +262,7 @@ class FileManagerAppState(
             .filter { it.rank < snapshot.selected.rank }
             .mapNotNull { it.featuresJson }
         recommendationService?.updatePolicyFromFeedback(
+            mode = snapshot.mode,
             selectedFeaturesJson = snapshot.selected.featuresJson,
             skippedBeforeFeaturesJson = skippedFeatures,
         )
@@ -252,6 +274,7 @@ class FileManagerAppState(
     ): RecommendationRequest = recommendationRequestContext.createRequest(
         nowMs = nowMs,
         limit = limit,
+        sessionId = behaviorRuntime?.sessionId,
     )
 
     fun exportSnapshot(): AppSnapshot = AppSnapshot(
@@ -423,7 +446,11 @@ class FileManagerAppState(
             entryPoint = entryPoint,
             screenName = screenName,
         )
-        recommendationRequestContext.recordOpenContent(referenceId)
+        recommendationRequestContext.recordOpenContent(
+            fileId = referenceId,
+            occurredAtMs = openedAt,
+            sessionId = behaviorRuntime?.sessionId,
+        )
         recommendationService?.updatePolicyFromManualSearchOpen(
             fileId = referenceId,
             files = runtimeStore.files.toList(),

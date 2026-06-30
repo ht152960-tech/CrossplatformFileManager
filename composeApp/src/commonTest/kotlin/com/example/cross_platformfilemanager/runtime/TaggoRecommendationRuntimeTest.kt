@@ -7,6 +7,7 @@ import com.example.cross_platformfilemanager.data.model.TaggoRecommendationConte
 import com.example.cross_platformfilemanager.data.model.TaggoRecommendationFeedback
 import com.example.cross_platformfilemanager.data.model.TaggoRecommendationSet
 import com.example.cross_platformfilemanager.data.repository.RecommendationRecordRepository
+import com.example.cross_platformfilemanager.domain.recommendation.RecommendationMode
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
@@ -35,6 +36,32 @@ class TaggoRecommendationRuntimeTest {
         assertEquals("home_render", repository.sets.single().policyName)
         assertEquals(listOf(1L, 2L, 3L), repository.candidates.map { it.rank })
         assertEquals("""["interval_pattern"]""", repository.candidates.first().reasonsJson)
+    }
+
+    @Test
+    fun afterOpenSetRecordsModeSessionTriggerAndPathFeatures() = runSuspend {
+        val repository = FakeRecommendationRecordRepository()
+        val runtime = createRuntime(repository)
+        val pathFeatures = """{"mode":"AFTER_OPEN","pathContext":{"matchedOrder":3}}"""
+
+        runtime.recordRecommendationSet(
+            surface = "home_recommendations",
+            trigger = "after_open_refresh",
+            candidates = listOf(
+                RecommendationSnapshotInput("file_2", 1, 0.9, """[{"code":"sequence_path_match"}]""", pathFeatures),
+            ),
+            policyName = "after_open_dynamic_policy",
+            mode = RecommendationMode.AFTER_OPEN,
+            sessionId = "session_1",
+            triggerFileId = "file_1",
+        )
+
+        assertEquals("home_recommendations:AFTER_OPEN", repository.contexts.single().contextType)
+        assertEquals("session_1", repository.contexts.single().sessionId)
+        assertEquals("file_1", repository.contexts.single().triggerFileId)
+        assertEquals("AFTER_OPEN", repository.sets.single().setType)
+        assertEquals(pathFeatures, repository.candidates.single().featuresJson)
+        assertTrue(repository.candidates.single().reasonsJson?.contains("sequence_path_match") == true)
     }
 
     @Test

@@ -29,7 +29,7 @@ class BanditPolicyUpdater(
                 values[name] = values.getValue(name) - policy.learningConfig.negativeLearningRate * mean
             }
         }
-        return policyStore.updateHomePolicy(policy, RecommendationWeights.fromMap(values))
+        return policyStore.updatePolicy(policy, RecommendationWeights.fromMap(values))
     }
 
     private fun decode(value: String?): RecommendationFeatureSnapshot? =

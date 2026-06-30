@@ -9,6 +9,8 @@ import kotlinx.serialization.json.Json
 @Serializable
 data class RecommendationWeights(
     val periodic: Double = 0.20,
+    val sequencePath: Double = 0.0,
+    val directSuccessor: Double = 0.0,
     val manualSearchOpen: Double = 0.17,
     val recency: Double = 0.15,
     val frequency: Double = 0.12,
@@ -44,6 +46,8 @@ data class RecommendationWeights(
 
     fun values(): Map<String, Double> = linkedMapOf(
         "periodic" to periodic,
+        "sequencePath" to sequencePath,
+        "directSuccessor" to directSuccessor,
         "manualSearchOpen" to manualSearchOpen,
         "recency" to recency,
         "frequency" to frequency,
@@ -57,8 +61,26 @@ data class RecommendationWeights(
     )
 
     companion object {
+        fun afterOpen() = RecommendationWeights(
+            periodic = 0.005,
+            sequencePath = 0.34,
+            directSuccessor = 0.18,
+            manualSearchOpen = 0.04,
+            recency = 0.10,
+            frequency = 0.08,
+            feedbackPositive = 0.10,
+            tagAffinity = 0.07,
+            detailInterest = 0.025,
+            failedOpenIntent = 0.015,
+            coldStart = 0.025,
+            feedbackPenalty = 0.015,
+            weakTypeContext = 0.005,
+        )
+
         fun fromMap(values: Map<String, Double>): RecommendationWeights = RecommendationWeights(
             periodic = values.getValue("periodic"),
+            sequencePath = values.getValue("sequencePath"),
+            directSuccessor = values.getValue("directSuccessor"),
             manualSearchOpen = values.getValue("manualSearchOpen"),
             recency = values.getValue("recency"),
             frequency = values.getValue("frequency"),
@@ -104,17 +126,29 @@ class RecommendationPolicyStore(
         encodeDefaults = true
     },
 ) {
-    suspend fun loadOrCreateHomePolicy(): RecommendationPolicy {
-        val stored = repository.loadPolicy(POLICY_NAME, RecommendationMode.HOME_INITIAL.name, MODEL_VERSION)
+    suspend fun loadOrCreateHomePolicy(): RecommendationPolicy =
+        loadOrCreatePolicy(RecommendationMode.HOME_INITIAL)
+
+    suspend fun loadOrCreateAfterOpenPolicy(): RecommendationPolicy =
+        loadOrCreatePolicy(RecommendationMode.AFTER_OPEN)
+
+    suspend fun loadOrCreatePolicy(mode: RecommendationMode): RecommendationPolicy {
+        val policyName = policyName(mode)
+        val stored = repository.loadPolicy(policyName, mode.name, MODEL_VERSION)
         if (stored == null) {
-            val policy = defaultPolicy(clock.nowMs())
+            val policy = defaultPolicy(mode, clock.nowMs())
             repository.insertPolicy(policy.toState())
             return policy
         }
-        return stored.toPolicyOrDefault()
+        return stored.toPolicyOrDefault(mode)
     }
 
     suspend fun updateHomePolicy(
+        current: RecommendationPolicy,
+        weights: RecommendationWeights,
+    ): RecommendationPolicy = updatePolicy(current, weights)
+
+    suspend fun updatePolicy(
         current: RecommendationPolicy,
         weights: RecommendationWeights,
     ): RecommendationPolicy {
@@ -132,19 +166,31 @@ class RecommendationPolicyStore(
         return updated
     }
 
-    fun defaultPolicy(nowMs: Long): RecommendationPolicy = RecommendationPolicy(
-        id = "policy_${POLICY_NAME}_${RecommendationMode.HOME_INITIAL.name}_$MODEL_VERSION",
-        policyName = POLICY_NAME,
-        mode = RecommendationMode.HOME_INITIAL,
-        modelVersion = MODEL_VERSION,
-        weights = RecommendationWeights(),
-        learningConfig = RecommendationLearningConfig(),
-        updateCount = 0L,
-        createdAtMs = nowMs,
-        lastUpdatedAtMs = nowMs,
-    )
+    fun defaultPolicy(nowMs: Long): RecommendationPolicy =
+        defaultPolicy(RecommendationMode.HOME_INITIAL, nowMs)
 
-    private fun TaggoRecommendationPolicyState.toPolicyOrDefault(): RecommendationPolicy =
+    fun defaultPolicy(mode: RecommendationMode, nowMs: Long): RecommendationPolicy {
+        val policyName = policyName(mode)
+        return RecommendationPolicy(
+            id = "policy_${policyName}_${mode.name}_$MODEL_VERSION",
+            policyName = policyName,
+            mode = mode,
+            modelVersion = MODEL_VERSION,
+            weights = if (mode == RecommendationMode.AFTER_OPEN) {
+                RecommendationWeights.afterOpen()
+            } else {
+                RecommendationWeights()
+            },
+            learningConfig = RecommendationLearningConfig(),
+            updateCount = 0L,
+            createdAtMs = nowMs,
+            lastUpdatedAtMs = nowMs,
+        )
+    }
+
+    private fun TaggoRecommendationPolicyState.toPolicyOrDefault(
+        expectedMode: RecommendationMode,
+    ): RecommendationPolicy =
         try {
             RecommendationPolicy(
                 id = id,
@@ -158,7 +204,7 @@ class RecommendationPolicyStore(
                 lastUpdatedAtMs = lastUpdatedAtMs,
             )
         } catch (_: Throwable) {
-            defaultPolicy(lastUpdatedAtMs).copy(
+            defaultPolicy(expectedMode, lastUpdatedAtMs).copy(
                 id = id,
                 updateCount = updateCount,
                 createdAtMs = createdAtMs,
@@ -177,8 +223,12 @@ class RecommendationPolicyStore(
         lastUpdatedAtMs = lastUpdatedAtMs,
     )
 
+    private fun policyName(mode: RecommendationMode): String =
+        if (mode == RecommendationMode.AFTER_OPEN) AFTER_OPEN_POLICY_NAME else POLICY_NAME
+
     companion object {
         const val POLICY_NAME = "home_dynamic_policy"
+        const val AFTER_OPEN_POLICY_NAME = "after_open_dynamic_policy"
         const val MODEL_VERSION = 1L
     }
 }

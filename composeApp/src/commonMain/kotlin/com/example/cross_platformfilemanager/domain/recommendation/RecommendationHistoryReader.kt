@@ -31,6 +31,7 @@ data class RecommendationFeedbackEvent(
     val feedbackType: String,
     val occurredAtMs: Long,
     val rank: Int?,
+    val mode: RecommendationMode? = null,
 )
 
 data class RecommendationIntentEvent(
@@ -39,6 +40,7 @@ data class RecommendationIntentEvent(
     val sessionId: String?,
     val entryPoint: String?,
 )
+
 class RecommendationHistoryReader(
     private val behaviorRepository: BehaviorRepository,
     private val recommendationRecordRepository: RecommendationRecordRepository,
@@ -98,16 +100,19 @@ class RecommendationHistoryReader(
         return recommendationRecordRepository
             .getFeedbackInRange(range.fromMs, range.toMs)
             .map { feedback ->
+                val setType = recommendationRecordRepository
+                    .getRecommendationSetById(feedback.recommendationSetId)
+                    ?.setType
                 RecommendationFeedbackEvent(
                     recommendationSetId = feedback.recommendationSetId,
                     fileId = feedback.fileId,
                     feedbackType = feedback.feedbackType,
                     occurredAtMs = feedback.createdAtMs,
                     rank = feedback.rankAtFeedback?.toInt(),
+                    mode = setType.toRecommendationMode(),
                 )
             }
     }
-
 
     private suspend fun loadIntentHistory(
         eventType: String,
@@ -127,6 +132,16 @@ class RecommendationHistoryReader(
                 )
             }
     }
+
+    private fun String?.toRecommendationMode(): RecommendationMode? = when {
+        this == null -> null
+        contains(RecommendationMode.AFTER_OPEN.name, ignoreCase = true) -> RecommendationMode.AFTER_OPEN
+        contains("after_open", ignoreCase = true) -> RecommendationMode.AFTER_OPEN
+        contains(RecommendationMode.HOME_INITIAL.name, ignoreCase = true) -> RecommendationMode.HOME_INITIAL
+        contains("home", ignoreCase = true) -> RecommendationMode.HOME_INITIAL
+        else -> null
+    }
+
     private fun historyRange(nowMs: Long, lookbackDays: Int): HistoryRange {
         val safeDays = lookbackDays.coerceAtLeast(0).toLong()
             .coerceAtMost(Long.MAX_VALUE / DAY_MILLIS)

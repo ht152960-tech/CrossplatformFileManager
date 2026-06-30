@@ -7,6 +7,7 @@ import com.example.cross_platformfilemanager.data.model.TaggoRecommendationConte
 import com.example.cross_platformfilemanager.data.model.TaggoRecommendationFeedback
 import com.example.cross_platformfilemanager.data.model.TaggoRecommendationSet
 import com.example.cross_platformfilemanager.data.repository.RecommendationRecordRepository
+import com.example.cross_platformfilemanager.domain.recommendation.RecommendationMode
 import kotlin.coroutines.cancellation.CancellationException
 
 data class RecommendationSnapshotInput(
@@ -35,6 +36,9 @@ class TaggoRecommendationRuntime(
         candidates: List<RecommendationSnapshotInput>,
         policyName: String = trigger,
         policyVersion: String? = null,
+        mode: RecommendationMode? = null,
+        sessionId: String? = null,
+        triggerFileId: String? = null,
     ): RecordedRecommendationSet? = safeCall {
         val generatedAtMs = clock.nowMs()
         val contextId = idGenerator.nextRecommendationContextId()
@@ -43,9 +47,9 @@ class TaggoRecommendationRuntime(
             TaggoRecommendationContext(
                 id = contextId,
                 createdAtMs = generatedAtMs,
-                contextType = surface,
-                sessionId = null,
-                triggerFileId = null,
+                contextType = mode?.let { "$surface:${it.name}" } ?: surface,
+                sessionId = sessionId,
+                triggerFileId = triggerFileId,
                 searchQuery = null,
                 localHour = null,
                 dayOfWeek = null,
@@ -59,7 +63,7 @@ class TaggoRecommendationRuntime(
                 id = setId,
                 contextId = contextId,
                 generatedAtMs = generatedAtMs,
-                setType = surface,
+                setType = mode?.name ?: surface,
                 modelVersion = recommendationModelVersion,
                 policyName = policyName,
                 policyVersion = policyVersion,
